@@ -1,0 +1,173 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8" />
+  <title>Equation Hi Lo</title>
+  <link rel="stylesheet" href="style.css">
+</head>
+<body>
+    <div id="uiContainer">
+        <div id="lobbyPlayerListContainer"></div>
+        <div id="nameContainer">
+            <input type="text" id="nameInput" placeholder="Enter your name" />
+            <button id="saveName">Join</button>
+        </div>
+        <button class="button" id="startBtn" style="display:none;">Start Game</button>
+    </div>
+    <button class="button" id="leaveButton" style="display:none;">Leave Game</button>
+  <script>
+    const socket = new WebSocket(`ws://${location.host}`);
+    const cursors = {};
+    const handDivs = {};
+    const lobbyPlayerDivs = {};
+
+    const EXPIRATION_TIME = 1000 * 60 * 60 * 24;  // 1 day in milliseconds
+    const USER_ID_KEY = 'userId';
+    const USER_NAME_KEY = 'userName';
+    const USER_COLOR_KEY = 'userColor';
+    const TIMESTAMP_KEY = 'timestamp';
+
+    let myId = localStorage.getItem(USER_ID_KEY);
+    let myColor = localStorage.getItem(USER_COLOR_KEY);
+    let myName = localStorage.getItem(USER_NAME_KEY);
+    let timestamp = localStorage.getItem(TIMESTAMP_KEY);
+    let myHand = null; // TODO this needs to be a serialized object
+    
+    document.addEventListener("mousemove", (e) => {
+        if (!myId) return;
+      const data = {
+        type: "cursor",
+        id: myId,
+        x: e.clientX,
+        y: e.clientY,
+        color: myColor,
+        username: myName
+      };
+      socket.send(JSON.stringify(data));
+      drawCursor(myId, e.clientX, e.clientY, myColor, myName);
+    });
+
+    //sounds like we are telling socket to listen but no we are listening to socket
+    socket.addEventListener("message", (event) => {
+      // what if it doesn't have all the fields?
+      const msg = JSON.parse(event.data);
+
+      // TODO don't send init message if an existing player is connecting?
+      // for now, check if myId is not null and take the init message id if it is
+      // this means the server is generating unneeded ids
+      if (msg.type === "init") {
+        const now = Date.now();
+
+        console.log('init ' + myId);
+        console.log(event.data);
+
+        if (!myId || !timestamp || now - timestamp > EXPIRATION_TIME) {
+            console.log('no stored token');
+            myId = msg.id;
+            myColor = msg.color;
+            localStorage.setItem(USER_ID_KEY, myId);
+            localStorage.setItem(USER_COLOR_KEY, myColor);
+            localStorage.setItem(TIMESTAMP_KEY, now);
+        }
+
+        // need to change this
+        if (msg.isHost) {
+
+            document.getElementById("startBtn").style.display = "block";
+        }
+      } else if (msg.type === "cursor") {
+        console.log(msg);
+        drawCursor(msg.id, msg.x, msg.y, msg.color, msg.username);
+      } else if (msg.type === "game-started") {
+        const btn = document.getElementById("startBtn");
+        btn.parentNode.removeChild(btn);
+        alert("The game has started!");
+        document.getElementById("leaveButton").style.display = "block";
+        document.getElementById("lobbyPlayerListContainer").remove();
+        // Or trigger game logic
+      } else if (msg.type === "deal") {
+        myHand = msg.hand;
+        console.log('hi');
+        drawHand(msg.id, msg.username, msg.hand);
+      } else if (msg.type === "player-joined") {
+        console.log('draw player' + msg.username);
+        drawPlayer(msg.color, msg.username, msg.isHost);
+      }
+    });
+
+    document.getElementById("saveName").addEventListener("click", () => {
+        if (myName !== undefined) { // server prevents username being set twice
+            const nameInput = document.getElementById("nameInput");
+            myName = nameInput.value;
+            localStorage.setItem('userName', myName);
+
+            const data = {
+                type: "join",
+                color: myColor,
+                userId: myId,
+                username: myName
+            };
+            socket.send(JSON.stringify(data));
+        }
+
+        document.getElementById("nameContainer").style.display = "none";
+    });
+
+    document.getElementById("startBtn").addEventListener("click", () => {
+        socket.send(JSON.stringify({ type: "start" }));
+    });
+
+    document.getElementById('leaveButton').addEventListener('click', () => {
+      localStorage.removeItem(USER_ID_KEY);
+      localStorage.removeItem(USER_COLOR_KEY);
+      localStorage.removeItem(TIMESTAMP_KEY);
+      alert("You have left the game.");
+      location.reload(); // Reload to reset game state
+    });
+
+    function drawCursor(id, x, y, color, username) {
+      if (!cursors[id]) { // checks if we already drew it??? no. check if it's been drawn THE FIRST TIME
+        const div = document.createElement("div");
+        div.className = "cursor";
+        // it's because we set the css color permanently here instead of redrawing color
+        // so maybe just generate color on server
+        div.style.backgroundColor = color;
+        const span = document.createElement("span");
+        span.textContent = username;
+        div.appendChild(span);
+        document.body.appendChild(div);
+        cursors[id] = div;
+      }
+      cursors[id].style.transform = `translate(${x}px, ${y}px)`;
+    }
+
+    function drawHand(id, username, hand) {
+        console.log(handDivs[id]);
+        if (!handDivs[id]) { // checks if we already drew it??? no. check if it's been drawn THE FIRST TIME
+            const div = document.createElement("div");
+            div.className = "hand";
+            document.body.appendChild(div);
+            handDivs[id] = div;
+        }
+
+        handDivs[id].innerHTML = `<p>${username}</p>`; // injection
+        hand.forEach((card) => {
+            const img = document.createElement("img");
+            img.src = `cards/${card.value}.png`; // assumes images are in /cards/
+            img.alt = card.value;
+            img.className = "card";
+            handDivs[id].appendChild(img);
+        });
+    }
+
+    function drawPlayer(color, username, isHost) {
+        let lobbyPlayerListContainer = document.getElementById("lobbyPlayerListContainer");
+        const div = document.createElement("div");
+        div.className = "lobbyPlayerListItem";
+        div.innerHTML = `<p>${username}</p>` + (isHost ? ' (Host)' : ''); // injection
+        div.style.color = color;
+        lobbyPlayerListContainer.appendChild(div);
+    }
+  </script>
+</body>
+</html>
