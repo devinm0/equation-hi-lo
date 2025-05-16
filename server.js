@@ -145,7 +145,9 @@ wss.on("connection", (ws) => {
       });
     }
 
-    if (data.type === "start" && ws.userId === hostId) {
+    
+    if (data.type === "start" /*&& ws.userId === hostId*/) { // should I check isHost instead?
+        console.log("150" + ws.userId + " " + hostId);
         const payload = JSON.stringify({ type: "game-started" });
         wss.clients.forEach((client) => {
           if (client.readyState === WebSocket.OPEN) {
@@ -155,7 +157,9 @@ wss.on("connection", (ws) => {
 
         initializeGame(ws);
 
-        dealFirstHiddenCardToEachPlayer(ws);
+        dealFirstHiddenCardToEachPlayer(ws); // okay so ws is whoever started the game
+    
+        dealTwoOpenCardsToEachPlayer(ws); // okay so ws is whoever started the game
     }
 
     if (data.type === "leave") {
@@ -176,6 +180,14 @@ wss.on("connection", (ws) => {
     if (data.type === "join") {
         console.log('player actually joined here' + data.username);
 
+        if (ws.isHost) { // without this, later players joining become the host
+            // but don't have a start button. so game can't start
+            hostId = data.userId; // just use ws.userId here?
+        }
+        console.log(data.userId + " " + hostId);
+        ws.userId = data.userId;
+        hostId = data.userId;
+        console.log(hostId + " " + ws.userId);
         // need a null check on players[data.id] here
         players.set(data.userId, new Player(data.userId, data.username, []));
 
@@ -217,7 +229,7 @@ function initializeGame(ws) {    // don't need ws
 
 function dealFirstHiddenCardToEachPlayer(ws) {
     players.forEach((player, id) => { // why does value come before key. so annoying
-        for (let i = deck.length - 1; i >= 0; i--) {
+        for (let i = 0; i < deck.length; i++) {
             // cannot be operator card
             if (deck[i].suit !== 'operator') {
                 // Remove the card and give it to player
@@ -233,10 +245,48 @@ function dealFirstHiddenCardToEachPlayer(ws) {
     });
 }
 
+function dealTwoOpenCardsToEachPlayer(ws) { // could be three if there is a root
+    players.forEach((player, id) => { // why does value come before key. so annoying    
+        // first card can be any card
+        const draw = deck.splice(0, 1)[0];
+        player.hand.push(draw);
+    
+        // technically i should be putting returned cards at the bottom
+        // but the math should be the same
+        
+        // ensure second card is a number
+        for (let i = 0; i < deck.length; i++) {
+            // cannot be operator card
+            if (deck[i].suit !== 'operator') {
+                // Remove the card and give it to player
+                player.hand.push(deck.splice(i, 1)[0]);
+                break; // having to index here is so trash omg
+            }
+        }
+
+        if (draw.value === 'root') { // push another number
+            // TODO modularize this code
+            for (let i = 0; i < deck.length; i++) {
+                // cannot be operator card
+                if (deck[i].suit !== 'operator') {
+                    // Remove the card and give it to player
+                    player.hand.push(deck.splice(i, 1)[0]);
+                    break; // having to index here is so trash omg
+                }
+            }
+        }
+
+        notifyAllPlayersOfNewlyDealtCards(ws, player);
+
+        console.log("dealt hidden card to " + player.id);
+        console.log(player.hand);
+    });
+}
+
 function notifyAllPlayersOfNewlyDealtCards(ws, player) {
     wss.clients.forEach((client) => {
         let payload;
-        if (client == ws) { // need to check if client = username
+        if (client.userId == player.id) { // need to check if client = username
              payload = JSON.stringify({
                 type: "deal",
                 id: player.id,
@@ -244,11 +294,15 @@ function notifyAllPlayersOfNewlyDealtCards(ws, player) {
                 hand: player.hand
               });
             } else {
+                // hide the hidden card.
+                let handToSend = JSON.parse(JSON.stringify(player.hand));
+                handToSend[3] = new Card(null, 'hidden');
+                // [...hand] //  only works if contains primitives
              payload = JSON.stringify({
                 type: "deal",
                 id: player.id,
                 username: player.username,
-                hand: player.hand // Array. fill with nulls or something
+                hand: handToSend // Array. fill with nulls or something
               });
             }
 

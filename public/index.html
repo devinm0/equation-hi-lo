@@ -81,12 +81,14 @@
       } else if (msg.type === "game-started") {
         const btn = document.getElementById("startBtn");
         btn.parentNode.removeChild(btn);
-        alert("The game has started!");
+        // alert("The game has started!");
         document.getElementById("leaveButton").style.display = "block";
         document.getElementById("lobbyPlayerListContainer").remove();
         // Or trigger game logic
       } else if (msg.type === "deal") {
-        myHand = msg.hand;
+        if (msg.id === myId) {
+            myHand = msg.hand;
+        }
         console.log('hi');
         drawHand(msg.id, msg.username, msg.hand);
       } else if (msg.type === "player-joined") {
@@ -150,11 +152,30 @@
             handDivs[id] = div;
         }
 
+        // Add check, don't assume server guarantees at most one multiply card
+        // Need to discard either multiply, plus, or minus
+        const handContainsMultiplyCard = myHand.some(e => e.value === 'multiply');
+        
+        if (handContainsMultiplyCard) {
+            alert("Multiplication card received. Please discard either addition, subtraction, or multiplication card.");
+        }
+        console.log(myHand);
+        console.log('hand contains multiply is ' + handContainsMultiplyCard);
         handDivs[id].innerHTML = `<p>${username}</p>`; // injection
         hand.forEach((card) => {
             const cardDiv = document.createElement("div");
             cardDiv.innerHTML = `<p>${getTextFromCardValue(card.value)}</p>`
-            cardDiv.className = "card";
+            cardDiv.className = card.value ? "card" : "card-back";
+
+            console.log('card.value is ' + card.value);
+            if (handContainsMultiplyCard && id === myId && (
+                card.value === "subtract" ||
+                card.value === "add" ||
+                card.value === "multiply"
+            )) {
+                cardDiv.style.backgroundColor = 'rgb(255, 252, 216)';
+                cardDiv.style.boxShadow = '0px 0px 5px rgba(255, 255, 0, 0.4)'
+            }
             cardDiv.style.color = getColorFromSuit(card.suit);
                 
             handDivs[id].appendChild(cardDiv);
@@ -238,7 +259,7 @@
                 return '+';
                 break;
             default:
-                return '?';
+                return '';
         }
     }
   </script>

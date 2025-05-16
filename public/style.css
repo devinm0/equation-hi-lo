@@ -41,13 +41,29 @@ background-color: #333;
     display: flex;
     align-items: center;
     justify-content: center;
-    font-size: 64px;
+    font-size: 128px;
     font-weight: bold;
     font-family: 'Arial', serif;
     color: black;
     margin: 8px;
     user-select: none;
     transition: transform 0.2s ease;
+}
+
+.card-back {
+    width: 120px;
+    height: 180px;
+    background: repeating-linear-gradient(
+        45deg,
+        #1400c4,
+        #3760f3 10px,
+        #ffffff 10px,
+        #ffffff 10px
+    );
+    border-radius: 12px;
+    box-shadow: 2px 4px 10px rgba(0, 0, 0, 0.2);
+    margin: 8px;
+    position: relative;
 }
 
 .card:hover {
