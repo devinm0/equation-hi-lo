@@ -16,7 +16,7 @@
     </div>
     <button class="button" id="leaveButton" style="display:none;">Leave Game</button>
   <script>
-    const socket = new WebSocket(`ws://${location.host}`);
+    const socket = new WebSocket(`ws://192.168.1.220:3000`);
     const cursors = {};
     const handDivs = {};
     const lobbyPlayerDivs = {};
@@ -152,11 +152,12 @@
 
         handDivs[id].innerHTML = `<p>${username}</p>`; // injection
         hand.forEach((card) => {
-            const img = document.createElement("img");
-            img.src = `cards/${card.value}.png`; // assumes images are in /cards/
-            img.alt = card.value;
-            img.className = "card";
-            handDivs[id].appendChild(img);
+            const cardDiv = document.createElement("div");
+            cardDiv.innerHTML = `<p>${getTextFromCardValue(card.value)}</p>`
+            cardDiv.className = "card";
+            cardDiv.style.color = getColorFromSuit(card.suit);
+                
+            handDivs[id].appendChild(cardDiv);
         });
     }
 
@@ -167,6 +168,78 @@
         div.innerHTML = `<p>${username}</p>` + (isHost ? ' (Host)' : ''); // injection
         div.style.color = color;
         lobbyPlayerListContainer.appendChild(div);
+    }
+
+    function getColorFromSuit(suit) {
+        switch(suit) {
+            case 'GOLD':
+                return 'rgb(228, 167, 1)';
+                break;
+            case 'SILVER':
+                return 'rgb(177, 177, 177)';
+                break;
+            case 'BRONZE':
+                return 'rgb(122, 61, 0)';
+                break;
+            case 'STONE':
+                return 'rgb(66, 66, 66)';
+                break;
+        }
+    }
+
+    function getTextFromCardValue(value) {
+        switch(value) {
+            case 'TEN':
+                return 10;
+                break;
+            case 'NINE':
+                return 9;
+                break;
+            case 'EIGHT':
+                return 8;
+                break;
+            case 'SEVEN':
+                return 7;
+                break;
+            case 'SIX':
+                return 6;
+                break;
+            case 'FIVE':
+                return 5;
+                break;
+            case 'FOUR':
+                return 4;
+                break;
+            case 'THREE':
+                return 3;
+                break;
+            case 'TWO':
+                return 2;
+                break;
+            case 'ONE':
+                return 1;
+                break;
+            case 'ZERO':
+                return 0;
+                break;
+            case 'ROOT':
+                return '√';
+                break;
+            case 'multiply': // TODO need to fix the enum, use enum values instead of strings
+                return '&times';
+                break;
+            case 'divide':
+                return '&divide';
+                break;
+            case 'subtract': // TODO should rename this to minus
+                return '−';
+                break;
+            case 'add':
+                return '+';
+                break;
+            default:
+                return '?';
+        }
     }
   </script>
 </body>

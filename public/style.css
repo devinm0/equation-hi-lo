@@ -1,5 +1,5 @@
-body { margin: 0; overflow: hidden; background-color: hsl(163, 87%, 36%); font-family: 'Arial'}
-.cursor {
+body { margin: 0; overflow: hidden; background-color: hsl(183, 89%, 31%); font-family: 'Arial'}
+.cursor { 
     width: 10px;
     height: 10px;
     border-radius: 50%;
@@ -27,8 +27,31 @@ body { margin: 0; overflow: hidden; background-color: hsl(163, 87%, 36%); font-f
 background-color: #333;
 }
 
+.hand {
+    display: flex;
+    gap: 8px;
+}
+
 .card {
-    width: 100px;
+    width: 120px;
+    height: 180px;
+    background-color: white;
+    border-radius: 12px;
+    box-shadow: 2px 4px 5px rgba(0, 0, 0, 0.4);
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    font-size: 64px;
+    font-weight: bold;
+    font-family: 'Arial', serif;
+    color: black;
+    margin: 8px;
+    user-select: none;
+    transition: transform 0.2s ease;
+}
+
+.card:hover {
+    transform: scale(1.05);
 }
 
 #uiContainer {

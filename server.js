@@ -64,11 +64,14 @@ for (const number in NumberCards) {
     }
 }
 // add 5 each of multiply and root cards to deck
-for (let i = 0; i < 5; i++) {
+for (let i = 0; i < 4; i++) {
     deck.push(new Card(OperatorCards.MULTIPLY, 'operator'));
     deck.push(new Card(OperatorCards.ROOT, 'operator'));
 }
 
+deck.sort(() => Math.random() - 0.5);
+
+console.log(deck);
 let hostId = null;
 
 app.use(express.static("public"));
@@ -151,6 +154,8 @@ wss.on("connection", (ws) => {
         });
 
         initializeGame(ws);
+
+        dealFirstHiddenCardToEachPlayer(ws);
     }
 
     if (data.type === "leave") {
@@ -196,65 +201,59 @@ wss.on("connection", (ws) => {
   });
 });
 
-server.listen(3000, () => {
+server.listen(3000, "0.0.0.0", () => {
   console.log("Server running on http://localhost:3000");
 });
 
-function initializeGame(ws) {    
-    console.log(players);
-    players.forEach((player, id) => {
+function initializeGame(ws) {    // don't need ws
+    players.forEach((player, id) => { // why does value come before key. so annoying
         player.hand.push(new Card(OperatorCards.ADD, 'operator'));
         player.hand.push(new Card(OperatorCards.DIVIDE, 'operator'));
         player.hand.push(new Card(OperatorCards.SUBTRACT, 'operator'));
 
-        console.log(player.hand);
-
-        
-        wss.clients.forEach((client) => {
-            let payload;
-            if (client == ws) {
-                 payload = JSON.stringify({
-                    type: "deal",
-                    id: player.id,
-                    username: player.username,
-                    hand: player.hand
-                  });
-                } else {
-                 payload = JSON.stringify({
-                    type: "deal",
-                    id: player.id,
-                    username: player.username,
-                    hand: player.hand // Array. fill with nulls or something
-                  });
-                }
-
-            if (/*client !== ws && */client.readyState === WebSocket.OPEN) {
-              client.send(payload);
-            }
-        });
+        notifyAllPlayersOfNewlyDealtCards(ws, player);
     })
 }
 
+function dealFirstHiddenCardToEachPlayer(ws) {
+    players.forEach((player, id) => { // why does value come before key. so annoying
+        for (let i = deck.length - 1; i >= 0; i--) {
+            // cannot be operator card
+            if (deck[i].suit !== 'operator') {
+                // Remove the card and give it to player
+                player.hand.push(deck.splice(i, 1)[0]);
+                break; // having to index here is so trash omg
+            }
+        }
 
-/* TODO
+        notifyAllPlayersOfNewlyDealtCards(ws, player);
 
-support up to 10 people, alert if too many people are in the game.
+        console.log("dealt hidden card to " + player.id);
+        console.log(player.hand);
+    });
+}
 
-so now I need to manage expiry of users on the server side as well... jesus
+function notifyAllPlayersOfNewlyDealtCards(ws, player) {
+    wss.clients.forEach((client) => {
+        let payload;
+        if (client == ws) { // need to check if client = username
+             payload = JSON.stringify({
+                type: "deal",
+                id: player.id,
+                username: player.username,
+                hand: player.hand
+              });
+            } else {
+             payload = JSON.stringify({
+                type: "deal",
+                id: player.id,
+                username: player.username,
+                hand: player.hand // Array. fill with nulls or something
+              });
+            }
 
-
-ok private browsing works bc no local storage
-// need to clear local storage before connecting to a new game
-// also if localstorage is there, it sets host to an id that isn't even me... so start button will disappear if i refresh
-// send a game end message if the server gets shut down? hmm but no fault toleranc
-//      what about clear localstorage if lose connection to server? that doesn't work as an indicator
-//      that it ended ... might come back up
-// maybe this is actually how I want it to work...
-
-// and if I leave the game, I immediately rejoin as a new person lol
-
-
-// TODO show leave button to refreshed page as well
-
-if i open another tab, it no longer shows the start game button...
-*/
+        if (/*client !== ws && */client.readyState === WebSocket.OPEN) {
+          client.send(payload);
+        }
+    });
+}
