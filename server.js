@@ -45,6 +45,13 @@ const Suits = {
     STONE: "stone"
 }
 
+const GamePhases = {
+    FIRSTDEAL: "firstdeal",
+    FIRSTBETTING: "firstbetting",
+    SECONDDEAL: "seconddeal",
+    SECONDBETTING: "secondbetting"
+}
+
 class Card {
     constructor(value, suit) {
         this.value = value;
@@ -52,6 +59,12 @@ class Card {
     }
 }
 let deck = []
+// add 5 each of multiply and root cards to deck
+for (let i = 0; i < 4; i++) {
+    deck.push(new Card(OperatorCards.MULTIPLY, 'operator'));
+    deck.push(new Card(OperatorCards.ROOT, 'operator'));
+}
+
 // add all numbers of all suits to deck
 for (const number in NumberCards) {
     if (NumberCards.hasOwnProperty(number)) { // Check if the property belongs to the object itself
@@ -63,16 +76,14 @@ for (const number in NumberCards) {
       }
     }
 }
-// add 5 each of multiply and root cards to deck
-for (let i = 0; i < 4; i++) {
-    deck.push(new Card(OperatorCards.MULTIPLY, 'operator'));
-    deck.push(new Card(OperatorCards.ROOT, 'operator'));
-}
 
-deck.sort(() => Math.random() - 0.5);
+// deck.sort(() => Math.random() - 0.5);
 
 console.log(deck);
 let hostId = null;
+// rather than global variables how can we make this functional
+let numPlayersThatHaveDiscarded = 0;
+let numPlayersThatNeedToDiscard = 0; 
 
 app.use(express.static("public"));
 
@@ -96,7 +107,7 @@ wss.on("connection", (ws) => {
   // only log it if socket message comes BACK
   console.log(`User connected: ${userId}`);
 
-  console.log(players);
+//   console.log(players);
   // Send init message with the userId
   ws.send(JSON.stringify({ type: "init", id: userId, color: userColor, isHost: ws.isHost || false }));
 
@@ -122,6 +133,45 @@ wss.on("connection", (ws) => {
       data = JSON.parse(str);
     } catch {
       return;
+    }
+
+    if (data.type === "discard") {
+        const payload = JSON.stringify({
+            type: "player-discarded",
+            id: data.id,
+            username: data.username,
+            value: data.value
+        });
+
+        // I guess we need a system to check that ALL cards have been discarded 
+        // before moving on to next round
+        // also this check for not equal ws might be wrong
+        wss.clients.forEach((client) => {
+            if (client !== ws && client.readyState === WebSocket.OPEN) {
+                client.send(payload);
+            }
+        });
+
+        // deal a replacement NUMBER card
+        const player = players.get(data.id);
+        console.log(data.id);
+        console.log(players);
+        console.log(player);
+        console.log(player.hand);
+        player.hand = player.hand.filter(card => card.value != data.value);
+        const draw = dealNumberCard();
+        player.hand.push(draw);
+        console.log(player.hand);
+
+        notifyAllPlayersOfNewlyDealtCards(ws, player);
+
+        numPlayersThatHaveDiscarded += 1;
+
+        if (numPlayersThatHaveDiscarded === numPlayersThatNeedToDiscard) {
+            commenceFirstRoundBetting(); 
+            // this would break if someone leaves the game.
+            // if someone leaves, reduce num players that need ro discard by 1?
+        }
     }
 
     // Forward cursor messages to others
@@ -245,43 +295,66 @@ function dealFirstHiddenCardToEachPlayer(ws) {
     });
 }
 
-function dealTwoOpenCardsToEachPlayer(ws) { // could be three if there is a root
+function dealNumberCard() {
+    for (let i = 0; i < deck.length; i++) {
+        // cannot be operator card
+        if (deck[i].suit !== 'operator') {
+            // Remove the card and give it to player
+            return deck.splice(i, 1)[0];
+        }
+    }
+}
+
+function dealAnyCard() {
+    return deck.splice(0, 1)[0];
+}
+
+// TODO write tests for these
+// that two operators cannot be dealt
+// that number count is now 3 if there's a root
+
+function dealTwoOpenCardsToEachPlayer(ws) {
+    // could be three if there is a root
     players.forEach((player, id) => { // why does value come before key. so annoying    
         // first card can be any card
-        const draw = deck.splice(0, 1)[0];
+        const draw = dealAnyCard();
         player.hand.push(draw);
     
-        // technically i should be putting returned cards at the bottom
-        // but the math should be the same
-        
-        // ensure second card is a number
-        for (let i = 0; i < deck.length; i++) {
-            // cannot be operator card
-            if (deck[i].suit !== 'operator') {
-                // Remove the card and give it to player
-                player.hand.push(deck.splice(i, 1)[0]);
-                break; // having to index here is so trash omg
-            }
+        // technically i should be putting returned cards at the bottom, but the math should be the same
+        // TODO also need to program in the new card being dealt after discard choice
+        let draw2;
+        if (draw.suit === 'operator') {
+            draw2 = dealNumberCard();
+        } else {
+            draw2 = dealAnyCard();
+        }
+        player.hand.push(draw2);
+
+        if (draw.value === 'root' || draw2.value === 'root') { // push another number
+            const draw3 = dealNumberCard();
+            player.hand.push(draw3);
         }
 
-        if (draw.value === 'root') { // push another number
-            // TODO modularize this code
-            for (let i = 0; i < deck.length; i++) {
-                // cannot be operator card
-                if (deck[i].suit !== 'operator') {
-                    // Remove the card and give it to player
-                    player.hand.push(deck.splice(i, 1)[0]);
-                    break; // having to index here is so trash omg
-                }
-            }
+        if (draw.value === 'multiply' || draw2.value === 'multiply') { // expect one more person to discard before advancing game state
+            numPlayersThatNeedToDiscard += 1;
         }
 
         notifyAllPlayersOfNewlyDealtCards(ws, player);
 
-        console.log("dealt hidden card to " + player.id);
+        console.log("dealt two open cards to " + player.id);
         console.log(player.hand);
     });
+
+    return numPlayersThatNeedToDiscard;
 }
+
+function dealLastOpenCard(ws, player) {
+    // looks like if it's any operator, deal another card
+    // discard applies again with multiply
+}
+
+// then make equations
+// THEN second round betting
 
 function notifyAllPlayersOfNewlyDealtCards(ws, player) {
     wss.clients.forEach((client) => {
@@ -311,3 +384,23 @@ function notifyAllPlayersOfNewlyDealtCards(ws, player) {
         }
     });
 }
+
+function commenceFirstRoundBetting() {
+    wss.clients.forEach((client) => {
+        if (/*client !== ws && */client.readyState === WebSocket.OPEN) {
+          client.send(JSON.stringify({
+            type: "first-round-betting-commenced",
+          }));
+        }
+    });
+}
+
+// TODO add instructions for when I send it people. It can be a nice css page
+// doesn't have to be live
+// TODO bug: people don't see people that have joined before they opened the page.
+//          need to show whole lobby upon joining (this would be better w http requests)
+
+// so the new overall structure will be - turn of game, phase of turn, etc
+
+// what if the game doesn't expect a certain socket message yet anyway, but the user sends it
+// let's say I send a betting message when it's in the dealing phase. we need phases

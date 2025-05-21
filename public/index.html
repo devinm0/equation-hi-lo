@@ -32,7 +32,7 @@
     let myName = localStorage.getItem(USER_NAME_KEY);
     let timestamp = localStorage.getItem(TIMESTAMP_KEY);
     let myHand = null; // TODO this needs to be a serialized object
-    
+
     document.addEventListener("mousemove", (e) => {
         if (!myId) return;
       const data = {
@@ -72,8 +72,9 @@
 
         // need to change this
         if (msg.isHost) {
-
-            document.getElementById("startBtn").style.display = "block";
+            const button = document.getElementById("startBtn")
+            button.style.display = "block";
+            button.disabled = true;
         }
       } else if (msg.type === "cursor") {
         console.log(msg);
@@ -84,16 +85,47 @@
         // alert("The game has started!");
         document.getElementById("leaveButton").style.display = "block";
         document.getElementById("lobbyPlayerListContainer").remove();
-        // Or trigger game logic
       } else if (msg.type === "deal") {
         if (msg.id === myId) {
             myHand = msg.hand;
         }
-        console.log('hi');
         drawHand(msg.id, msg.username, msg.hand);
+
+        // TODO 5/20
+        // need the same bool to only do this with alert.
+        const highlightedCards = document.querySelectorAll('.card-highlighted');
+        highlightedCards.forEach(card => {
+            // have a guard clause here but might be better to KNOW that I'll only call this once
+            if (!card.classList.contains('listener-added')) {
+                card.addEventListener('click', function() {
+                    console.log('sending a discard message');
+                    const data = {
+                        type: "discard",
+                        id: myId,
+                        value: this.dataset.value,
+                        color: myColor,
+                        username: myName
+                    };
+                    socket.send(JSON.stringify(data));
+                    // remove the highlight from ALL cards
+                    document.querySelectorAll('.card-highlighted').forEach(card => {
+                        card.classList.remove("card-highlighted");// only do this once server confirms??
+                    });
+                });
+
+                card.classList.add('listener-added');
+            }
+        });
       } else if (msg.type === "player-joined") {
         console.log('draw player' + msg.username);
         drawPlayer(msg.color, msg.username, msg.isHost);
+
+        if (msg.isHost) {
+            const button = document.getElementById("startBtn")
+            button.disabled = false;            
+        }
+      } else if (msg.type === "player-discarded") {
+        alert(msg.username + " discarded their " + msg.value + " card.");
       }
     });
 
@@ -144,7 +176,6 @@
     }
 
     function drawHand(id, username, hand) {
-        console.log(handDivs[id]);
         if (!handDivs[id]) { // checks if we already drew it??? no. check if it's been drawn THE FIRST TIME
             const div = document.createElement("div");
             div.className = "hand";
@@ -156,28 +187,35 @@
         // Need to discard either multiply, plus, or minus
         const handContainsMultiplyCard = myHand.some(e => e.value === 'multiply');
         
+        // TODO: bug we get a notification twice here
+        // TODO: we get a  notification again if it wasn't the discard.
+        //       need a bool that says we've notified.
         if (handContainsMultiplyCard) {
             alert("Multiplication card received. Please discard either addition, subtraction, or multiplication card.");
         }
-        console.log(myHand);
-        console.log('hand contains multiply is ' + handContainsMultiplyCard);
         handDivs[id].innerHTML = `<p>${username}</p>`; // injection
         hand.forEach((card) => {
             const cardDiv = document.createElement("div");
             cardDiv.innerHTML = `<p>${getTextFromCardValue(card.value)}</p>`
             cardDiv.className = card.value ? "card" : "card-back";
 
-            console.log('card.value is ' + card.value);
-            if (handContainsMultiplyCard && id === myId && (
+            if (card.value === 10){
+                card.style.letterSpacing = '-0.1rem';
+            }
+            if (
                 card.value === "subtract" ||
                 card.value === "add" ||
                 card.value === "multiply"
-            )) {
-                cardDiv.style.backgroundColor = 'rgb(255, 252, 216)';
-                cardDiv.style.boxShadow = '0px 0px 5px rgba(255, 255, 0, 0.4)'
+            ) {
+                cardDiv.dataset.value = card.value;
+
+                if (handContainsMultiplyCard && id === myId) {
+                    // learned: be careful with capitalization
+                    cardDiv.className = "card card-highlighted"
+                }
             }
             cardDiv.style.color = getColorFromSuit(card.suit);
-                
+            
             handDivs[id].appendChild(cardDiv);
         });
     }
@@ -244,7 +282,7 @@
                 return 0;
                 break;
             case 'ROOT':
-                return '√';
+                return 'v';
                 break;
             case 'multiply': // TODO need to fix the enum, use enum values instead of strings
                 return '&times';

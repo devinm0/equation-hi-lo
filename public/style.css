@@ -50,6 +50,11 @@ background-color: #333;
     transition: transform 0.2s ease;
 }
 
+.card-highlighted {
+    background-color: rgb(255, 252, 216);
+    box-shadow: 0px 0px 5px rgba(255, 255, 0, 0.4);
+}
+
 .card-back {
     width: 120px;
     height: 180px;
@@ -116,8 +121,14 @@ background-color: #333;
 }
 
 #saveName:hover,
-#startButton:hover {
+#startBtn:hover {
     background-color: #222;
+}
+
+#startBtn:disabled {
+    background-color: #999;
+    cursor: not-allowed;
+    pointer-events: all !important;
 }
 
 .lobbyPlayerListItem {
