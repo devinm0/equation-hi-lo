@@ -1,19 +1,40 @@
 <!DOCTYPE html>
 <html lang="en">
 <head>
+  <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no">
   <meta charset="UTF-8" />
   <title>Equation Hi Lo</title>
   <link rel="stylesheet" href="style.css">
 </head>
 <body>
+    <div id="notificationWrapper">
+        <div id="notificationDiv" style="display: none;"></div>
+    </div>
+
     <div id="uiContainer">
         <div id="lobbyPlayerListContainer"></div>
         <div id="nameContainer">
             <input type="text" id="nameInput" placeholder="Enter your name" />
             <button id="saveName">Join</button>
         </div>
-        <button class="button" id="startBtn" style="display:none;">Start Game</button>
+        <button class="button" id="startBtn" style="display:none;" disabled>Start Game</button>
     </div>
+
+    <div id="potDiv">
+
+    </div>
+
+    <div id="bettingControls" style="display:none;">
+        <div id="chipStagingContainer" style="text-align:center;"><span id="betAmountLabel">0</span> chips</div>
+        <div id="betContainer">
+            <button class="button" id="foldButton">Fold</button>
+            <input type="range" min="0" max="1000" value="0" id="betSlider">
+            <button class="button" id="callRaiseButton">Call</button>
+            <button class="button" id="allInButton">All In</button>
+        </div>
+        
+    </div>
+
     <button class="button" id="leaveButton" style="display:none;">Leave Game</button>
   <script>
     const socket = new WebSocket(`ws://192.168.1.220:3000`);
@@ -74,7 +95,7 @@
         if (msg.isHost) {
             const button = document.getElementById("startBtn")
             button.style.display = "block";
-            button.disabled = true;
+            button.disabled = true; // only enable it once the host joins
         }
       } else if (msg.type === "cursor") {
         console.log(msg);
@@ -85,11 +106,11 @@
         // alert("The game has started!");
         document.getElementById("leaveButton").style.display = "block";
         document.getElementById("lobbyPlayerListContainer").remove();
-      } else if (msg.type === "deal") {
+      } else if (msg.type === "first-open-deal") {
         if (msg.id === myId) {
             myHand = msg.hand;
         }
-        drawHand(msg.id, msg.username, msg.hand);
+        drawHand(msg.id, msg.username, msg.hand, true);
 
         // TODO 5/20
         // need the same bool to only do this with alert.
@@ -116,8 +137,12 @@
                 card.classList.add('listener-added');
             }
         });
+      } else if (msg.type === "deal") {
+        if (msg.id === myId) {
+            myHand = msg.hand;
+        }
+        drawHand(msg.id, msg.username, msg.hand);
       } else if (msg.type === "player-joined") {
-        console.log('draw player' + msg.username);
         drawPlayer(msg.color, msg.username, msg.isHost);
 
         if (msg.isHost) {
@@ -126,13 +151,38 @@
         }
       } else if (msg.type === "player-discarded") {
         alert(msg.username + " discarded their " + msg.value + " card.");
+      } else if (msg.type === "first-round-betting-commenced") {
+        alert("First round betting has commenced.");
+      } else if (msg.type === "next-turn") {
+        document.getElementById("potDiv").textContent = msg.pot;
+        console.log(msg.currentTurnPlayerId, myId, msg.betAmount);
+        // we only need fold or bet state for this turn.
+        // so for each player we can have 
+
+        // needs to include fold button, slider, and staging area
+        // but your own chip stack is ALWAYS visible
+        if (msg.currentTurnPlayerId === myId) { // bad practice. trusting the client to do this.
+            setupBettingControls(msg.betAmount, msg.maxBet);
+            hideNotificationDiv();
+        } else {
+            notifyThatAnotherPlayerIsBetting(msg.username);
+        }
+        // fold button
+        // slider from currentCall to leastChippedPlayer
+        // all in button
+        // chips move from your stack to a staging stack
+        // flick to send to the pot
+
+        // server keeps track of pot and who has folded
+        // server needs to keep track of whose turn it is
+        // server keeps track of who starts the next round
       }
     });
 
     document.getElementById("saveName").addEventListener("click", () => {
         if (myName !== undefined) { // server prevents username being set twice
             const nameInput = document.getElementById("nameInput");
-            myName = nameInput.value;
+            myName = nameInput.value; //.trim();
             localStorage.setItem('userName', myName);
 
             const data = {
@@ -175,7 +225,7 @@
       cursors[id].style.transform = `translate(${x}px, ${y}px)`;
     }
 
-    function drawHand(id, username, hand) {
+    function drawHand(id, username, hand, isFirstOpenDeal = false) {
         if (!handDivs[id]) { // checks if we already drew it??? no. check if it's been drawn THE FIRST TIME
             const div = document.createElement("div");
             div.className = "hand";
@@ -183,6 +233,7 @@
             handDivs[id] = div;
         }
 
+        console.log(myHand);
         // Add check, don't assume server guarantees at most one multiply card
         // Need to discard either multiply, plus, or minus
         const handContainsMultiplyCard = myHand.some(e => e.value === 'multiply');
@@ -190,7 +241,7 @@
         // TODO: bug we get a notification twice here
         // TODO: we get a  notification again if it wasn't the discard.
         //       need a bool that says we've notified.
-        if (handContainsMultiplyCard) {
+        if (handContainsMultiplyCard && isFirstOpenDeal) {
             alert("Multiplication card received. Please discard either addition, subtraction, or multiplication card.");
         }
         handDivs[id].innerHTML = `<p>${username}</p>`; // injection
@@ -199,8 +250,10 @@
             cardDiv.innerHTML = `<p>${getTextFromCardValue(card.value)}</p>`
             cardDiv.className = card.value ? "card" : "card-back";
 
+            // careful with card and cardDiv naming like this
             if (card.value === 10){
-                card.style.letterSpacing = '-0.1rem';
+                cardDiv.style.letterSpacing = '-1rem';
+                cardDiv.style.transform = 'translateX(-0.5rem)';
             }
             if (
                 card.value === "subtract" ||
@@ -209,7 +262,7 @@
             ) {
                 cardDiv.dataset.value = card.value;
 
-                if (handContainsMultiplyCard && id === myId) {
+                if (handContainsMultiplyCard && id === myId && isFirstOpenDeal) { // TODO this is also a mess. We should have a separate drawHighlights function
                     // learned: be careful with capitalization
                     cardDiv.className = "card card-highlighted"
                 }
@@ -218,6 +271,18 @@
             
             handDivs[id].appendChild(cardDiv);
         });
+    }
+
+    function notifyThatAnotherPlayerIsBetting(name){
+        let notificationDiv = document.getElementById("notificationDiv");
+        notificationDiv.style.display = "block";
+        notificationDiv.textContent = name + " is betting";
+    }
+
+    function hideNotificationDiv(){
+        let notificationDiv = document.getElementById("notificationDiv");
+        notificationDiv.style.display = "none";
+        notificationDiv.textContent = "";
     }
 
     function drawPlayer(color, username, isHost) {
@@ -300,6 +365,59 @@
                 return '';
         }
     }
-  </script>
+
+    function setupBettingControls(currentBet, maxBet) {
+        const slider = document.getElementById("betSlider");
+        const betLabel = document.getElementById("betAmountLabel");
+        const callRaiseButton = document.getElementById("callRaiseButton");
+        const allInButton = document.getElementById("allInButton");
+
+        // Set slider range
+        slider.min = currentBet;
+        slider.max = maxBet;
+        slider.value = currentBet;
+
+        // Initial label
+        betLabel.textContent = currentBet;
+        callRaiseButton.textContent = "Call";
+
+        // Show controls
+        document.getElementById("bettingControls").style.display = "block";
+
+        slider.oninput = () => {
+            const val = parseInt(slider.value);
+            console.log(slider.min, slider.max, slider.value);
+        
+            betLabel.textContent = val;
+            // what if currentBet is null
+            callRaiseButton.textContent = val > currentBet ? "Raise" : "Call";
+        };
+
+        allInButton.onclick = () => {
+            slider.value = slider.max;
+            slider.dispatchEvent(new Event("input")); // update UI
+            // You may also trigger the bet here, if appropriate
+        };
+
+        callRaiseButton.onclick = () => {
+            const bet = parseInt(slider.value);
+            // TODO Emit or handle bet logic
+            console.log("Bet placed:", bet);
+            socket.send(JSON.stringify({ type: "bet-placed", userId: myId, betAmount: bet }));
+
+            hideBettingControls();
+        };
+
+        document.getElementById("foldButton").onclick = () => {
+            // send fold message. server will eliminate player and broadcast notification   
+            console.log("Player folded");
+        };
+    }
+
+    function hideBettingControls() {
+        document.getElementById("bettingControls").style.display = "none";
+    }
+
+</script>
 </body>
 </html>

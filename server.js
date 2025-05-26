@@ -8,13 +8,18 @@ const server = http.createServer(app);
 const wss = new WebSocket.Server({ server });
 
 class Player {
-    constructor(id, username, hand) {
+    constructor(id, username, hand, chipCount) {
         this.id = id;
         this.username = username;
         this.hand = hand;
+        this.chipCount = chipCount;
+        this.foldedThisTurn = false;
+        this.betAmount = 0;
     }
 }
 let players = new Map();
+let currentTurnPlayerId = 0;
+let pot = 0;
 
 const NumberCards = {
     ZERO: "zero",
@@ -77,7 +82,7 @@ for (const number in NumberCards) {
     }
 }
 
-// deck.sort(() => Math.random() - 0.5);
+deck.sort(() => Math.random() - 0.5);
 
 console.log(deck);
 let hostId = null;
@@ -107,10 +112,9 @@ wss.on("connection", (ws) => {
   // only log it if socket message comes BACK
   console.log(`User connected: ${userId}`);
 
-//   console.log(players);
+  // console.log(players);
   // Send init message with the userId
   ws.send(JSON.stringify({ type: "init", id: userId, color: userColor, isHost: ws.isHost || false }));
-
 
   // without this, we don't see the other cursors at the start. but even with it, they appear top corner to start
 //   players.forEach((value, key) => {
@@ -154,14 +158,9 @@ wss.on("connection", (ws) => {
 
         // deal a replacement NUMBER card
         const player = players.get(data.id);
-        console.log(data.id);
-        console.log(players);
-        console.log(player);
-        console.log(player.hand);
         player.hand = player.hand.filter(card => card.value != data.value);
         const draw = dealNumberCard();
         player.hand.push(draw);
-        console.log(player.hand);
 
         notifyAllPlayersOfNewlyDealtCards(ws, player);
 
@@ -194,7 +193,6 @@ wss.on("connection", (ws) => {
         }
       });
     }
-
     
     if (data.type === "start" /*&& ws.userId === hostId*/) { // should I check isHost instead?
         console.log("150" + ws.userId + " " + hostId);
@@ -210,6 +208,10 @@ wss.on("connection", (ws) => {
         dealFirstHiddenCardToEachPlayer(ws); // okay so ws is whoever started the game
     
         dealTwoOpenCardsToEachPlayer(ws); // okay so ws is whoever started the game
+
+        if (numPlayersThatNeedToDiscard == 0) {
+            commenceFirstRoundBetting();
+        }
     }
 
     if (data.type === "leave") {
@@ -232,6 +234,7 @@ wss.on("connection", (ws) => {
 
         if (ws.isHost) { // without this, later players joining become the host
             // but don't have a start button. so game can't start
+            currentTurnPlayerId = data.userId;
             hostId = data.userId; // just use ws.userId here?
         }
         console.log(data.userId + " " + hostId);
@@ -239,7 +242,7 @@ wss.on("connection", (ws) => {
         hostId = data.userId;
         console.log(hostId + " " + ws.userId);
         // need a null check on players[data.id] here
-        players.set(data.userId, new Player(data.userId, data.username, []));
+        players.set(data.userId, new Player(data.userId, data.username, [], Math.floor(Math.random()*10) + 10));
 
         console.log(data.userId);
             // notify other players of joining
@@ -259,7 +262,20 @@ wss.on("connection", (ws) => {
             }
         });
     }
+    if (data.type === "bet-placed"){
+        if (data.userId !== currentTurnPlayerId) return; // invalid message
+        currentTurnPlayerId = findNextPlayerTurn();
 
+        pot += data.betAmount;
+        advanceToNextPlayersTurn(data.betAmount);
+        // send message to everyone except that player, that betting is happening
+        // send message to next player with data.betAmount as new minBet
+
+        // make bet placed message on index html
+
+        // we can trust index to enable betting controls
+        // and make sure bet-placed
+    }
   });
 });
 
@@ -268,6 +284,9 @@ server.listen(3000, "0.0.0.0", () => {
 });
 
 function initializeGame(ws) {    // don't need ws
+    console.log(players);
+    console.log(currentTurnPlayerId + " < currentTurnPlayerId");
+
     players.forEach((player, id) => { // why does value come before key. so annoying
         player.hand.push(new Card(OperatorCards.ADD, 'operator'));
         player.hand.push(new Card(OperatorCards.DIVIDE, 'operator'));
@@ -339,7 +358,7 @@ function dealTwoOpenCardsToEachPlayer(ws) {
             numPlayersThatNeedToDiscard += 1;
         }
 
-        notifyAllPlayersOfNewlyDealtCards(ws, player);
+        notifyAllPlayersOfNewlyDealtCards(ws, player, true); // magic bool parameters are bad. just call notifyOfFirstOpenDeal
 
         console.log("dealt two open cards to " + player.id);
         console.log(player.hand);
@@ -356,12 +375,12 @@ function dealLastOpenCard(ws, player) {
 // then make equations
 // THEN second round betting
 
-function notifyAllPlayersOfNewlyDealtCards(ws, player) {
+function notifyAllPlayersOfNewlyDealtCards(ws, player, firstOpen = false) {
     wss.clients.forEach((client) => {
         let payload;
         if (client.userId == player.id) { // need to check if client = username
              payload = JSON.stringify({
-                type: "deal",
+                type: firstOpen? "first-open-deal" : "deal",
                 id: player.id,
                 username: player.username,
                 hand: player.hand
@@ -372,7 +391,7 @@ function notifyAllPlayersOfNewlyDealtCards(ws, player) {
                 handToSend[3] = new Card(null, 'hidden');
                 // [...hand] //  only works if contains primitives
              payload = JSON.stringify({
-                type: "deal",
+                type: firstOpen? "first-open-deal" : "deal",
                 id: player.id,
                 username: player.username,
                 hand: handToSend // Array. fill with nulls or something
@@ -385,6 +404,13 @@ function notifyAllPlayersOfNewlyDealtCards(ws, player) {
     });
 }
 
+// we need to make sure everyone has either matched or folded.
+// so commenced sends a message like this
+// each subsequent send a different message type "betting-moved-on" or "player-turn"
+// client keeps sending "bet-placed" which should actually be "turn-taken" with subtype fold call or raise
+// when do we stop messaging? when everyone has either matched or folded. based on boolean and int on each player
+    // but we have to consider giving everyone a chance to call... the above condition succeeds if first person calls
+// then reset the values to 0 and false
 function commenceFirstRoundBetting() {
     wss.clients.forEach((client) => {
         if (/*client !== ws && */client.readyState === WebSocket.OPEN) {
@@ -393,8 +419,36 @@ function commenceFirstRoundBetting() {
           }));
         }
     });
+
+    advanceToNextPlayersTurn(1);
 }
 
+// TODO display ("5 to call") or something similar
+function advanceToNextPlayersTurn(betAmount) { // should take a parameter here
+    const playerChipCounts = players.values().map(player => player.chipCount);
+    const maxBet = Math.min(...playerChipCounts);
+    console.log(players);
+    console.log(maxBet, currentTurnPlayerId, players.get(currentTurnPlayerId));
+    wss.clients.forEach((client) => {
+        if (/*client !== ws && */client.readyState === WebSocket.OPEN) {
+          client.send(JSON.stringify({
+            type: "next-turn",
+            betAmount: betAmount,
+            maxBet: maxBet,
+            currentTurnPlayerId: currentTurnPlayerId,
+            username: players.get(currentTurnPlayerId).username,
+            pot: pot
+          }));
+        }
+    });
+}
+
+function findNextPlayerTurn() {
+    var keys = Array.from(players.keys()); // just maintain an array instead of casting all the time
+    console.log(keys);
+    console.log(keys.indexOf(currentTurnPlayerId));
+    return keys[(keys.indexOf(currentTurnPlayerId) + 1) % keys.length];
+}
 // TODO add instructions for when I send it people. It can be a nice css page
 // doesn't have to be live
 // TODO bug: people don't see people that have joined before they opened the page.
@@ -404,3 +458,8 @@ function commenceFirstRoundBetting() {
 
 // what if the game doesn't expect a certain socket message yet anyway, but the user sends it
 // let's say I send a betting message when it's in the dealing phase. we need phases
+
+
+// need to send the variable which is the lowest player's chips
+// or keep it client side?
+// then have a pot variable which is total chips
