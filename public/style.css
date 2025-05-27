@@ -7,6 +7,10 @@ body { margin: 0; overflow: hidden; background-color: hsl(183, 89%, 31%); font-f
     pointer-events: none;
 }
 
+#potDiv {
+    font-weight: bold;
+    color: white;
+}
 #leaveButton {
     position: absolute;
     top: 5%;
@@ -30,6 +34,13 @@ background-color: #333;
 .hand {
     display: flex;
     gap: 8px;
+    flex-wrap: wrap;
+}
+
+.handLabel {
+    width: 100%;
+    color: white;
+    font-weight: bold;
 }
 
 .card {
@@ -189,3 +200,51 @@ background-color: #333;
       transform: translateY(0);
     }
   }
+
+  .chip-stacks-container {
+    display: flex;
+    justify-content: center;
+    align-items: flex-end;
+    gap: 12px;
+    margin: 20px auto;
+    width: fit-content;
+}
+
+.chip-stack {
+    display: flex;
+    flex-direction: column-reverse;
+    align-items: center;
+    gap: 2px;
+    transition: all 0.3s ease;
+}
+
+.chip {
+    width: 80px;
+    height: 20px;
+    margin: -8px; /* so that they stack on top of each other */
+    border-radius: 50% / 40%;
+    background-color: crimson;
+    border: 2px solid rgb(62, 62, 62);
+    box-shadow: 0 2px 4px rgba(0, 0, 0, 0.3);
+    opacity: 0;
+    transform: translateY(10px);
+    animation: chipIn 0.3s ease forwards;
+}
+
+@keyframes chipIn {
+    to {
+        opacity: 1;
+        transform: translateY(0);
+    }
+}
+
+.chip.out {
+    animation: chipOut 0.3s ease forwards;
+}
+
+@keyframes chipOut {
+    to {
+        opacity: 0;
+        transform: translateY(10px);
+    }
+}

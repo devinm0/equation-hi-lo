@@ -8,15 +8,17 @@ const server = http.createServer(app);
 const wss = new WebSocket.Server({ server });
 
 class Player {
-    constructor(id, username, hand, chipCount) {
+    constructor(id, username, hand, chipCount, foldedThisTurn = false, betAmount = 0, turnTakenThisRound = false) {
         this.id = id;
         this.username = username;
         this.hand = hand;
         this.chipCount = chipCount;
-        this.foldedThisTurn = false;
-        this.betAmount = 0;
+        this.foldedThisTurn = foldedThisTurn;
+        this.betAmount = betAmount;
+        this.turnTakenThisRound = turnTakenThisRound;
     }
 }
+
 let players = new Map();
 let currentTurnPlayerId = 0;
 let pot = 0;
@@ -116,18 +118,6 @@ wss.on("connection", (ws) => {
   // Send init message with the userId
   ws.send(JSON.stringify({ type: "init", id: userId, color: userColor, isHost: ws.isHost || false }));
 
-  // without this, we don't see the other cursors at the start. but even with it, they appear top corner to start
-//   players.forEach((value, key) => {
-//     const payload = JSON.stringify({
-//         type: "cursor",
-//         id: key,
-//         x: value.x,
-//         y: value.y,
-//         color: value.color,
-//       });
-//       ws.send(payload);
-//   })
-
   ws.on("message", (message) => {
     // console.log("message");
     const str = message.toString();
@@ -171,27 +161,6 @@ wss.on("connection", (ws) => {
             // this would break if someone leaves the game.
             // if someone leaves, reduce num players that need ro discard by 1?
         }
-    }
-
-    // Forward cursor messages to others
-    if (data.type === "cursor") {
-        // players.set(userId, {x: data.x, y: data.y, color: data.color});
-
-      // why aren't we using userId instead of data.Id here?
-      const payload = JSON.stringify({
-        type: "cursor",
-        id: data.id,
-        x: data.x,
-        y: data.y,
-        color: data.color,
-        username: data.username
-      });
-
-      wss.clients.forEach((client) => {
-        if (client !== ws && client.readyState === WebSocket.OPEN) {
-          client.send(payload);
-        }
-      });
     }
     
     if (data.type === "start" /*&& ws.userId === hostId*/) { // should I check isHost instead?
@@ -264,17 +233,33 @@ wss.on("connection", (ws) => {
     }
     if (data.type === "bet-placed"){
         if (data.userId !== currentTurnPlayerId) return; // invalid message
-        currentTurnPlayerId = findNextPlayerTurn();
 
+        const justPlayedPlayer = players.get(data.userId);
+        justPlayedPlayer.turnTakenThisRound = true;
+        justPlayedPlayer.foldedThisTurn = data.folded; // can we pass nothing in the case of placing a bet?
+        justPlayedPlayer.betAmount += data.betAmount // or should it just be raise? handle if someone folds
+        justPlayedPlayer.chipCount -= data.betAmount // should only be the diff
         pot += data.betAmount;
-        advanceToNextPlayersTurn(data.betAmount);
-        // send message to everyone except that player, that betting is happening
-        // send message to next player with data.betAmount as new minBet
 
-        // make bet placed message on index html
+        // determine if turn is over. check all players either called or folded
+        const activePlayers = Array.from(players).filter(([id, player]) => player.foldedThisTurn !== true)
+        if (activePlayers.length === 1){
+            // end turn
+            console.log("only one active player");
+            endTurn();
+            return;
+        }
+        const playerBetAmounts = activePlayers.map(([id, player]) => player.betAmount);
+        const setOfBets = new Set(playerBetAmounts);
+        if (setOfBets.size === 1){
+            // end turn
+            console.log("everyone has called or folded");
+            endTurn();
+            return;
+        }
 
-        // we can trust index to enable betting controls
-        // and make sure bet-placed
+        currentTurnPlayerId = findNextPlayerTurn();
+        advanceToNextPlayersTurn(justPlayedPlayer.betAmount);
     }
   });
 });
@@ -284,8 +269,7 @@ server.listen(3000, "0.0.0.0", () => {
 });
 
 function initializeGame(ws) {    // don't need ws
-    console.log(players);
-    console.log(currentTurnPlayerId + " < currentTurnPlayerId");
+    console.log("initializeGame");
 
     players.forEach((player, id) => { // why does value come before key. so annoying
         player.hand.push(new Card(OperatorCards.ADD, 'operator'));
@@ -308,9 +292,6 @@ function dealFirstHiddenCardToEachPlayer(ws) {
         }
 
         notifyAllPlayersOfNewlyDealtCards(ws, player);
-
-        console.log("dealt hidden card to " + player.id);
-        console.log(player.hand);
     });
 }
 
@@ -375,6 +356,13 @@ function dealLastOpenCard(ws, player) {
 // then make equations
 // THEN second round betting
 
+function endTurn() {
+    for (const [key, value] of players) {
+        value.turnTakenThisRound = false;
+        value.foldedThisTurn = false;
+        value.betAmount = 0;
+    }
+}
 function notifyAllPlayersOfNewlyDealtCards(ws, player, firstOpen = false) {
     wss.clients.forEach((client) => {
         let payload;
@@ -404,13 +392,6 @@ function notifyAllPlayersOfNewlyDealtCards(ws, player, firstOpen = false) {
     });
 }
 
-// we need to make sure everyone has either matched or folded.
-// so commenced sends a message like this
-// each subsequent send a different message type "betting-moved-on" or "player-turn"
-// client keeps sending "bet-placed" which should actually be "turn-taken" with subtype fold call or raise
-// when do we stop messaging? when everyone has either matched or folded. based on boolean and int on each player
-    // but we have to consider giving everyone a chance to call... the above condition succeeds if first person calls
-// then reset the values to 0 and false
 function commenceFirstRoundBetting() {
     wss.clients.forEach((client) => {
         if (/*client !== ws && */client.readyState === WebSocket.OPEN) {
@@ -433,7 +414,7 @@ function advanceToNextPlayersTurn(betAmount) { // should take a parameter here
         if (/*client !== ws && */client.readyState === WebSocket.OPEN) {
           client.send(JSON.stringify({
             type: "next-turn",
-            betAmount: betAmount,
+            toCall: betAmount - players.get(currentTurnPlayerId).betAmount,
             maxBet: maxBet,
             currentTurnPlayerId: currentTurnPlayerId,
             username: players.get(currentTurnPlayerId).username,

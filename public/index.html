@@ -20,12 +20,12 @@
         <button class="button" id="startBtn" style="display:none;" disabled>Start Game</button>
     </div>
 
-    <div id="potDiv">
+    <div id="potDiv" style="text-align: center; font-weight: bold; margin-bottom: 10px;"></div>
 
-    </div>
+    <div id="chipStacksContainer" class="chip-stacks-container"></div>
 
     <div id="bettingControls" style="display:none;">
-        <div id="chipStagingContainer" style="text-align:center;"><span id="betAmountLabel">0</span> chips</div>
+        <div id="chipStagingContainer" style="text-align:center; font-weight: bold; color: white;"><span id="betAmountLabel">0</span> chips</div>
         <div id="betContainer">
             <button class="button" id="foldButton">Fold</button>
             <input type="range" min="0" max="1000" value="0" id="betSlider">
@@ -38,7 +38,6 @@
     <button class="button" id="leaveButton" style="display:none;">Leave Game</button>
   <script>
     const socket = new WebSocket(`ws://192.168.1.220:3000`);
-    const cursors = {};
     const handDivs = {};
     const lobbyPlayerDivs = {};
 
@@ -53,20 +52,6 @@
     let myName = localStorage.getItem(USER_NAME_KEY);
     let timestamp = localStorage.getItem(TIMESTAMP_KEY);
     let myHand = null; // TODO this needs to be a serialized object
-
-    document.addEventListener("mousemove", (e) => {
-        if (!myId) return;
-      const data = {
-        type: "cursor",
-        id: myId,
-        x: e.clientX,
-        y: e.clientY,
-        color: myColor,
-        username: myName
-      };
-      socket.send(JSON.stringify(data));
-      drawCursor(myId, e.clientX, e.clientY, myColor, myName);
-    });
 
     //sounds like we are telling socket to listen but no we are listening to socket
     socket.addEventListener("message", (event) => {
@@ -97,9 +82,6 @@
             button.style.display = "block";
             button.disabled = true; // only enable it once the host joins
         }
-      } else if (msg.type === "cursor") {
-        console.log(msg);
-        drawCursor(msg.id, msg.x, msg.y, msg.color, msg.username);
       } else if (msg.type === "game-started") {
         const btn = document.getElementById("startBtn");
         btn.parentNode.removeChild(btn);
@@ -119,11 +101,12 @@
             // have a guard clause here but might be better to KNOW that I'll only call this once
             if (!card.classList.contains('listener-added')) {
                 card.addEventListener('click', function() {
-                    console.log('sending a discard message');
+                    console.log('sending a discard message ');
+                    console.log(this);
                     const data = {
                         type: "discard",
                         id: myId,
-                        value: this.dataset.value,
+                        value: this.children[0].dataset.value,
                         color: myColor,
                         username: myName
                     };
@@ -154,15 +137,16 @@
       } else if (msg.type === "first-round-betting-commenced") {
         alert("First round betting has commenced.");
       } else if (msg.type === "next-turn") {
-        document.getElementById("potDiv").textContent = msg.pot;
-        console.log(msg.currentTurnPlayerId, myId, msg.betAmount);
+        document.getElementById("potDiv").textContent = "Pot: " + msg.pot;
+        updateChipStack(msg.pot);
+        console.log(msg.currentTurnPlayerId, myId, msg.toCall);
         // we only need fold or bet state for this turn.
         // so for each player we can have 
 
         // needs to include fold button, slider, and staging area
         // but your own chip stack is ALWAYS visible
         if (msg.currentTurnPlayerId === myId) { // bad practice. trusting the client to do this.
-            setupBettingControls(msg.betAmount, msg.maxBet);
+            setupBettingControls(msg.toCall, msg.maxBet);
             hideNotificationDiv();
         } else {
             notifyThatAnotherPlayerIsBetting(msg.username);
@@ -209,22 +193,6 @@
       location.reload(); // Reload to reset game state
     });
 
-    function drawCursor(id, x, y, color, username) {
-      if (!cursors[id]) { // checks if we already drew it??? no. check if it's been drawn THE FIRST TIME
-        const div = document.createElement("div");
-        div.className = "cursor";
-        // it's because we set the css color permanently here instead of redrawing color
-        // so maybe just generate color on server
-        div.style.backgroundColor = color;
-        const span = document.createElement("span");
-        span.textContent = username;
-        div.appendChild(span);
-        document.body.appendChild(div);
-        cursors[id] = div;
-      }
-      cursors[id].style.transform = `translate(${x}px, ${y}px)`;
-    }
-
     function drawHand(id, username, hand, isFirstOpenDeal = false) {
         if (!handDivs[id]) { // checks if we already drew it??? no. check if it's been drawn THE FIRST TIME
             const div = document.createElement("div");
@@ -235,7 +203,6 @@
 
         console.log(myHand);
         // Add check, don't assume server guarantees at most one multiply card
-        // Need to discard either multiply, plus, or minus
         const handContainsMultiplyCard = myHand.some(e => e.value === 'multiply');
         
         // TODO: bug we get a notification twice here
@@ -243,24 +210,33 @@
         //       need a bool that says we've notified.
         if (handContainsMultiplyCard && isFirstOpenDeal) {
             alert("Multiplication card received. Please discard either addition, subtraction, or multiplication card.");
-        }
-        handDivs[id].innerHTML = `<p>${username}</p>`; // injection
+        }        
+
+        // clear the hand, since this gets drawn on every deal, so we can redraw the cards
+        handDivs[id].innerHTML = `<p></p>`; // injection
+        const nameDiv = document.createElement("div");
+        nameDiv.innerHTML = `<p>${username}</p>`; // injection
+        nameDiv.className = "handLabel";
+        handDivs[id].appendChild(nameDiv);
+        
         hand.forEach((card) => {
             const cardDiv = document.createElement("div");
-            cardDiv.innerHTML = `<p>${getTextFromCardValue(card.value)}</p>`
+            const cardDivParagraph = document.createElement("p");
+            cardDivParagraph.innerHTML = `${getTextFromCardValue(card.value)}`;
+            cardDiv.appendChild(cardDivParagraph);
             cardDiv.className = card.value ? "card" : "card-back";
 
             // careful with card and cardDiv naming like this
-            if (card.value === 10){
-                cardDiv.style.letterSpacing = '-1rem';
-                cardDiv.style.transform = 'translateX(-0.5rem)';
+            if (card.value === "TEN"){
+                cardDivParagraph.style.letterSpacing = '-1rem';
+                cardDivParagraph.style.transform = 'translateX(-0.7rem)';
             }
             if (
                 card.value === "subtract" ||
                 card.value === "add" ||
                 card.value === "multiply"
             ) {
-                cardDiv.dataset.value = card.value;
+                cardDivParagraph.dataset.value = card.value;
 
                 if (handContainsMultiplyCard && id === myId && isFirstOpenDeal) { // TODO this is also a mess. We should have a separate drawHighlights function
                     // learned: be careful with capitalization
@@ -366,19 +342,19 @@
         }
     }
 
-    function setupBettingControls(currentBet, maxBet) {
+    function setupBettingControls(toCall, maxBet) {
         const slider = document.getElementById("betSlider");
         const betLabel = document.getElementById("betAmountLabel");
         const callRaiseButton = document.getElementById("callRaiseButton");
         const allInButton = document.getElementById("allInButton");
 
         // Set slider range
-        slider.min = currentBet;
+        slider.min = toCall;
         slider.max = maxBet;
-        slider.value = currentBet;
+        slider.value = toCall;
 
         // Initial label
-        betLabel.textContent = currentBet;
+        betLabel.textContent = toCall;
         callRaiseButton.textContent = "Call";
 
         // Show controls
@@ -390,7 +366,7 @@
         
             betLabel.textContent = val;
             // what if currentBet is null
-            callRaiseButton.textContent = val > currentBet ? "Raise" : "Call";
+            callRaiseButton.textContent = val > toCall ? "Raise" : "Call";
         };
 
         allInButton.onclick = () => {
@@ -403,7 +379,7 @@
             const bet = parseInt(slider.value);
             // TODO Emit or handle bet logic
             console.log("Bet placed:", bet);
-            socket.send(JSON.stringify({ type: "bet-placed", userId: myId, betAmount: bet }));
+            socket.send(JSON.stringify({ type: "bet-placed", userId: myId, betAmount: bet, folded: false }));
 
             hideBettingControls();
         };
@@ -411,12 +387,49 @@
         document.getElementById("foldButton").onclick = () => {
             // send fold message. server will eliminate player and broadcast notification   
             console.log("Player folded");
+            socket.send(JSON.stringify({ type: "bet-placed", userId: myId, folded: true }));
         };
     }
 
     function hideBettingControls() {
         document.getElementById("bettingControls").style.display = "none";
     }
+
+    const maxStackSize = 10;
+    let chipCount = 0;
+    const container = document.getElementById("chipStacksContainer");
+
+    function updateChipStack(newCount) {
+        chipCount = newCount;
+        
+        // Clear all previous stacks
+        container.innerHTML = "";
+
+        const fullStacks = Math.floor(chipCount / maxStackSize);
+        const remainder = chipCount % maxStackSize;
+
+        const stackCounts = Array(fullStacks).fill(maxStackSize);
+        if (remainder > 0) {
+            stackCounts.push(remainder);
+        }
+
+        for (const count of stackCounts) {
+            const stack = document.createElement("div");
+            stack.classList.add("chip-stack");
+
+            for (let i = 0; i < count; i++) {
+                const chip = document.createElement("div");
+                chip.classList.add("chip");
+                stack.appendChild(chip);
+            }
+
+            container.appendChild(stack);
+        }
+    }
+
+    // TODO use this timeout code when first going to the site. It's a cool animation to draw people in
+    // setTimeout(() => updateChipStack(8), 3000);   // fewer chips
+    // setTimeout(() => updateChipStack(17), 6000);  // mixed stack sizes
 
 </script>
 </body>
