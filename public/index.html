@@ -145,10 +145,14 @@
         } else { 
             alert(msg.username + " bet " + msg.betAmount);
             updateChipStack(msg.chipCount, document.getElementById("chipStacksContainer-" + msg.id));
+
+            // update pot
+            document.getElementById("potDiv").textContent = "Pot: " + msg.pot;
+            updateChipStack(msg.pot, document.getElementById("chipStacksContainer")); //should rename it to potStacksContainer
         }
       } else if (msg.type === "next-turn") {
-        document.getElementById("potDiv").textContent = "Pot: " + msg.pot;
-        updateChipStack(msg.pot, document.getElementById("chipStacksContainer"));
+        // document.getElementById("potDiv").textContent = "Pot: " + msg.pot;
+        // updateChipStack(msg.pot, document.getElementById("chipStacksContainer"));
         console.log(msg.currentTurnPlayerId, myId, msg.toCall);
 
         if (msg.currentTurnPlayerId === myId) { // bad practice. trusting the client to do this.

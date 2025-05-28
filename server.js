@@ -253,8 +253,9 @@ wss.on("connection", (ws) => {
                 folded: data.folded,
                 username: players.get(data.userId).username,
                 betAmount: data.betAmount, // so users can see "so and so bet x chips"
-                chipCount: players.get(data.userId).chipCount // to update the chip stack visual of player x for each player
-              }));
+                chipCount: players.get(data.userId).chipCount, // to update the chip stack visual of player x for each player
+                pot: pot // otherwise, pot won't get updated on last player of the round
+            }));
             }
         });
 
@@ -264,7 +265,7 @@ wss.on("connection", (ws) => {
         if (activePlayers.length === 1){
             // end turn
             console.log("only one active player");
-            endTurn();
+            endBettingRound();
             return;
         }
         const playerBetAmounts = activePlayers.map(([id, player]) => player.betAmount);
@@ -272,7 +273,7 @@ wss.on("connection", (ws) => {
         if (setOfBets.size === 1){
             // end turn
             console.log("everyone has called or folded");
-            endTurn();
+            endBettingRound();
             return;
         }
 
@@ -374,12 +375,23 @@ function dealLastOpenCard(ws, player) {
 // then make equations
 // THEN second round betting
 
-function endTurn() {
+function endBettingRound() {
     for (const [key, value] of players) {
         value.turnTakenThisRound = false;
         value.foldedThisTurn = false;
         value.betAmount = 0;
     }
+
+    // wss.clients.forEach((client) => {
+    //     if (/*client !== ws && */client.readyState === WebSocket.OPEN) {
+    //       client.send(JSON.stringify({
+    //         type: "end-betting-round",
+    //         playerChipCount: players.get(client.userId).chipCount,
+    //         pot: pot
+    //       }));
+    //     }
+    // });
+
 }
 function notifyAllPlayersOfNewlyDealtCards(ws, player, firstOpen = false) {
     wss.clients.forEach((client) => {
@@ -438,8 +450,8 @@ function advanceToNextPlayersTurn(betAmount) { // should take a parameter here
             maxBet: maxBet,
             currentTurnPlayerId: currentTurnPlayerId,
             username: players.get(currentTurnPlayerId).username,
-            playerChipCount: players.get(client.userId).chipCount,
-            pot: pot
+            playerChipCount: players.get(client.userId).chipCount
+            // pot: pot
           }));
         }
     });
