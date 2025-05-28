@@ -165,14 +165,15 @@ wss.on("connection", (ws) => {
     
     if (data.type === "start" /*&& ws.userId === hostId*/) { // should I check isHost instead?
         console.log("150" + ws.userId + " " + hostId);
-        const payload = JSON.stringify({ type: "game-started" });
-        wss.clients.forEach((client) => {
-          if (client.readyState === WebSocket.OPEN) {
-            client.send(payload);
-          }
-        });
 
         initializeGame(ws);
+
+        wss.clients.forEach((client) => {
+            if (client.readyState === WebSocket.OPEN) {
+              const payload = JSON.stringify({ type: "game-started", chipCount: players.get(client.userId).chipCount, id: client.userId, hand: players.get(client.userId).hand });
+              client.send(payload);
+            }
+          });
 
         dealFirstHiddenCardToEachPlayer(ws); // okay so ws is whoever started the game
     
@@ -237,10 +238,27 @@ wss.on("connection", (ws) => {
         const justPlayedPlayer = players.get(data.userId);
         justPlayedPlayer.turnTakenThisRound = true;
         justPlayedPlayer.foldedThisTurn = data.folded; // can we pass nothing in the case of placing a bet?
+        //TODO need to skip following logic if player folded
+        //TODO rename betAmount to total bet this round
+
         justPlayedPlayer.betAmount += data.betAmount // or should it just be raise? handle if someone folds
         justPlayedPlayer.chipCount -= data.betAmount // should only be the diff
         pot += data.betAmount;
 
+        wss.clients.forEach((client) => {
+            if (/*client !== ws && */client.readyState === WebSocket.OPEN) {
+              client.send(JSON.stringify({
+                type: "bet-placed",
+                id: data.userId,
+                folded: data.folded,
+                username: players.get(data.userId).username,
+                betAmount: data.betAmount, // so users can see "so and so bet x chips"
+                chipCount: players.get(data.userId).chipCount // to update the chip stack visual of player x for each player
+              }));
+            }
+        });
+
+        // TODO make a checkIfBettingRoundIsComplete function with this - 
         // determine if turn is over. check all players either called or folded
         const activePlayers = Array.from(players).filter(([id, player]) => player.foldedThisTurn !== true)
         if (activePlayers.length === 1){
@@ -371,7 +389,8 @@ function notifyAllPlayersOfNewlyDealtCards(ws, player, firstOpen = false) {
                 type: firstOpen? "first-open-deal" : "deal",
                 id: player.id,
                 username: player.username,
-                hand: player.hand
+                hand: player.hand,
+                chipCount: player.chipCount,
               });
             } else {
                 // hide the hidden card.
@@ -382,7 +401,8 @@ function notifyAllPlayersOfNewlyDealtCards(ws, player, firstOpen = false) {
                 type: firstOpen? "first-open-deal" : "deal",
                 id: player.id,
                 username: player.username,
-                hand: handToSend // Array. fill with nulls or something
+                hand: handToSend, // Array. fill with nulls or something
+                chipCount: player.chipCount // need to pass chipCount so we can draw the chip stack. TODO decouple from drawHand or call it drawPlayer
               });
             }
 
@@ -418,6 +438,7 @@ function advanceToNextPlayersTurn(betAmount) { // should take a parameter here
             maxBet: maxBet,
             currentTurnPlayerId: currentTurnPlayerId,
             username: players.get(currentTurnPlayerId).username,
+            playerChipCount: players.get(client.userId).chipCount,
             pot: pot
           }));
         }

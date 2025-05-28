@@ -25,7 +25,7 @@
     <div id="chipStacksContainer" class="chip-stacks-container"></div>
 
     <div id="bettingControls" style="display:none;">
-        <div id="chipStagingContainer" style="text-align:center; font-weight: bold; color: white;"><span id="betAmountLabel">0</span> chips</div>
+        <div id="chipStagingContainer" style="text-align:center; font-weight: bold; color: white;"><span id="betAmountLabel">0</span></div>
         <div id="betContainer">
             <button class="button" id="foldButton">Fold</button>
             <input type="range" min="0" max="1000" value="0" id="betSlider">
@@ -37,7 +37,7 @@
 
     <button class="button" id="leaveButton" style="display:none;">Leave Game</button>
   <script>
-    const socket = new WebSocket(`ws://192.168.1.220:3000`);
+    const socket = new WebSocket(`ws://localhost:3000`);
     const handDivs = {};
     const lobbyPlayerDivs = {};
 
@@ -85,14 +85,17 @@
       } else if (msg.type === "game-started") {
         const btn = document.getElementById("startBtn");
         btn.parentNode.removeChild(btn);
-        // alert("The game has started!");
         document.getElementById("leaveButton").style.display = "block";
         document.getElementById("lobbyPlayerListContainer").remove();
+        drawHand(msg.id, msg.username, msg.hand, true);
+        updateChipStack(msg.chipCount, document.getElementById("chipStacksContainer-" + myId));
+        alert("The game has started!");
       } else if (msg.type === "first-open-deal") {
         if (msg.id === myId) {
             myHand = msg.hand;
         }
         drawHand(msg.id, msg.username, msg.hand, true);
+        updateChipStack(msg.chipCount, document.getElementById("chipStacksContainer-" + myId));
 
         // TODO 5/20
         // need the same bool to only do this with alert.
@@ -136,30 +139,25 @@
         alert(msg.username + " discarded their " + msg.value + " card.");
       } else if (msg.type === "first-round-betting-commenced") {
         alert("First round betting has commenced.");
+      } else if (msg.type === "bet-placed") {
+        if (msg.folded) {
+            alert(msg.username + " folded.");
+        } else { 
+            alert(msg.username + " bet " + msg.betAmount);
+            updateChipStack(msg.chipCount, document.getElementById("chipStacksContainer-" + msg.id));
+        }
       } else if (msg.type === "next-turn") {
         document.getElementById("potDiv").textContent = "Pot: " + msg.pot;
-        updateChipStack(msg.pot);
+        updateChipStack(msg.pot, document.getElementById("chipStacksContainer"));
         console.log(msg.currentTurnPlayerId, myId, msg.toCall);
-        // we only need fold or bet state for this turn.
-        // so for each player we can have 
 
-        // needs to include fold button, slider, and staging area
-        // but your own chip stack is ALWAYS visible
         if (msg.currentTurnPlayerId === myId) { // bad practice. trusting the client to do this.
-            setupBettingControls(msg.toCall, msg.maxBet);
+            setupBettingControls(msg.toCall, msg.maxBet, msg.playerChipCount);
             hideNotificationDiv();
         } else {
             notifyThatAnotherPlayerIsBetting(msg.username);
         }
-        // fold button
-        // slider from currentCall to leastChippedPlayer
-        // all in button
         // chips move from your stack to a staging stack
-        // flick to send to the pot
-
-        // server keeps track of pot and who has folded
-        // server needs to keep track of whose turn it is
-        // server keeps track of who starts the next round
       }
     });
 
@@ -194,6 +192,7 @@
     });
 
     function drawHand(id, username, hand, isFirstOpenDeal = false) {
+        console.log("id in drawHand: " + id);
         if (!handDivs[id]) { // checks if we already drew it??? no. check if it's been drawn THE FIRST TIME
             const div = document.createElement("div");
             div.className = "hand";
@@ -201,7 +200,6 @@
             handDivs[id] = div;
         }
 
-        console.log(myHand);
         // Add check, don't assume server guarantees at most one multiply card
         const handContainsMultiplyCard = myHand.some(e => e.value === 'multiply');
         
@@ -218,6 +216,11 @@
         nameDiv.innerHTML = `<p>${username}</p>`; // injection
         nameDiv.className = "handLabel";
         handDivs[id].appendChild(nameDiv);
+
+        const playerChipsStacksContainerDiv = document.createElement("div");
+        playerChipsStacksContainerDiv.className = "chip-stacks-container";
+        playerChipsStacksContainerDiv.id = "chipStacksContainer-" + id;
+        handDivs[id].appendChild(playerChipsStacksContainerDiv);
         
         hand.forEach((card) => {
             const cardDiv = document.createElement("div");
@@ -342,7 +345,7 @@
         }
     }
 
-    function setupBettingControls(toCall, maxBet) {
+    function setupBettingControls(toCall, maxBet, myChipCount) {
         const slider = document.getElementById("betSlider");
         const betLabel = document.getElementById("betAmountLabel");
         const callRaiseButton = document.getElementById("callRaiseButton");
@@ -354,7 +357,7 @@
         slider.value = toCall;
 
         // Initial label
-        betLabel.textContent = toCall;
+        betLabel.textContent = toCall + " to call";
         callRaiseButton.textContent = "Call";
 
         // Show controls
@@ -364,7 +367,7 @@
             const val = parseInt(slider.value);
             console.log(slider.min, slider.max, slider.value);
         
-            betLabel.textContent = val;
+            betLabel.textContent = "Bet " + val + " (Raise " + (val - toCall);
             // what if currentBet is null
             callRaiseButton.textContent = val > toCall ? "Raise" : "Call";
         };
@@ -397,13 +400,12 @@
 
     const maxStackSize = 10;
     let chipCount = 0;
-    const container = document.getElementById("chipStacksContainer");
 
-    function updateChipStack(newCount) {
+    function updateChipStack(newCount, containerToUpdate) {
         chipCount = newCount;
         
         // Clear all previous stacks
-        container.innerHTML = "";
+        containerToUpdate.innerHTML = "";
 
         const fullStacks = Math.floor(chipCount / maxStackSize);
         const remainder = chipCount % maxStackSize;
@@ -423,7 +425,7 @@
                 stack.appendChild(chip);
             }
 
-            container.appendChild(stack);
+            containerToUpdate.appendChild(stack);
         }
     }
 
