@@ -37,7 +37,7 @@
 
     <button class="button" id="leaveButton" style="display:none;">Leave Game</button>
   <script>
-    const socket = new WebSocket(`ws://localhost:3000`);
+    const socket = new WebSocket(`ws://192.168.1.220:3000`);
     const handDivs = {};
     const lobbyPlayerDivs = {};
 
@@ -162,6 +162,12 @@
             notifyThatAnotherPlayerIsBetting(msg.username);
         }
         // chips move from your stack to a staging stack
+      } else if (msg.type === "end-betting-round") {
+        if (msg.round === 'first'){
+            alert('First betting round complete. Dealing last open card');
+        } else if (msg.round === 'second') {
+            alert('Final betting round complete. Make your equations');
+        }
       }
     });
 
@@ -229,6 +235,9 @@
         hand.forEach((card) => {
             const cardDiv = document.createElement("div");
             const cardDivParagraph = document.createElement("p");
+            if (getTextFromCardValue(card.value) === 'v') {
+                console.log("it's a root card");
+            }
             cardDivParagraph.innerHTML = `${getTextFromCardValue(card.value)}`;
             cardDiv.appendChild(cardDivParagraph);
             cardDiv.className = card.value ? "card" : "card-back";

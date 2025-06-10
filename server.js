@@ -60,9 +60,10 @@ const GamePhases = {
 }
 
 class Card {
-    constructor(value, suit) {
+    constructor(value, suit, hidden=false) {
         this.value = value;
         this.suit = suit;
+        this.hidden = hidden
     }
 }
 let deck = []
@@ -170,7 +171,12 @@ wss.on("connection", (ws) => {
 
         wss.clients.forEach((client) => {
             if (client.readyState === WebSocket.OPEN) {
-              const payload = JSON.stringify({ type: "game-started", chipCount: players.get(client.userId).chipCount, id: client.userId, hand: players.get(client.userId).hand });
+              const payload = JSON.stringify({ 
+                type: "game-started", 
+                chipCount: players.get(client.userId).chipCount, 
+                id: client.userId, 
+                hand: players.get(client.userId).hand 
+            });
               client.send(payload);
             }
           });
@@ -259,23 +265,11 @@ wss.on("connection", (ws) => {
             }
         });
 
-        // TODO make a checkIfBettingRoundIsComplete function with this - 
-        // determine if turn is over. check all players either called or folded
-        const activePlayers = Array.from(players).filter(([id, player]) => player.foldedThisTurn !== true)
-        if (activePlayers.length === 1){
-            // end turn
-            console.log("only one active player");
-            endBettingRound();
-            return;
-        }
-        const playerBetAmounts = activePlayers.map(([id, player]) => player.betAmount);
-        const setOfBets = new Set(playerBetAmounts);
-        if (setOfBets.size === 1){
-            // end turn
-            console.log("everyone has called or folded");
-            endBettingRound();
-            return;
-        }
+        if (bettingRoundIsComplete()) {
+            // need a check on game state here if firstRoundBetting, dealLastOpenCard. if lastroundBetting, go to equation making mode
+            endBettingRound("first");
+            dealLastOpenCard();
+        };
 
         currentTurnPlayerId = findNextPlayerTurn();
         advanceToNextPlayersTurn(justPlayedPlayer.betAmount);
@@ -306,6 +300,8 @@ function dealFirstHiddenCardToEachPlayer(ws) {
             if (deck[i].suit !== 'operator') {
                 // Remove the card and give it to player
                 player.hand.push(deck.splice(i, 1)[0]);
+                // set hidden to true, so when message is sent to other players its obfuscated
+                player.hand[player.hand.length - 1].hidden = true;
                 break; // having to index here is so trash omg
             }
         }
@@ -367,30 +363,56 @@ function dealTwoOpenCardsToEachPlayer(ws) {
     return numPlayersThatNeedToDiscard;
 }
 
-function dealLastOpenCard(ws, player) {
+function dealLastOpenCard(ws) {
     // looks like if it's any operator, deal another card
     // discard applies again with multiply
+
+        // could be three if there is a root
+    players.forEach((player, id) => { // why does value come before key. so annoying    
+        // first card can be any card
+        const draw = dealAnyCard();
+        player.hand.push(draw);
+    
+        // technically i should be putting returned cards at the bottom, but the math should be the same
+        // TODO also need to program in the new card being dealt after discard choice
+        if (draw.suit === 'operator') {
+            let draw2 = dealNumberCard();
+            player.hand.push(draw2);
+        }
+
+        if (draw.value === 'multiply') { // expect one more person to discard before advancing game state
+            numPlayersThatNeedToDiscard += 1;
+        }
+
+        notifyAllPlayersOfNewlyDealtCards(ws, player, false); // magic bool parameters are bad AND IT JUST CAUSED PROBLEMS just call notifyOfFirstOpenDeal
+
+        console.log("dealt last open card to " + player.id);
+        console.log(player.hand);
+    });
+
+    return numPlayersThatNeedToDiscard;    
 }
 
 // then make equations
 // THEN second round betting
 
-function endBettingRound() {
+function endBettingRound(round) {
     for (const [key, value] of players) {
         value.turnTakenThisRound = false;
         value.foldedThisTurn = false;
         value.betAmount = 0;
     }
 
-    // wss.clients.forEach((client) => {
-    //     if (/*client !== ws && */client.readyState === WebSocket.OPEN) {
-    //       client.send(JSON.stringify({
-    //         type: "end-betting-round",
-    //         playerChipCount: players.get(client.userId).chipCount,
-    //         pot: pot
-    //       }));
-    //     }
-    // });
+    wss.clients.forEach((client) => {
+        if (/*client !== ws && */client.readyState === WebSocket.OPEN) {
+          client.send(JSON.stringify({
+            type: "end-betting-round",
+            playerChipCount: players.get(client.userId).chipCount,
+            pot: pot,
+            round: round
+          }));
+        }
+    });
 
 }
 function notifyAllPlayersOfNewlyDealtCards(ws, player, firstOpen = false) {
@@ -407,7 +429,11 @@ function notifyAllPlayersOfNewlyDealtCards(ws, player, firstOpen = false) {
             } else {
                 // hide the hidden card.
                 let handToSend = JSON.parse(JSON.stringify(player.hand));
-                handToSend[3] = new Card(null, 'hidden');
+                for (let i = 0; i < handToSend.length; i++) {
+                    if (handToSend[i].hidden === true) {
+                        handToSend[i] = new Card(null, 'hidden');
+                    }
+                }
                 // [...hand] //  only works if contains primitives
              payload = JSON.stringify({
                 type: firstOpen? "first-open-deal" : "deal",
@@ -463,6 +489,25 @@ function findNextPlayerTurn() {
     console.log(keys.indexOf(currentTurnPlayerId));
     return keys[(keys.indexOf(currentTurnPlayerId) + 1) % keys.length];
 }
+
+function bettingRoundIsComplete() {
+    const nonFoldedPlayers = Array.from(players).filter(([id, player]) => player.foldedThisTurn !== true)
+    if (nonFoldedPlayers.length === 1){
+        // end turn
+        console.log("only one active player");
+        return true;
+    }
+    const playerBetAmounts = nonFoldedPlayers.map(([id, player]) => player.betAmount);
+    const setOfBets = new Set(playerBetAmounts);
+    if (setOfBets.size === 1){
+        // end turn
+        console.log("everyone has called or folded");
+        return true;
+    }
+
+    return false;
+}
+         
 // TODO add instructions for when I send it people. It can be a nice css page
 // doesn't have to be live
 // TODO bug: people don't see people that have joined before they opened the page.
