@@ -92,6 +92,7 @@ let hostId = null;
 // rather than global variables how can we make this functional
 let numPlayersThatHaveDiscarded = 0;
 let numPlayersThatNeedToDiscard = 0; 
+firstRoundBettingCompleted = false; // TODO reset to false when a whole game round is done
 
 app.use(express.static("public"));
 
@@ -157,8 +158,13 @@ wss.on("connection", (ws) => {
 
         numPlayersThatHaveDiscarded += 1;
 
+        // TODO need to change this to allow for second round of betting
         if (numPlayersThatHaveDiscarded === numPlayersThatNeedToDiscard) {
-            commenceFirstRoundBetting(); 
+            if (firstRoundBettingCompleted) {
+                commenceEquationForming();
+            } else {
+                commenceFirstRoundBetting(); 
+            }
             // this would break if someone leaves the game.
             // if someone leaves, reduce num players that need ro discard by 1?
         }
@@ -268,7 +274,12 @@ wss.on("connection", (ws) => {
         if (bettingRoundIsComplete()) {
             // need a check on game state here if firstRoundBetting, dealLastOpenCard. if lastroundBetting, go to equation making mode
             endBettingRound("first");
-            dealLastOpenCard();
+            firstRoundBettingCompleted = true;
+            dealLastOpenCardToEachPlayer();
+
+            if (numPlayersThatNeedToDiscard == 0) {
+                commenceEquationForming();
+            }
         };
 
         currentTurnPlayerId = findNextPlayerTurn();
@@ -363,7 +374,7 @@ function dealTwoOpenCardsToEachPlayer(ws) {
     return numPlayersThatNeedToDiscard;
 }
 
-function dealLastOpenCard(ws) {
+function dealLastOpenCardToEachPlayer(ws) {
     // looks like if it's any operator, deal another card
     // discard applies again with multiply
 
@@ -508,6 +519,16 @@ function bettingRoundIsComplete() {
     return false;
 }
          
+function commenceEquationForming() {
+    wss.clients.forEach((client) => {
+        if (client.readyState === WebSocket.OPEN) {
+          const payload = JSON.stringify({ 
+            type: "commence-equation-forming", 
+        });
+          client.send(payload);
+        }
+      });
+}
 // TODO add instructions for when I send it people. It can be a nice css page
 // doesn't have to be live
 // TODO bug: people don't see people that have joined before they opened the page.

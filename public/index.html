@@ -36,6 +36,7 @@
     </div>
 
     <button class="button" id="leaveButton" style="display:none;">Leave Game</button>
+    <script src="https://cdn.jsdelivr.net/npm/sortablejs@1.15.0/Sortable.min.js"></script>
   <script>
     const socket = new WebSocket(`ws://192.168.1.220:3000`);
     const handDivs = {};
@@ -52,6 +53,7 @@
     let myName = localStorage.getItem(USER_NAME_KEY);
     let timestamp = localStorage.getItem(TIMESTAMP_KEY);
     let myHand = null; // TODO this needs to be a serialized object
+    let sortable = null; // allows for rearranging our hand to form the equation
 
     //sounds like we are telling socket to listen but no we are listening to socket
     socket.addEventListener("message", (event) => {
@@ -166,8 +168,11 @@
         if (msg.round === 'first'){
             alert('First betting round complete. Dealing last open card');
         } else if (msg.round === 'second') {
-            alert('Final betting round complete. Make your equations');
+            alert('Final betting round complete.');
         }
+      } else if (msg.type === "commence-equation-forming") {
+            alert('60 seconds! Drag cards to get close to 1 or 20.');
+            sortable.option("disabled", false)
       }
     });
 
@@ -208,6 +213,19 @@
             div.className = "hand";
             document.body.appendChild(div);
             handDivs[id] = div;
+
+            console.log(id, myId);
+            if (id === myId) {
+                // make it a sortable for when we make the equations
+                const sortableTemp = Sortable.create(div, {
+                    animation: 150,
+                    draggable: ".card",
+                    disabled: true,
+                });
+                sortable = sortableTemp;
+            }
+
+            console.log(sortable);
         }
 
         // Add check, don't assume server guarantees at most one multiply card

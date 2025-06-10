@@ -1,4 +1,4 @@
-body { margin: 0; overflow: hidden; background-color: hsl(183, 89%, 31%); font-family: 'Arial'}
+body { margin: 0; /*overflow: hidden; */background-color: hsl(183, 89%, 31%); font-family: 'Arial'}
 .cursor { 
     width: 10px;
     height: 10px;
@@ -58,7 +58,6 @@ background-color: #333;
     color: black;
     margin: 8px;
     user-select: none;
-    transition: transform 0.2s ease;
 }
 
 .card-highlighted {
@@ -83,7 +82,8 @@ background-color: #333;
 }
 
 .card:hover {
-    /* transform: scale(1.05); */
+    transition: all 0.2s ease;
+    transform: scale(1.05);
 }
 
 #uiContainer {
@@ -247,4 +247,16 @@ background-color: #333;
         opacity: 0;
         transform: translateY(10px);
     }
+}
+
+.sortable-chosen {
+    opacity: 1;
+    transform: scale(1.05);
+    box-shadow: 0 0 10px rgba(0, 0, 0, 0.3);
+    border-radius: 12px;
+}
+
+.sortable-ghost {
+    border-radius: 12px;
+    opacity: 0;
 }
