@@ -284,9 +284,7 @@
         hand.forEach((card) => {
             const cardDiv = document.createElement("div");
             const cardDivParagraph = document.createElement("p");
-            if (getTextFromCardValue(card.value) === 'v') {
-                console.log("it's a root card");
-            }
+
             cardDivParagraph.innerHTML = `${getTextFromCardValue(card.value)}`;
             cardDiv.appendChild(cardDivParagraph);
             cardDiv.className = card.value ? "card" : "card-back";
@@ -296,6 +294,12 @@
                 cardDivParagraph.style.letterSpacing = '-1rem';
                 cardDivParagraph.style.transform = 'translateX(-0.7rem)';
             }
+
+            if (card.value === "root"){
+                cardDivParagraph.style.fontSize = '95px';
+                cardDivParagraph.style.transform = 'scale(1.3, 1) translateY(10px) translateX(-3px)';
+            }
+
             if (
                 card.value === "subtract" ||
                 card.value === "add" ||
@@ -399,8 +403,8 @@
             case 'ZERO':
                 return 0;
                 break;
-            case 'ROOT':
-                return 'v';
+            case 'root':
+                return '√';
                 break;
             case 'multiply': // TODO need to fix the enum, use enum values instead of strings
                 return '&times';
