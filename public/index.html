@@ -204,6 +204,8 @@
             alert('Time is up!');
 
             sortable.option("disabled", true)
+
+            console.log(applyOps(handDivs[myId].querySelectorAll('.card')));
       }
     });
 
@@ -510,6 +512,66 @@
     // TODO use this timeout code when first going to the site. It's a cool animation to draw people in
     // setTimeout(() => updateChipStack(8), 3000);   // fewer chips
     // setTimeout(() => updateChipStack(17), 6000);  // mixed stack sizes
+
+    // for now, just trust the client. eventually we'll have to send "card order" because even esnding the hand
+    // is untrustable. and then the server can order the cards and apply operators
+    function applyOps(cardElements) {
+        const tokens = [];
+
+        // Convert each card <div> into a token (number or operator)
+        for (const card of cardElements) {
+            const p = card.querySelector('p');
+            if (!p) continue;
+
+            const val = p.textContent.trim();
+
+            if (!isNaN(val)) {
+                tokens.push(Number(val));
+            } else if (val === '√') {
+                tokens.push('sqrt'); // use keyword for safe eval later
+            } else if (val === '+') {
+                tokens.push('+');
+            } else if (val === '-' || val === '−') {
+                tokens.push('-');
+            } else if (val === '÷' || val === '/') {
+                tokens.push('/');
+            } else if (val === '*') {
+                tokens.push('*');
+            } else {
+                console.warn('Unhandled token:', val);
+            }
+        }
+
+        console.log(tokens);
+        // Convert tokens into evaluable expression string
+        const expr = [];
+        for (let i = 0; i < tokens.length; i++) {
+            const tok = tokens[i];
+
+            if (tok === 'sqrt') {
+                // Check next token is a number
+                const next = tokens[i + 1];
+                if (typeof next === 'number') {
+                    expr.push(`Math.sqrt(${next})`);
+                    i++; // skip next token
+                } else {
+                    throw new Error("√ must be followed by a number");
+                }
+            } else {
+                expr.push(tok);
+            }
+        }
+
+        // Join into string and evaluate
+        const exprStr = expr.join(' ');
+        try {
+            const result = Function(`"use strict"; return (${exprStr})`)();
+            return result;
+        } catch (e) {
+            console.error("Invalid expression:", exprStr);
+            throw e;
+        }
+    }
 
 </script>
 </body>

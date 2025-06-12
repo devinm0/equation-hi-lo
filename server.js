@@ -567,3 +567,4 @@ function endEquationForming() {
 // or keep it client side?
 // then have a pot variable which is total chips
 
+//TODO need to handle if a multiply is dealt in second round
