@@ -8,7 +8,7 @@ const server = http.createServer(app);
 const wss = new WebSocket.Server({ server });
 
 class Player {
-    constructor(id, username, hand, chipCount, foldedThisTurn = false, betAmount = 0, turnTakenThisRound = false) {
+    constructor(id, username, hand, chipCount, foldedThisTurn = false, betAmount = 0, turnTakenThisRound = false, equationResult = 0) {
         this.id = id;
         this.username = username;
         this.hand = hand;
@@ -16,6 +16,7 @@ class Player {
         this.foldedThisTurn = foldedThisTurn;
         this.betAmount = betAmount;
         this.turnTakenThisRound = turnTakenThisRound;
+        this.equationResult = equationResult;
     }
 }
 
@@ -290,6 +291,16 @@ wss.on("connection", (ws) => {
             advanceToNextPlayersTurn(justPlayedPlayer.betAmount);
         }
     }
+
+    if (data.type === "equation-result") {
+        // definitely DON'T want to tell everyone what the results are yet
+
+        const player = players.get(data.userId);
+        console.log(data.result);
+        player.equationResult = data.result;
+        // TODO will have to reset this with each round.
+        // I guess I should just have an object I throw everything in which gets reset when a new round happens
+    }
   });
 });
 
@@ -478,6 +489,18 @@ function commenceFirstRoundBetting() {
     advanceToNextPlayersTurn(1);
 }
 
+function commenceSecondRoundBetting() {
+    wss.clients.forEach((client) => {
+        if (/*client !== ws && */client.readyState === WebSocket.OPEN) {
+          client.send(JSON.stringify({
+            type: "second-round-betting-commenced",
+          }));
+        }
+    });
+
+    advanceToNextPlayersTurn(0); // no ante to match on the second round
+}
+
 // TODO display ("5 to call") or something similar
 function advanceToNextPlayersTurn(betAmount) { // should take a parameter here
     const playerChipCounts = players.values().map(player => player.chipCount);
@@ -551,6 +574,8 @@ function endEquationForming() {
           client.send(payload);
         }
       });
+
+    commenceSecondRoundBetting();
 }
 // TODO add instructions for when I send it people. It can be a nice css page
 // doesn't have to be live

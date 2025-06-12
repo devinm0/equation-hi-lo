@@ -35,6 +35,7 @@ background-color: #333;
     display: flex;
     gap: 8px;
     flex-wrap: wrap;
+    touch-action: none;
 }
 
 .handLabel {
@@ -58,6 +59,7 @@ background-color: #333;
     color: black;
     margin: 8px;
     user-select: none;
+    touch-action: manipulation;
 }
 
 .card-highlighted {

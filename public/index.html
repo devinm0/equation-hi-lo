@@ -1,7 +1,7 @@
 <!DOCTYPE html>
 <html lang="en">
 <head>
-  <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no, minimal-ui">
   <meta charset="UTF-8" />
   <title>Equation Hi Lo</title>
   <link rel="stylesheet" href="style.css">
@@ -157,6 +157,8 @@
         alert(msg.username + " discarded their " + msg.value + " card.");
       } else if (msg.type === "first-round-betting-commenced") {
         alert("First round betting has commenced.");
+      } else if (msg.type === "second-round-betting-commenced") {
+          alert("Second round betting has commenced.");
       } else if (msg.type === "bet-placed") {
         console.log("socket message bet-placed");
         if (msg.folded) {
@@ -205,7 +207,15 @@
 
             sortable.option("disabled", true)
 
-            console.log(applyOps(handDivs[myId].querySelectorAll('.card')));
+            const equationResult = applyOps(handDivs[myId].querySelectorAll('.card'));
+            console.log(equationResult);
+            const data = {
+                type: "equation-result",
+                userId: myId,
+                username: myName,
+                result: equationResult
+            };
+            socket.send(JSON.stringify(data));
       }
     });
 
@@ -254,6 +264,7 @@
                     animation: 150,
                     draggable: ".card",
                     disabled: true,
+                    forceFallback: true
                 });
                 sortable = sortableTemp;
             }
