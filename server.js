@@ -159,6 +159,7 @@ wss.on("connection", (ws) => {
         numPlayersThatHaveDiscarded += 1;
 
         // TODO need to change this to allow for second round of betting
+        console.log(numPlayersThatHaveDiscarded, numPlayersThatNeedToDiscard)
         if (numPlayersThatHaveDiscarded === numPlayersThatNeedToDiscard) {
             if (firstRoundBettingCompleted) {
                 commenceEquationForming();
@@ -277,13 +278,17 @@ wss.on("connection", (ws) => {
             firstRoundBettingCompleted = true;
             dealLastOpenCardToEachPlayer();
 
-            if (numPlayersThatNeedToDiscard == 0) {
+            console.log(numPlayersThatNeedToDiscard);
+            if (numPlayersThatHaveDiscarded === numPlayersThatNeedToDiscard) {
                 commenceEquationForming();
             }
-        };
-
-        currentTurnPlayerId = findNextPlayerTurn();
-        advanceToNextPlayersTurn(justPlayedPlayer.betAmount);
+        } else { 
+            // using else so that we don't send the "next turn" even when it's over - 
+            // but is this an issue for second betting round? 
+            // who will we start with
+            currentTurnPlayerId = findNextPlayerTurn();
+            advanceToNextPlayersTurn(justPlayedPlayer.betAmount);
+        }
     }
   });
 });
@@ -528,6 +533,24 @@ function commenceEquationForming() {
           client.send(payload);
         }
       });
+    
+    console.log("Waiting 60 seconds...");
+
+    setTimeout(() => {
+        console.log("Equation forming over, notifying clients.");
+        endEquationForming();
+    }, 60000);
+}
+
+function endEquationForming() {
+    wss.clients.forEach((client) => {
+        if (client.readyState === WebSocket.OPEN) {
+          const payload = JSON.stringify({ 
+            type: "end-equation-forming", 
+        });
+          client.send(payload);
+        }
+      });
 }
 // TODO add instructions for when I send it people. It can be a nice css page
 // doesn't have to be live
@@ -543,3 +566,4 @@ function commenceEquationForming() {
 // need to send the variable which is the lowest player's chips
 // or keep it client side?
 // then have a pot variable which is total chips
+
