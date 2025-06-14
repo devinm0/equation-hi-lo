@@ -7,6 +7,27 @@
   <link rel="stylesheet" href="style.css">
 </head>
 <body>
+    <!-- Choice Modal -->
+    <div id="choiceModal" class="modal-overlay hidden">
+        <div class="modal">
+        <!-- <h2>Select Your Option</h2> -->
+        <div class="options">
+            <div class="option" data-choice="low">
+            <div class="low-symbol">1</div>
+            <p>Low</p>
+            </div>
+            <div class="option" data-choice="high">
+            <div class="high-symbol">20</div>
+            <p>High</p>
+            </div>
+        </div>
+        <div class="buttons">
+            <button id="confirmChoice">Confirm</button>
+            <!-- <button id="cancelChoice">Cancel</button> -->
+        </div>
+        </div>
+    </div>
+
     <div id="notificationWrapper">
         <div id="notificationDiv" style="display: none;"></div>
     </div>
@@ -54,7 +75,7 @@
         }
     }
 
-    const socket = new WebSocket(`ws://192.168.1.220:3000`);
+    const socket = new WebSocket(`ws://172.20.10.5:3000`);
     const handDivs = {};
     const lobbyPlayerDivs = {};
 
@@ -216,7 +237,29 @@
                 result: equationResult
             };
             socket.send(JSON.stringify(data));
-      }
+      } else if (msg.type === "hi-lo-selection") {
+        alert("Select Hi, Lo, or Swing betting.");
+
+        openChoiceModal(choices => {
+            if (choices) {
+                const data = {
+                    type: "hi-lo-selected",
+                    userId: myId,
+                    username: myName,
+                    choices: choices
+                };
+                console.log(data);
+                socket.send(JSON.stringify(data));
+
+                console.log('Player chose:', choices); // e.g., ["low", "high"]
+            } else {
+                console.log('Player canceled');
+            }
+            });
+
+      } else if (msg.type === "round-result") {
+        alert(msg.message);
+      } 
     });
 
     document.getElementById("saveName").addEventListener("click", () => {
@@ -546,7 +589,7 @@
                 tokens.push('-');
             } else if (val === '÷' || val === '/') {
                 tokens.push('/');
-            } else if (val === '*') {
+            } else if (val === '*' || val === '×') {
                 tokens.push('*');
             } else {
                 console.warn('Unhandled token:', val);
@@ -582,6 +625,40 @@
             console.error("Invalid expression:", exprStr);
             throw e;
         }
+    }
+
+    let selectedChoices = new Set();
+
+    function openChoiceModal(onConfirm) {
+        const modal = document.getElementById('choiceModal');
+        const options = modal.querySelectorAll('.option');
+        selectedChoices.clear();
+        options.forEach(opt => opt.classList.remove('selected'));
+
+        modal.classList.remove('hidden');
+
+        options.forEach(opt => {
+            opt.onclick = () => {
+            const choice = opt.dataset.choice;
+            if (selectedChoices.has(choice)) {
+                selectedChoices.delete(choice);
+                opt.classList.remove('selected');
+            } else {
+                selectedChoices.add(choice);
+                opt.classList.add('selected');
+            }
+            };
+        });
+
+        document.getElementById('confirmChoice').onclick = () => {
+            modal.classList.add('hidden');
+            onConfirm(Array.from(selectedChoices));
+        };
+
+        // document.getElementById('cancelChoice').onclick = () => {
+        //     modal.classList.add('hidden');
+        //     onConfirm(null);
+        // };
     }
 
 </script>

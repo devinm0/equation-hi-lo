@@ -8,7 +8,7 @@ const server = http.createServer(app);
 const wss = new WebSocket.Server({ server });
 
 class Player {
-    constructor(id, username, hand, chipCount, foldedThisTurn = false, betAmount = 0, turnTakenThisRound = false, equationResult = 0) {
+    constructor(id, username, hand, chipCount, foldedThisTurn = false, betAmount = 0, turnTakenThisRound = false, equationResult = 0, choices = []) {
         this.id = id;
         this.username = username;
         this.hand = hand;
@@ -17,6 +17,7 @@ class Player {
         this.betAmount = betAmount;
         this.turnTakenThisRound = turnTakenThisRound;
         this.equationResult = equationResult;
+        this.choices = choices;
     }
 }
 
@@ -275,13 +276,17 @@ wss.on("connection", (ws) => {
 
         if (bettingRoundIsComplete()) {
             // need a check on game state here if firstRoundBetting, dealLastOpenCard. if lastroundBetting, go to equation making mode
-            endBettingRound("first");
-            firstRoundBettingCompleted = true;
-            dealLastOpenCardToEachPlayer();
-
-            console.log(numPlayersThatNeedToDiscard);
-            if (numPlayersThatHaveDiscarded === numPlayersThatNeedToDiscard) {
-                commenceEquationForming();
+            if (firstRoundBettingCompleted) {
+                endBettingRound("second");
+                commenceHiLoSelection();
+            } else {
+                endBettingRound("first");
+                firstRoundBettingCompleted = true;
+                dealLastOpenCardToEachPlayer();
+                console.log(numPlayersThatNeedToDiscard);
+                if (numPlayersThatHaveDiscarded === numPlayersThatNeedToDiscard) {
+                    commenceEquationForming();
+                }
             }
         } else { 
             // using else so that we don't send the "next turn" even when it's over - 
@@ -300,6 +305,18 @@ wss.on("connection", (ws) => {
         player.equationResult = data.result;
         // TODO will have to reset this with each round.
         // I guess I should just have an object I throw everything in which gets reset when a new round happens
+    }
+
+    if (data.type === "hi-lo-selected") {
+        console.log(data.userId, data.username, data.choices);
+        const player = players.get(data.userId);
+        player.choices = data.choices;
+
+        // check that every player submitted choices
+        if ([...players.values()].every(player => player.choices.length > 0)) {
+            console.log('everyone submitted their hi or lo selections');
+            determineWinners();
+        }
     }
   });
 });
@@ -426,7 +443,7 @@ function dealLastOpenCardToEachPlayer(ws) {
 function endBettingRound(round) {
     for (const [key, value] of players) {
         value.turnTakenThisRound = false;
-        value.foldedThisTurn = false;
+        // value.foldedThisTurn = false; // actually wrong, folding is for whole game round
         value.betAmount = 0;
     }
 
@@ -505,7 +522,6 @@ function commenceSecondRoundBetting() {
 function advanceToNextPlayersTurn(betAmount) { // should take a parameter here
     const playerChipCounts = players.values().map(player => player.chipCount);
     const maxBet = Math.min(...playerChipCounts);
-    console.log(players);
     console.log(maxBet, currentTurnPlayerId, players.get(currentTurnPlayerId));
     wss.clients.forEach((client) => {
         if (/*client !== ws && */client.readyState === WebSocket.OPEN) {
@@ -538,7 +554,7 @@ function bettingRoundIsComplete() {
     }
     const playerBetAmounts = nonFoldedPlayers.map(([id, player]) => player.betAmount);
     const setOfBets = new Set(playerBetAmounts);
-    if (setOfBets.size === 1){
+    if (setOfBets.size === 1){ // TODO could be bug here, bc on second round, bet starts at 0
         // end turn
         console.log("everyone has called or folded");
         return true;
@@ -577,6 +593,78 @@ function endEquationForming() {
 
     commenceSecondRoundBetting();
 }
+
+function commenceHiLoSelection() {
+    wss.clients.forEach((client) => {
+        if (client.readyState === WebSocket.OPEN) {
+          const payload = JSON.stringify({ 
+            type: "hi-lo-selection", 
+        });
+          client.send(payload);
+        }
+      });
+}
+
+// TODO account for card suits
+// TODO don't show any betting or hi lo selection socket messages to folded players
+function determineWinners() {
+    const loBettingPlayers = [...players.entries()].filter(([key, value]) => value.choices.includes('low'));
+    const hiBettingPlayers = [...players.entries()].filter(([key, value]) => value.choices.includes('high'));
+      
+    const loTarget = 1;
+    const hiTarget = 20;
+      
+    let loWinner = null;
+    let minDiff = Infinity;
+      
+    for (const [key, value] of loBettingPlayers) {
+        const diff = Math.abs(value.equationResult - loTarget);
+        if (diff < minDiff) {
+            minDiff = diff;
+            loWinner = value;
+        }
+    }
+      
+    let hiWinner = null;
+    minDiff = Infinity;
+      
+    for (const [key, value] of hiBettingPlayers) {
+        const diff = Math.abs(value.equationResult - hiTarget);
+        if (diff < minDiff) {
+          minDiff = diff;
+          hiWinner = value;
+        }
+    }
+      
+    console.log(hiWinner);
+    console.log(loWinner);
+      
+    let payload;
+    // there's distinct lo and hi winners
+    if (loWinner !== null && hiWinner !== null) {
+        payload = JSON.stringify({
+            type: "round-result",
+            message: loWinner.username + " won the low bet and " + hiWinner.username + " won the high bet."
+        });
+    } else if (loWinner !== null) { // players only bet on lo
+        payload = JSON.stringify({
+            type: "round-result",
+            message: loWinner.username + " won the low bet."
+        });
+    } else if (hiWinner !== null) { // players only bet on hi
+        payload = JSON.stringify({
+            type: "round-result",
+            message: hiWinner.username + " won the high bet."
+        });
+    }
+
+    wss.clients.forEach((client) => {
+        if (/*client !== ws && */client.readyState === WebSocket.OPEN) {
+            client.send(payload);
+        }
+    });
+}
+
 // TODO add instructions for when I send it people. It can be a nice css page
 // doesn't have to be live
 // TODO bug: people don't see people that have joined before they opened the page.
