@@ -107,7 +107,10 @@ wss.on("connection", (ws) => {
   const userId = uuidv4();
   ws.userId = userId; // Store on socket
   
+  console.log('checking host');
+
   if (!hostId) { // ! applies to null!?
+    console.log('not host');
     hostId = userId;
     ws.isHost = true;
     console.log("hostId is " + hostId);
@@ -639,6 +642,7 @@ function determineWinners() {
     console.log(hiWinner);
     console.log(loWinner);
       
+    // notify everyone about the winners
     let payload;
     // there's distinct lo and hi winners
     if (loWinner !== null && hiWinner !== null) {
@@ -663,6 +667,71 @@ function determineWinners() {
             client.send(payload);
         }
     });
+
+    // send chips to the winners
+    // if both, split the pot
+    if (loWinner !== null && hiWinner !== null) {
+        console.log('loWinner !== null && hiWinner !== null');
+
+        if (pot % 2 !== 0) {
+            pot = pot - 1 // discard a chip if pot is uneven
+        }
+
+        const chipsToSend = pot / 2;
+        players.get(hiWinner.id).chipCount += chipsToSend;
+        players.get(loWinner.id).chipCount += chipsToSend;
+
+        payload = JSON.stringify({
+            type: "chip-distribution",
+            chipCount: chipsToSend
+        });
+
+        wss.clients.forEach((client) => {
+            // send to only the winners
+            console.log(client.userId);
+            console.log(hiWinner?.id);
+            console.log(loWinner?.id);
+
+            if ((client.userId === hiWinner.id || client.userId === loWinner.id) && client.readyState === WebSocket.OPEN) {
+                client.send(payload);
+            }
+        });
+    } else if (loWinner !== null) {
+        console.log('loWinner is not null');
+        players.get(loWinner.id).chipCount += pot;
+
+        payload = JSON.stringify({
+            type: "chip-distribution",
+            chipCount: pot
+        });
+
+        wss.clients.forEach((client) => {
+            console.log(client.userId);
+            console.log(loWinner?.id);
+            // send to only the winners
+            if (client.userId === loWinner.id && client.readyState === WebSocket.OPEN) {
+                client.send(payload);
+            }
+        });
+    } else if (hiWinner !== null) {
+        players.get(hiWinner.id).chipCount += pot;
+
+        payload = JSON.stringify({
+            type: "chip-distribution",
+            chipCount: pot
+        });
+
+        wss.clients.forEach((client) => {
+            // send to only the winners
+            if (client.userId === hiWinner.id && client.readyState === WebSocket.OPEN) {
+                client.send(payload);
+            }
+        });
+    }
+
+    pot = 0;
+
+    //TODO check if any players reached 0, and kick them out of the game.
 }
 
 // TODO add instructions for when I send it people. It can be a nice css page

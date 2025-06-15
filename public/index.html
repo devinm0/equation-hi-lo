@@ -211,7 +211,7 @@
         if (msg.round === 'first'){
             alert('First betting round complete. Dealing last open card');
         } else if (msg.round === 'second') {
-            alert('Final betting round complete.');
+            alert('Second betting round complete.');
         }
       } else if (msg.type === "commence-equation-forming") {
         console.log("socket message commence-equation-forming");
@@ -256,9 +256,16 @@
                 console.log('Player canceled');
             }
             });
-
       } else if (msg.type === "round-result") {
         alert(msg.message);
+        // reset  pot
+        document.getElementById("potDiv").textContent = "Pot: 0";
+        updateChipStack(0, document.getElementById("chipStacksContainer")); //should rename it to potStacksContainer
+      } else if (msg.type === "chip-distribution") {
+        console.log("socket message chip-distribution");
+
+        updateChipStack(msg.chipCount, document.getElementById("chipStacksContainer-" + myId));
+        // do I need code here to actually keep track of MY chip count? or server does it
       } 
     });
 
