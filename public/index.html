@@ -132,9 +132,9 @@
       } else if (msg.type === "deal") {
         if (msg.id === myId) {
             myHand = msg.hand;
-        }
+        }        
         drawHand(msg.id, msg.username, msg.hand, msg.multiplicationCardDealt);
-
+    
         if (msg.chipCount !== undefined) {
             updateChipStack(msg.chipCount, document.getElementById("chipStacksContainer-" + myId));
         }
@@ -177,18 +177,17 @@
         alert("First round betting has commenced.");
       } else if (msg.type === "second-round-betting-commenced") {
           alert("Second round betting has commenced.");
+      } else if (msg.type === "player-folded") {
+            alert(msg.username + " folded.");
+            drawHand(msg.id, msg.username, msg.hand, false, true);
       } else if (msg.type === "bet-placed") {
         console.log("socket message bet-placed");
-        if (msg.folded) {
-            alert(msg.username + " folded.");
-        } else { 
             alert(msg.username + " bet " + msg.betAmount);
             updateChipStack(msg.chipCount, document.getElementById("chipStacksContainer-" + msg.id));
 
             // update pot
             document.getElementById("potDiv").textContent = "Pot: " + msg.pot;
             updateChipStack(msg.pot, document.getElementById("chipStacksContainer")); //should rename it to potStacksContainer
-        }
       } else if (msg.type === "next-turn") {
         console.log("socket message next-turn");
         // document.getElementById("potDiv").textContent = "Pot: " + msg.pot;
@@ -296,7 +295,7 @@
       location.reload(); // Reload to reset game state
     });
 
-    function drawHand(id, username, hand, multiplicationCardDealt = false) {
+    function drawHand(id, username, hand, multiplicationCardDealt = false, folded = false) {
         // console.log("id in drawHand: " + id);
         if (!handDivs[id]) { // checks if we already drew it??? no. check if it's been drawn THE FIRST TIME
             const div = document.createElement("div");
@@ -329,8 +328,15 @@
         // clear the hand, since this gets drawn on every deal, so we can redraw the cards
         handDivs[id].innerHTML = `<p></p>`; // injection
         const nameDiv = document.createElement("div");
-        nameDiv.innerHTML = `<p>${username}</p>`; // injection
+        if (id === myId) {
+            nameDiv.innerHTML = `<p>${username} (me)</p>`; // injection
+        } else {
+            nameDiv.innerHTML = `<p>${username}</p>`; // injection
+        }
         nameDiv.className = "handLabel";
+        if (folded) {
+            nameDiv.classList.add("folded");
+        }
         handDivs[id].appendChild(nameDiv);
 
         const playerChipsStacksContainerDiv = document.createElement("div");
@@ -371,6 +377,11 @@
             }
             cardDiv.style.color = getColorFromSuit(card.suit);
             
+            if (folded) { // do after card or card back. still want to show back even if greyed out
+                console.log("adding className folded " + username);
+                cardDiv.classList.add("folded");
+            }
+
             handDivs[id].appendChild(cardDiv);
         });
     }
@@ -534,8 +545,9 @@
 
         document.getElementById("foldButton").onclick = () => {
             // send fold message. server will eliminate player and broadcast notification   
-            console.log("Player folded");
-            socket.send(JSON.stringify({ type: "bet-placed", userId: myId, folded: true }));
+            console.log("Player folded, toCall is " + toCall);
+            // need to send betAmount so that it doesn't get reset. refactor to track on server side
+            socket.send(JSON.stringify({ type: "bet-placed", userId: myId, betAmount: toCall, folded: true }));
         };
     }
 

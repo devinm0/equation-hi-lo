@@ -255,31 +255,58 @@ wss.on("connection", (ws) => {
 
         const justPlayedPlayer = players.get(data.userId);
         justPlayedPlayer.turnTakenThisRound = true;
-        justPlayedPlayer.foldedThisTurn = data.folded; // can we pass nothing in the case of placing a bet?
+        justPlayedPlayer.betAmount += data.betAmount // even if folded. (just passing on last players bet amount) 
+        // refactor to use a global server-side currentBetAmount variable
+        // when I do, need to reset it in endBettingRound function
+
         //TODO need to skip following logic if player folded
         //TODO rename betAmount to total bet this round
 
-        justPlayedPlayer.betAmount += data.betAmount // or should it just be raise? handle if someone folds
-        justPlayedPlayer.chipCount -= data.betAmount // should only be the diff
-        pot += data.betAmount;
+        if (data.folded) {
+            justPlayedPlayer.foldedThisTurn = data.folded; // can we pass nothing in the case of placing a bet?
+            
+            wss.clients.forEach((client) => {
+                let handToSend = JSON.parse(JSON.stringify(players.get(data.userId).hand));
+                if (client.userId !== data.userId) {
+                    // keep the card hidden, if it the receiver of the socket message is not the owner of the card
+                    // this code is duplicated from the notifyPlayersOfAnewDeal method. 
+                    // TODO refactor for DRY. it's repeated
+                    for (let i = 0; i < handToSend.length; i++) {
+                        if (handToSend[i].hidden === true) {
+                            handToSend[i] = new Card(null, 'hidden');
+                        }
+                    }
+                } 
+                if (/*client !== ws && */client.readyState === WebSocket.OPEN) {
+                client.send(JSON.stringify({
+                    type: "player-folded",
+                    id: data.userId,
+                    username: players.get(data.userId).username,
+                    hand: handToSend
+                }));
+                }
+            });
+        } else {
+            justPlayedPlayer.chipCount -= data.betAmount // should only be the diff
+            pot += data.betAmount;
 
-        wss.clients.forEach((client) => {
-            if (/*client !== ws && */client.readyState === WebSocket.OPEN) {
-              client.send(JSON.stringify({
-                type: "bet-placed",
-                id: data.userId,
-                folded: data.folded,
-                username: players.get(data.userId).username,
-                betAmount: data.betAmount, // so users can see "so and so bet x chips"
-                chipCount: players.get(data.userId).chipCount, // to update the chip stack visual of player x for each player
-                pot: pot // otherwise, pot won't get updated on last player of the round
-            }));
-            }
-        });
+            wss.clients.forEach((client) => {
+                if (/*client !== ws && */client.readyState === WebSocket.OPEN) {
+                client.send(JSON.stringify({
+                    type: "bet-placed",
+                    id: data.userId,
+                    username: players.get(data.userId).username,
+                    betAmount: data.betAmount, // so users can see "so and so bet x chips"
+                    chipCount: players.get(data.userId).chipCount, // to update the chip stack visual of player x for each player
+                    pot: pot // otherwise, pot won't get updated on last player of the round
+                }));
+                }
+            });
+        }
 
         if (bettingRoundIsComplete()) {
             // need a check on game state here if firstRoundBetting, dealLastOpenCard. if lastroundBetting, go to equation making mode
-            if (firstRoundBettingCompleted) {
+            if (firstRoundBettingCompleted) { // confusing, sounds like we end second round at the end of first. rename to in secondroundbetting
                 endBettingRound("second");
                 commenceHiLoSelection();
             } else {
@@ -413,19 +440,15 @@ function dealTwoOpenCardsToEachPlayer(ws) {
 }
 
 function dealLastOpenCardToEachPlayer(ws) {
-    // looks like if it's any operator, deal another card
-    // discard applies again with multiply
-
-        // could be three if there is a root
-    players.forEach((player, id) => { // why does value come before key. so annoying    
+    // can't wanna deal to folded players
+    const nonFoldedPlayers = [...players.values()].filter(player => player.foldedThisTurn !== true);
+    nonFoldedPlayers.forEach((player, id) => { // why does value come before key. so annoying    
         // first card can be any card
         const draw = dealAnyCard();
         player.hand.push(draw);
     
         // technically i should be putting returned cards at the bottom, but the math should be the same
-        // TODO also need to program in the new card being dealt after discard choice
 
-        // change this to just if root. Because on multiply, the number card will be dealt after discard
         if (draw.value === 'ROOT') {
             let draw2 = dealNumberCard();
             player.hand.push(draw2);
@@ -438,7 +461,7 @@ function dealLastOpenCardToEachPlayer(ws) {
             multiplicationCardDealt = true;
         }
 
-        notifyAllPlayersOfNewlyDealtCards(ws, player, multiplicationCardDealt); // magic bool parameters are bad AND IT JUST CAUSED PROBLEMS just call notifyOfFirstOpenDeal
+        notifyAllPlayersOfNewlyDealtCards(ws, player, multiplicationCardDealt);
 
         console.log("dealt last open card to " + player.id);
         console.log(player.hand);
@@ -446,9 +469,6 @@ function dealLastOpenCardToEachPlayer(ws) {
 
     return numPlayersThatNeedToDiscard;    
 }
-
-// then make equations
-// THEN second round betting
 
 function endBettingRound(round) {
     for (const [key, value] of players) {
@@ -522,10 +542,12 @@ function commenceFirstRoundBetting() {
 
 function commenceSecondRoundBetting() {
     wss.clients.forEach((client) => {
-        if (/*client !== ws && */client.readyState === WebSocket.OPEN) {
-          client.send(JSON.stringify({
-            type: "second-round-betting-commenced",
-          }));
+        if (players.get(client.userId).folded !== true) { // can't allow folded players to participate in betting
+            if (/*client !== ws && */client.readyState === WebSocket.OPEN) {
+            client.send(JSON.stringify({
+                type: "second-round-betting-commenced",
+            }));
+            }
         }
     });
 
@@ -553,10 +575,25 @@ function advanceToNextPlayersTurn(betAmount) { // should take a parameter here
 }
 
 function findNextPlayerTurn() {
-    var keys = Array.from(players.keys()); // just maintain an array instead of casting all the time
-    console.log(keys);
-    console.log(keys.indexOf(currentTurnPlayerId));
-    return keys[(keys.indexOf(currentTurnPlayerId) + 1) % keys.length];
+    return findNextKeyWithWrap(players, currentTurnPlayerId, v => v.foldedThisTurn !== true);
+
+    function findNextKeyWithWrap(map, startKey, predicate) {
+        const entries = [...map];
+        const startIndex = entries.findIndex(([key]) => key === startKey);
+      
+        if (startIndex === -1) return undefined;
+      
+        const total = entries.length;
+      
+        for (let i = 1; i < total; i++) {
+          const [key, value] = entries[(startIndex + i) % total];
+          if (predicate(value, key)) {
+            return key;
+          }
+        }
+      
+        return undefined; // No match found
+    }
 }
 
 function bettingRoundIsComplete() {
@@ -568,7 +605,8 @@ function bettingRoundIsComplete() {
     }
     const playerBetAmounts = nonFoldedPlayers.map(([id, player]) => player.betAmount);
     const setOfBets = new Set(playerBetAmounts);
-    if (setOfBets.size === 1){ // TODO could be bug here, bc on second round, bet starts at 0
+    // bets are all equal AND active players have all bet at least once, then betting round is complete
+    if (setOfBets.size === 1 && nonFoldedPlayers.every(([id, player]) => player.turnTakenThisRound === true)){ 
         // end turn
         console.log("everyone has called or folded");
         return true;
@@ -579,11 +617,13 @@ function bettingRoundIsComplete() {
          
 function commenceEquationForming() {
     wss.clients.forEach((client) => {
-        if (client.readyState === WebSocket.OPEN) {
-          const payload = JSON.stringify({ 
-            type: "commence-equation-forming", 
-        });
-          client.send(payload);
+        if (players.get(client.userId).folded !== true) { // can't allow folded players to form equations
+            if (client.readyState === WebSocket.OPEN) {
+            const payload = JSON.stringify({ 
+                type: "commence-equation-forming", 
+            });
+            client.send(payload);
+            }
         }
       });
     
@@ -610,11 +650,13 @@ function endEquationForming() {
 
 function commenceHiLoSelection() {
     wss.clients.forEach((client) => {
-        if (client.readyState === WebSocket.OPEN) {
-          const payload = JSON.stringify({ 
-            type: "hi-lo-selection", 
-        });
-          client.send(payload);
+        if (players.get(client.userId).folded !== true) { // can't allow folded players to participate in betting
+            if (client.readyState === WebSocket.OPEN) {
+            const payload = JSON.stringify({ 
+                type: "hi-lo-selection", 
+            });
+            client.send(payload);
+            }
         }
       });
 }
@@ -638,8 +680,9 @@ function determineWinners() {
           });
     }
 
-    const loBettingPlayers = [...players.entries()].filter(([key, value]) => value.choices.includes('low'));
-    const hiBettingPlayers = [...players.entries()].filter(([key, value]) => value.choices.includes('high'));
+    const nonFoldedPlayers = [...players.values()].filter(player => player.foldedThisTurn !== true);
+    const loBettingPlayers = nonFoldedPlayers.filter(player => player.choices.includes('low'));
+    const hiBettingPlayers = nonFoldedPlayers.filter(player => player.choices.includes('high'));
       
     const loTarget = 1;
     const hiTarget = 20;
@@ -793,62 +836,62 @@ function determineWinners() {
 
     pot = 0;
 
-    function suitToInt(suit) {
-        switch (suit) {
-          case Suits.STONE:
-            return 0;
-          case Suits.BRONZE:
-            return 1;
-          case Suits.SILVER:
-            return 2;
-          case Suits.GOLD:
-            return 3;
-          default:
-            return;
-        }
-    }
-      
-    function getNumberFromCardValue(value) {
-        switch(value) {
-            case 'TEN':
-                return 10;
-                break;
-            case 'NINE':
-                return 9;
-                break;
-            case 'EIGHT':
-                return 8;
-                break;
-            case 'SEVEN':
-                return 7;
-                break;
-            case 'SIX':
-                return 6;
-                break;
-            case 'FIVE':
-                return 5;
-                break;
-            case 'FOUR':
-                return 4;
-                break;
-            case 'THREE':
-                return 3;
-                break;
-            case 'TWO':
-                return 2;
-                break;
-            case 'ONE':
-                return 1;
-                break;
-            case 'ZERO':
-                return 0;
-                break;
-            default:
-                return NaN;
-        }
-    }
-
     //TODO check if any players reached 0, and kick them out of the game.
+}
+
+function suitToInt(suit) {
+    switch (suit) {
+      case Suits.STONE:
+        return 0;
+      case Suits.BRONZE:
+        return 1;
+      case Suits.SILVER:
+        return 2;
+      case Suits.GOLD:
+        return 3;
+      default:
+        return;
+    }
+}
+  
+function getNumberFromCardValue(value) {
+    switch(value) {
+        case 'TEN':
+            return 10;
+            break;
+        case 'NINE':
+            return 9;
+            break;
+        case 'EIGHT':
+            return 8;
+            break;
+        case 'SEVEN':
+            return 7;
+            break;
+        case 'SIX':
+            return 6;
+            break;
+        case 'FIVE':
+            return 5;
+            break;
+        case 'FOUR':
+            return 4;
+            break;
+        case 'THREE':
+            return 3;
+            break;
+        case 'TWO':
+            return 2;
+            break;
+        case 'ONE':
+            return 1;
+            break;
+        case 'ZERO':
+            return 0;
+            break;
+        default:
+            return NaN;
+    }
 }
 
 // TODO add instructions for when I send it people. It can be a nice css page
