@@ -397,11 +397,13 @@ function dealTwoOpenCardsToEachPlayer(ws) {
             player.hand.push(draw3);
         }
 
+        let multiplicationCardDealt = false;
         if (draw.value === 'multiply' || draw2.value === 'multiply') { // expect one more person to discard before advancing game state
             numPlayersThatNeedToDiscard += 1;
+            multiplicationCardDealt = true;
         }
 
-        notifyAllPlayersOfNewlyDealtCards(ws, player, true); // magic bool parameters are bad. just call notifyOfFirstOpenDeal
+        notifyAllPlayersOfNewlyDealtCards(ws, player, multiplicationCardDealt); // magic bool parameters are bad. just call notifyOfFirstOpenDeal
 
         console.log("dealt two open cards to " + player.id);
         console.log(player.hand);
@@ -422,16 +424,21 @@ function dealLastOpenCardToEachPlayer(ws) {
     
         // technically i should be putting returned cards at the bottom, but the math should be the same
         // TODO also need to program in the new card being dealt after discard choice
-        if (draw.suit === 'operator') {
+
+        // change this to just if root. Because on multiply, the number card will be dealt after discard
+        if (draw.value === 'ROOT') {
             let draw2 = dealNumberCard();
             player.hand.push(draw2);
         }
 
+        let multiplicationCardDealt = false;
+
         if (draw.value === 'multiply') { // expect one more person to discard before advancing game state
             numPlayersThatNeedToDiscard += 1;
+            multiplicationCardDealt = true;
         }
 
-        notifyAllPlayersOfNewlyDealtCards(ws, player, false); // magic bool parameters are bad AND IT JUST CAUSED PROBLEMS just call notifyOfFirstOpenDeal
+        notifyAllPlayersOfNewlyDealtCards(ws, player, multiplicationCardDealt); // magic bool parameters are bad AND IT JUST CAUSED PROBLEMS just call notifyOfFirstOpenDeal
 
         console.log("dealt last open card to " + player.id);
         console.log(player.hand);
@@ -462,16 +469,20 @@ function endBettingRound(round) {
     });
 
 }
-function notifyAllPlayersOfNewlyDealtCards(ws, player, firstOpen = false) {
+function notifyAllPlayersOfNewlyDealtCards(ws, player, multiplicationCardDealt = false) {
     wss.clients.forEach((client) => {
         let payload;
         if (client.userId == player.id) { // need to check if client = username
              payload = JSON.stringify({
-                type: firstOpen? "first-open-deal" : "deal",
+                type: "deal",
                 id: player.id,
                 username: player.username,
                 hand: player.hand,
                 chipCount: player.chipCount,
+                multiplicationCardDealt: multiplicationCardDealt 
+                // ^ only send this socket message to the player 
+                // who has the multiplication card. otherwise, 
+                // player 2 getting a multiply means player 1 will have to discard
               });
             } else {
                 // hide the hidden card.
@@ -483,7 +494,7 @@ function notifyAllPlayersOfNewlyDealtCards(ws, player, firstOpen = false) {
                 }
                 // [...hand] //  only works if contains primitives
              payload = JSON.stringify({
-                type: firstOpen? "first-open-deal" : "deal",
+                type: "deal",
                 id: player.id,
                 username: player.username,
                 hand: handToSend, // Array. fill with nulls or something

@@ -75,7 +75,7 @@
         }
     }
 
-    const socket = new WebSocket(`ws://172.20.10.5:3000`);
+    const socket = new WebSocket(`ws://192.168.1.220:3000`);
     const handDivs = {};
     const lobbyPlayerDivs = {};
 
@@ -126,16 +126,18 @@
         btn.parentNode.removeChild(btn);
         document.getElementById("leaveButton").style.display = "block";
         document.getElementById("lobbyPlayerListContainer").remove();
-        drawHand(msg.id, msg.username, msg.hand, true);
+        drawHand(msg.id, msg.username, msg.hand); // should this be true?
         updateChipStack(msg.chipCount, document.getElementById("chipStacksContainer-" + myId));
         alert("The game has started!");
-      } else if (msg.type === "first-open-deal") {
+      } else if (msg.type === "deal") {
         if (msg.id === myId) {
             myHand = msg.hand;
         }
-        drawHand(msg.id, msg.username, msg.hand, true);
-        updateChipStack(msg.chipCount, document.getElementById("chipStacksContainer-" + myId));
+        drawHand(msg.id, msg.username, msg.hand, msg.multiplicationCardDealt);
 
+        if (msg.chipCount !== undefined) {
+            updateChipStack(msg.chipCount, document.getElementById("chipStacksContainer-" + myId));
+        }
         // TODO 5/20
         // need the same bool to only do this with alert.
         const highlightedCards = document.querySelectorAll('.card-highlighted');
@@ -162,11 +164,6 @@
                 card.classList.add('listener-added');
             }
         });
-      } else if (msg.type === "deal") {
-        if (msg.id === myId) {
-            myHand = msg.hand;
-        }
-        drawHand(msg.id, msg.username, msg.hand);
       } else if (msg.type === "player-joined") {
         drawPlayer(msg.color, msg.username, msg.isHost);
 
@@ -299,7 +296,7 @@
       location.reload(); // Reload to reset game state
     });
 
-    function drawHand(id, username, hand, isFirstOpenDeal = false) {
+    function drawHand(id, username, hand, multiplicationCardDealt = false) {
         // console.log("id in drawHand: " + id);
         if (!handDivs[id]) { // checks if we already drew it??? no. check if it's been drawn THE FIRST TIME
             const div = document.createElement("div");
@@ -322,13 +319,10 @@
             console.log(sortable);
         }
 
-        // Add check, don't assume server guarantees at most one multiply card
-        const handContainsMultiplyCard = myHand.some(e => e.value === 'multiply');
-        
         // TODO: bug we get a notification twice here
         // TODO: we get a  notification again if it wasn't the discard.
         //       need a bool that says we've notified.
-        if (handContainsMultiplyCard && isFirstOpenDeal) {
+        if (multiplicationCardDealt) {
             alert("Multiplication card received. Please discard either addition, subtraction, or multiplication card.");
         }        
 
@@ -370,7 +364,7 @@
             ) {
                 cardDivParagraph.dataset.value = card.value;
 
-                if (handContainsMultiplyCard && id === myId && isFirstOpenDeal) { // TODO this is also a mess. We should have a separate drawHighlights function
+                if (multiplicationCardDealt) { // TODO this is also a mess. We should have a separate drawHighlights function
                     // learned: be careful with capitalization
                     cardDiv.className = "card card-highlighted"
                 }
@@ -381,6 +375,16 @@
         });
     }
 
+    function notify(message) {
+        let notificationDiv = document.getElementById("notificationDiv");
+        notificationDiv.style.display = "block";
+        notificationDiv.textContent = message;
+
+        setTimeout(() => {
+            hideNotificationDiv(); // this is actually wrong since we'll hide any other notifications coming in
+            // we need to implement a queue or just have fewer notifications
+        }, 1000);
+    }
     function notifyThatAnotherPlayerIsBetting(name){
         let notificationDiv = document.getElementById("notificationDiv");
         notificationDiv.style.display = "block";
