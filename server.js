@@ -630,6 +630,14 @@ function determineWinners() {
           });
     }
 
+    function findHighestCard(hand) {
+        return hand.filter(card => card.suit !== 'operator').reduce((maxCard, currentCard) => {
+            const currentVal = getNumberFromCardValue(currentCard.value);
+            const maxVal = getNumberFromCardValue(maxCard.value);
+            return currentVal > maxVal ? currentCard : maxCard;
+          });
+    }
+
     const loBettingPlayers = [...players.entries()].filter(([key, value]) => value.choices.includes('low'));
     const hiBettingPlayers = [...players.entries()].filter(([key, value]) => value.choices.includes('high'));
       
@@ -673,6 +681,23 @@ function determineWinners() {
         if (diff < minDiff) {
           minDiff = diff;
           hiWinner = value;
+          //TODO following is exactly a copy of the lowest value. I should make this code a function with option highest or lowest
+        } else if (diff === minDiff) { // triple equals?
+            // find the highest card of each player
+            
+            // technically a waste, only need to compare if we end up with two highest cards.
+            // as it is, a tie for second place gets compared
+            let currentPlayersHighestCard = findHighestCard(value.hand);
+            let currentHighestPlayersHighestCard = findHighestCard(value.hand);
+
+            if (currentPlayersHighestCard.value > currentHighestPlayersHighestCard.value) {
+                hiWinner = value;
+            } else if (currentPlayersHighestCard.value === currentHighestPlayersHighestCard.value) {
+                // need to compare suit then
+                if (suitToInt(currentPlayersHighestCard.suit) > suitToInt(currentHighestPlayersHighestCard.suit)) {
+                    hiWinner = value;
+                } // impossible to be equal. suit+number pairs (cards) are unique
+            }
         }
     }
       
