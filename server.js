@@ -48,10 +48,10 @@ const OperatorCards = {
 };
 
 const Suits = {
-    GOLD: "gold",
-    SILVER: "silver",
+    STONE: "stone",
     BRONZE: "bronze",
-    STONE: "stone"
+    SILVER: "silver",
+    GOLD: "gold",
 }
 
 const GamePhases = {
@@ -611,6 +611,14 @@ function commenceHiLoSelection() {
 // TODO account for card suits
 // TODO don't show any betting or hi lo selection socket messages to folded players
 function determineWinners() {
+    function findLowestCard(hand) {
+        return hand.filter(card => card.suit !== 'operator').reduce((minCard, currentCard) => {
+            const currentVal = getNumberFromCardValue(currentCard.value);
+            const minVal = getNumberFromCardValue(minCard.value);
+            return currentVal < minVal ? currentCard : minCard;
+          });
+    }
+
     const loBettingPlayers = [...players.entries()].filter(([key, value]) => value.choices.includes('low'));
     const hiBettingPlayers = [...players.entries()].filter(([key, value]) => value.choices.includes('high'));
       
@@ -625,9 +633,27 @@ function determineWinners() {
         if (diff < minDiff) {
             minDiff = diff;
             loWinner = value;
+        } else if (diff === minDiff) { // triple equals?
+            // find the lowest card of each player
+            
+            // technically a waste, only need to compare if we end up with two lowest cards.
+            // as it is, a tie for second place gets compared
+            let currentPlayersLowestCard = findLowestCard(value.hand);
+            let currentLowestPlayersLowestCard = findLowestCard(value.hand);
+
+            if (currentPlayersLowestCard.value < currentLowestPlayersLowestCard.value) {
+                loWinner = value;
+            } else if (currentPlayersLowestCard.value === currentLowestPlayersLowestCard.value) {
+                // need to compare suit then
+                if (suitToInt(currentPlayersLowestCard.suit) < suitToInt(currentLowestPlayersLowestCard.suit)) {
+                    loWinner = value;
+                } // impossible to be equal. suit+number pairs (cards) are unique
+            }
         }
     }
-      
+    
+
+
     let hiWinner = null;
     minDiff = Infinity;
       
@@ -730,6 +756,61 @@ function determineWinners() {
     }
 
     pot = 0;
+
+    function suitToInt(suit) {
+        switch (suit) {
+          case Suits.STONE:
+            return 0;
+          case Suits.BRONZE:
+            return 1;
+          case Suits.SILVER:
+            return 2;
+          case Suits.GOLD:
+            return 3;
+          default:
+            return;
+        }
+    }
+      
+    function getNumberFromCardValue(value) {
+        switch(value) {
+            case 'TEN':
+                return 10;
+                break;
+            case 'NINE':
+                return 9;
+                break;
+            case 'EIGHT':
+                return 8;
+                break;
+            case 'SEVEN':
+                return 7;
+                break;
+            case 'SIX':
+                return 6;
+                break;
+            case 'FIVE':
+                return 5;
+                break;
+            case 'FOUR':
+                return 4;
+                break;
+            case 'THREE':
+                return 3;
+                break;
+            case 'TWO':
+                return 2;
+                break;
+            case 'ONE':
+                return 1;
+                break;
+            case 'ZERO':
+                return 0;
+                break;
+            default:
+                return NaN;
+        }
+    }
 
     //TODO check if any players reached 0, and kick them out of the game.
 }
