@@ -215,7 +215,7 @@
             alert('60 seconds! Drag cards to get close to 1 or 20.');
             beginCountdownNotification();
             sortable.option("disabled", false)
-            
+
       } else if (msg.type === "players-are-equation-forming") {
             alert('Other players are forming their equations.');
             beginCountdownNotification();
@@ -324,11 +324,14 @@
         // clear the hand, so we can redraw all cards on every deal
         handDivs[id].innerHTML = `<p></p>`; // injection
         const nameDiv = document.createElement("div");
+        let nameDivContents = username;
         if (id === myId) {
-            nameDiv.innerHTML = `<p>${username} (me)</p>`; // injection
-        } else {
-            nameDiv.innerHTML = `<p>${username}</p>`; // injection
+            nameDivContents += ' (me)'; // injection
         }
+        if (folded) {
+            nameDivContents += ' (folded)'; // injection
+        }
+        nameDiv.innerHTML = '<p>' + nameDivContents + '</p>';
         nameDiv.className = "handLabel";
         if (folded) {
             nameDiv.classList.add("folded");
