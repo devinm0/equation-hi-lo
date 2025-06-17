@@ -58,7 +58,8 @@
 
     <button class="button" id="leaveButton" style="display:none;">Leave Game</button>
     <script src="https://cdn.jsdelivr.net/npm/sortablejs@1.15.0/Sortable.min.js"></script>
-  <script>
+    <script type="module">
+    import { NumberCards, OperatorCards, Suits } from './enums.js';
     const totalDuration = 60 * 1000; // 60 seconds
     const display = document.getElementById('notificationDiv');
 
@@ -296,14 +297,12 @@
     });
 
     function drawHand(id, username, hand, multiplicationCardDealt = false, folded = false) {
-        // console.log("id in drawHand: " + id);
-        if (!handDivs[id]) { // checks if we already drew it??? no. check if it's been drawn THE FIRST TIME
+        if (!handDivs[id]) { // check if hand has ever been drawn since game start
             const div = document.createElement("div");
             div.className = "hand";
             document.body.appendChild(div);
             handDivs[id] = div;
 
-            console.log(id, myId);
             if (id === myId) {
                 // make it a sortable for when we make the equations
                 const sortableTemp = Sortable.create(div, {
@@ -314,18 +313,13 @@
                 });
                 sortable = sortableTemp;
             }
-
-            console.log(sortable);
         }
 
-        // TODO: bug we get a notification twice here
-        // TODO: we get a  notification again if it wasn't the discard.
-        //       need a bool that says we've notified.
         if (multiplicationCardDealt) {
             alert("Multiplication card received. Please discard either addition, subtraction, or multiplication card.");
         }        
 
-        // clear the hand, since this gets drawn on every deal, so we can redraw the cards
+        // clear the hand, so we can redraw all cards on every deal
         handDivs[id].innerHTML = `<p></p>`; // injection
         const nameDiv = document.createElement("div");
         if (id === myId) {
@@ -348,7 +342,7 @@
             const cardDiv = document.createElement("div");
             
             let cardDivParagraph;
-            if (card.value === "root"){
+            if (card.value === OperatorCards.ROOT){
                 // for roots, need to draw it by hand since font is bad
                 const canvas = document.createElement('canvas');
                 canvas.width = 120;
@@ -372,21 +366,24 @@
                 cardDiv.appendChild(canvas);
             } else {
                 cardDivParagraph = document.createElement("p");
-                cardDivParagraph.innerHTML = `${getTextFromCardValue(card.value)}`;
+                if (card.value !== null) { // will be null in the case of hidden cards
+                    cardDivParagraph.innerHTML = `${card.value}`;
+                } // TODO injection
                 cardDiv.appendChild(cardDivParagraph);
             }
-            cardDiv.className = card.value ? "card" : "card-back";
+            cardDiv.className = card.value !== null ? "card" : "card-back"; // without null check, 0 becomes card-back since equivalent to false
 
             // careful with card and cardDiv naming like this
-            if (card.value === "TEN"){
+            if (card.value === NumberCards.TEN){
                 cardDivParagraph.style.letterSpacing = '-1rem';
                 cardDivParagraph.style.transform = 'translateX(-0.7rem)';
             }
 
+            // is one of the three discardable operators
             if (
-                card.value === "subtract" ||
-                card.value === "add" ||
-                card.value === "multiply"
+                card.value === OperatorCards.SUBTRACT ||
+                card.value === OperatorCards.ADD ||
+                card.value === OperatorCards.MULTIPLY
             ) {
                 cardDivParagraph.dataset.value = card.value;
 
@@ -398,7 +395,6 @@
             cardDiv.style.color = getColorFromSuit(card.suit);
             
             if (folded) { // do after card or card back. still want to show back even if greyed out
-                console.log("adding className folded " + username);
                 cardDiv.classList.add("folded");
             }
 
@@ -450,74 +446,27 @@
     }
 
     function getColorFromSuit(suit) {
+        console.log("suit " + suit);
+        console.log(suit + 1);
+        console.log(Suits.OPERATOR === suit);
+
         switch(suit) {
-            case 'GOLD':
+            case Suits.GOLD:
+                console.log(Suits.GOLD);
                 return 'rgb(228, 167, 1)';
                 break;
-            case 'SILVER':
+            case Suits.SILVER:
+                console.log(Suits.SILVER);
                 return 'rgb(177, 177, 177)';
                 break;
-            case 'BRONZE':
+            case Suits.BRONZE:
+                console.log(Suits.BRONZE);
                 return 'rgb(122, 61, 0)';
                 break;
-            case 'STONE':
+            case Suits.STONE:
+                console.log(Suits.STONE);
                 return 'rgb(66, 66, 66)';
                 break;
-        }
-    }
-
-    function getTextFromCardValue(value) {
-        switch(value) {
-            case 'TEN':
-                return 10;
-                break;
-            case 'NINE':
-                return 9;
-                break;
-            case 'EIGHT':
-                return 8;
-                break;
-            case 'SEVEN':
-                return 7;
-                break;
-            case 'SIX':
-                return 6;
-                break;
-            case 'FIVE':
-                return 5;
-                break;
-            case 'FOUR':
-                return 4;
-                break;
-            case 'THREE':
-                return 3;
-                break;
-            case 'TWO':
-                return 2;
-                break;
-            case 'ONE':
-                return 1;
-                break;
-            case 'ZERO':
-                return 0;
-                break;
-            case 'root':
-                return '√';
-                break;
-            case 'multiply': // TODO need to fix the enum, use enum values instead of strings
-                return '&times';
-                break;
-            case 'divide':
-                return '&divide';
-                break;
-            case 'subtract': // TODO should rename this to minus
-                return '−';
-                break;
-            case 'add':
-                return '+';
-                break;
-            default:
-                return '';
         }
     }
 

@@ -1,3 +1,5 @@
+const { OperatorCards, Suits, NumberCards } = require('./public/enums.js');
+
 const express = require("express");
 const http = require("http");
 const WebSocket = require("ws");
@@ -25,35 +27,6 @@ let players = new Map();
 let currentTurnPlayerId = 0;
 let pot = 0;
 
-const NumberCards = {
-    ZERO: "zero",
-    ONE: "one",
-    TWO: "two",
-    THREE: "three",
-    FOUR: "four",
-    FIVE: "five",
-    SIX: "six",
-    SEVEN: "seven",
-    EIGHT: "eight",
-    NINE: "nine",
-    TEN: "ten"
-}
-
-const OperatorCards = {
-    ADD: "add",
-    SUBTRACT: "subtract",
-    DIVIDE: "divide",
-    MULTIPLY: "multiply",
-    ROOT: "root",
-};
-
-const Suits = {
-    STONE: "stone",
-    BRONZE: "bronze",
-    SILVER: "silver",
-    GOLD: "gold",
-}
-
 const GamePhases = {
     FIRSTDEAL: "firstdeal",
     FIRSTBETTING: "firstbetting",
@@ -71,19 +44,14 @@ class Card {
 let deck = []
 // add 5 each of multiply and root cards to deck
 for (let i = 0; i < 4; i++) {
-    deck.push(new Card(OperatorCards.MULTIPLY, 'operator'));
-    deck.push(new Card(OperatorCards.ROOT, 'operator'));
+    deck.push(new Card(OperatorCards.MULTIPLY, Suits.OPERATOR));
+    deck.push(new Card(OperatorCards.ROOT, Suits.OPERATOR));
 }
 
 // add all numbers of all suits to deck
-for (const number in NumberCards) {
-    if (NumberCards.hasOwnProperty(number)) { // Check if the property belongs to the object itself
-
-      for (const suit in Suits) {
-        if (Suits.hasOwnProperty(suit)) { // Check if the property belongs to the object itself
-            deck.push(new Card(number, suit));
-        }
-      }
+for (const number of Object.values(NumberCards)) {
+    for (const suit of Object.values(Suits)) {
+        deck.push(new Card(number, suit));
     }
 }
 
@@ -121,12 +89,10 @@ wss.on("connection", (ws) => {
   // only log it if socket message comes BACK
   console.log(`User connected: ${userId}`);
 
-  // console.log(players);
   // Send init message with the userId
   ws.send(JSON.stringify({ type: "init", id: userId, color: userColor, isHost: ws.isHost || false }));
 
   ws.on("message", (message) => {
-    // console.log("message");
     const str = message.toString();
     let data;
 
@@ -144,8 +110,6 @@ wss.on("connection", (ws) => {
             value: data.value
         });
 
-        // I guess we need a system to check that ALL cards have been discarded 
-        // before moving on to next round
         // also this check for not equal ws might be wrong
         wss.clients.forEach((client) => {
             if (client !== ws && client.readyState === WebSocket.OPEN) {
@@ -153,8 +117,8 @@ wss.on("connection", (ws) => {
             }
         });
 
-        // deal a replacement NUMBER card
         const player = players.get(data.id);
+        // remove discarded card
         player.hand = player.hand.filter(card => card.value != data.value);
         const draw = dealNumberCard();
         player.hand.push(draw);
@@ -359,9 +323,9 @@ function initializeGame(ws) {    // don't need ws
     console.log("initializeGame");
 
     players.forEach((player, id) => { // why does value come before key. so annoying
-        player.hand.push(new Card(OperatorCards.ADD, 'operator'));
-        player.hand.push(new Card(OperatorCards.DIVIDE, 'operator'));
-        player.hand.push(new Card(OperatorCards.SUBTRACT, 'operator'));
+        player.hand.push(new Card(OperatorCards.ADD, Suits.OPERATOR));
+        player.hand.push(new Card(OperatorCards.DIVIDE, Suits.OPERATOR));
+        player.hand.push(new Card(OperatorCards.SUBTRACT, Suits.OPERATOR));
 
         notifyAllPlayersOfNewlyDealtCards(ws, player);
     })
@@ -371,7 +335,7 @@ function dealFirstHiddenCardToEachPlayer(ws) {
     players.forEach((player, id) => { // why does value come before key. so annoying
         for (let i = 0; i < deck.length; i++) {
             // cannot be operator card
-            if (deck[i].suit !== 'operator') {
+            if (deck[i].suit !== Suits.OPERATOR) {
                 // Remove the card and give it to player
                 player.hand.push(deck.splice(i, 1)[0]);
                 // set hidden to true, so when message is sent to other players its obfuscated
@@ -387,7 +351,7 @@ function dealFirstHiddenCardToEachPlayer(ws) {
 function dealNumberCard() {
     for (let i = 0; i < deck.length; i++) {
         // cannot be operator card
-        if (deck[i].suit !== 'operator') {
+        if (deck[i].suit !== Suits.OPERATOR) {
             // Remove the card and give it to player
             return deck.splice(i, 1)[0];
         }
@@ -412,20 +376,20 @@ function dealTwoOpenCardsToEachPlayer(ws) {
         // technically i should be putting returned cards at the bottom, but the math should be the same
         // TODO also need to program in the new card being dealt after discard choice
         let draw2;
-        if (draw.suit === 'operator') {
+        if (draw.suit === Suits.OPERATOR) {
             draw2 = dealNumberCard();
         } else {
             draw2 = dealAnyCard();
         }
         player.hand.push(draw2);
 
-        if (draw.value === 'root' || draw2.value === 'root') { // push another number
+        if (draw.value === OperatorCards.ROOT || draw2.value === OperatorCards.ROOT) { // push another number
             const draw3 = dealNumberCard();
             player.hand.push(draw3);
         }
 
         let multiplicationCardDealt = false;
-        if (draw.value === 'multiply' || draw2.value === 'multiply') { // expect one more person to discard before advancing game state
+        if (draw.value === OperatorCards.MULTIPLY || draw2.value === OperatorCards.MULTIPLY) { // expect one more person to discard before advancing game state
             numPlayersThatNeedToDiscard += 1;
             multiplicationCardDealt = true;
         }
@@ -449,14 +413,14 @@ function dealLastOpenCardToEachPlayer(ws) {
     
         // technically i should be putting returned cards at the bottom, but the math should be the same
 
-        if (draw.value === 'root') {
+        if (draw.value === OperatorCards.ROOT) {
             let draw2 = dealNumberCard();
             player.hand.push(draw2);
         }
 
         let multiplicationCardDealt = false;
 
-        if (draw.value === 'multiply') { // expect one more person to discard before advancing game state
+        if (draw.value === OperatorCards.MULTIPLY) { // expect one more person to discard before advancing game state
             numPlayersThatNeedToDiscard += 1;
             multiplicationCardDealt = true;
         }
@@ -661,21 +625,19 @@ function commenceHiLoSelection() {
       });
 }
 
-// TODO account for card suits
-// TODO don't show any betting or hi lo selection socket messages to folded players
 function determineWinners() {
     function findLowestCard(hand) {
-        return hand.filter(card => card.suit !== 'operator').reduce((minCard, currentCard) => {
-            const currentVal = getNumberFromCardValue(currentCard.value);
-            const minVal = getNumberFromCardValue(minCard.value);
+        return hand.filter(card => card.suit !== Suits.OPERATOR).reduce((minCard, currentCard) => {
+            const currentVal = currentCard.value;
+            const minVal = minCard.value;
             return currentVal < minVal ? currentCard : minCard;
           });
     }
 
     function findHighestCard(hand) {
-        return hand.filter(card => card.suit !== 'operator').reduce((maxCard, currentCard) => {
-            const currentVal = getNumberFromCardValue(currentCard.value);
-            const maxVal = getNumberFromCardValue(maxCard.value);
+        return hand.filter(card => card.suit !== Suits.OPERATOR).reduce((maxCard, currentCard) => {
+            const currentVal = currentCard.value;
+            const maxVal = maxCard.value;
             return currentVal > maxVal ? currentCard : maxCard;
           });
     }
@@ -689,26 +651,26 @@ function determineWinners() {
       
     let loWinner = null;
     let minDiff = Infinity;
-      
-    for (const [key, value] of loBettingPlayers) {
-        const diff = Math.abs(value.equationResult - loTarget);
+    
+    for (const player of loBettingPlayers) {
+        const diff = Math.abs(player.equationResult - loTarget);
         if (diff < minDiff) {
             minDiff = diff;
-            loWinner = value;
+            loWinner = player;
         } else if (diff === minDiff) { // triple equals?
             // find the lowest card of each player
             
             // technically a waste, only need to compare if we end up with two lowest cards.
             // as it is, a tie for second place gets compared
-            let currentPlayersLowestCard = findLowestCard(value.hand);
-            let currentLowestPlayersLowestCard = findLowestCard(value.hand);
+            let currentPlayersLowestCard = findLowestCard(player.hand);
+            let currentLowestPlayersLowestCard = findLowestCard(player.hand);
 
             if (currentPlayersLowestCard.value < currentLowestPlayersLowestCard.value) {
-                loWinner = value;
+                loWinner = player;
             } else if (currentPlayersLowestCard.value === currentLowestPlayersLowestCard.value) {
                 // need to compare suit then
-                if (suitToInt(currentPlayersLowestCard.suit) < suitToInt(currentLowestPlayersLowestCard.suit)) {
-                    loWinner = value;
+                if (currentPlayersLowestCard.suit < currentLowestPlayersLowestCard.suit) {
+                    loWinner = player;
                 } // impossible to be equal. suit+number pairs (cards) are unique
             }
         }
@@ -719,26 +681,26 @@ function determineWinners() {
     let hiWinner = null;
     minDiff = Infinity;
       
-    for (const [key, value] of hiBettingPlayers) {
-        const diff = Math.abs(value.equationResult - hiTarget);
+    for (const player of hiBettingPlayers) {
+        const diff = Math.abs(player.equationResult - hiTarget);
         if (diff < minDiff) {
           minDiff = diff;
-          hiWinner = value;
+          hiWinner = player;
           //TODO following is exactly a copy of the lowest value. I should make this code a function with option highest or lowest
         } else if (diff === minDiff) { // triple equals?
             // find the highest card of each player
             
             // technically a waste, only need to compare if we end up with two highest cards.
             // as it is, a tie for second place gets compared
-            let currentPlayersHighestCard = findHighestCard(value.hand);
-            let currentHighestPlayersHighestCard = findHighestCard(value.hand);
+            let currentPlayersHighestCard = findHighestCard(player.hand);
+            let currentHighestPlayersHighestCard = findHighestCard(player.hand);
 
             if (currentPlayersHighestCard.value > currentHighestPlayersHighestCard.value) {
-                hiWinner = value;
+                hiWinner = player;
             } else if (currentPlayersHighestCard.value === currentHighestPlayersHighestCard.value) {
                 // need to compare suit then
-                if (suitToInt(currentPlayersHighestCard.suit) > suitToInt(currentHighestPlayersHighestCard.suit)) {
-                    hiWinner = value;
+                if (currentPlayersHighestCard.suit > currentHighestPlayersHighestCard.suit) {
+                    hiWinner = player;
                 } // impossible to be equal. suit+number pairs (cards) are unique
             }
         }
@@ -838,62 +800,7 @@ function determineWinners() {
 
     //TODO check if any players reached 0, and kick them out of the game.
 }
-
-function suitToInt(suit) {
-    switch (suit) {
-      case Suits.STONE:
-        return 0;
-      case Suits.BRONZE:
-        return 1;
-      case Suits.SILVER:
-        return 2;
-      case Suits.GOLD:
-        return 3;
-      default:
-        return;
-    }
-}
   
-function getNumberFromCardValue(value) {
-    switch(value) {
-        case 'TEN':
-            return 10;
-            break;
-        case 'NINE':
-            return 9;
-            break;
-        case 'EIGHT':
-            return 8;
-            break;
-        case 'SEVEN':
-            return 7;
-            break;
-        case 'SIX':
-            return 6;
-            break;
-        case 'FIVE':
-            return 5;
-            break;
-        case 'FOUR':
-            return 4;
-            break;
-        case 'THREE':
-            return 3;
-            break;
-        case 'TWO':
-            return 2;
-            break;
-        case 'ONE':
-            return 1;
-            break;
-        case 'ZERO':
-            return 0;
-            break;
-        default:
-            return NaN;
-    }
-}
-
 // TODO add instructions for when I send it people. It can be a nice css page
 // doesn't have to be live
 // TODO bug: people don't see people that have joined before they opened the page.
