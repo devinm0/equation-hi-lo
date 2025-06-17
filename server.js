@@ -308,8 +308,9 @@ wss.on("connection", (ws) => {
         const player = players.get(data.userId);
         player.choices = data.choices;
 
+        const nonFoldedPlayers = [...players.values()].filter(player => player.foldedThisTurn !== true);
         // check that every player submitted choices
-        if ([...players.values()].every(player => player.choices.length > 0)) {
+        if (nonFoldedPlayers.every(player => player.choices.length > 0)) {
             console.log('everyone submitted their hi or lo selections');
             determineWinners();
         }
