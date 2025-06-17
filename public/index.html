@@ -212,12 +212,14 @@
         }
       } else if (msg.type === "commence-equation-forming") {
         console.log("socket message commence-equation-forming");
-
             alert('60 seconds! Drag cards to get close to 1 or 20.');
-
+            beginCountdownNotification();
+            sortable.option("disabled", false)
+            
+      } else if (msg.type === "players-are-equation-forming") {
+            alert('Other players are forming their equations.');
             beginCountdownNotification();
 
-            sortable.option("disabled", false)
       } else if (msg.type === "end-equation-forming") {
             console.log("socket message end-equation-forming");
             hideNotificationDiv(); // do we call this actually? rename to resetAndHideNotificationDiv?

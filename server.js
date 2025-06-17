@@ -426,9 +426,6 @@ function dealLastOpenCardToEachPlayer(ws) {
         }
 
         notifyAllPlayersOfNewlyDealtCards(ws, player, multiplicationCardDealt);
-
-        console.log("dealt last open card to " + player.id);
-        console.log(player.hand);
     });
 
     return numPlayersThatNeedToDiscard;    
@@ -506,7 +503,7 @@ function commenceFirstRoundBetting() {
 
 function commenceSecondRoundBetting() {
     wss.clients.forEach((client) => {
-        if (players.get(client.userId).folded !== true) { // can't allow folded players to participate in betting
+        if (players.get(client.userId).foldedThisTurn !== true) { // can't allow folded players to participate in betting
             if (/*client !== ws && */client.readyState === WebSocket.OPEN) {
             client.send(JSON.stringify({
                 type: "second-round-betting-commenced",
@@ -515,14 +512,20 @@ function commenceSecondRoundBetting() {
         }
     });
 
+    // put findNextPlayerTurn inside advanceToNextPlayersTurn
+    // i think I want to just continue in round robin.
+    // We can change this implementation later to always follow left of the dealer
+    currentTurnPlayerId = findNextPlayerTurn();
     advanceToNextPlayersTurn(0); // no ante to match on the second round
 }
 
-// TODO display ("5 to call") or something similar
 function advanceToNextPlayersTurn(betAmount) { // should take a parameter here
     const playerChipCounts = players.values().map(player => player.chipCount);
     const maxBet = Math.min(...playerChipCounts);
-    console.log(maxBet, currentTurnPlayerId, players.get(currentTurnPlayerId));
+    console.log("NOTIFICATION", maxBet, currentTurnPlayerId, players.get(currentTurnPlayerId));
+    
+    // modify this so that we don't trust the client?
+    // but technically we do because only currentTurnPlayer can send a betting message.
     wss.clients.forEach((client) => {
         if (/*client !== ws && */client.readyState === WebSocket.OPEN) {
           client.send(JSON.stringify({
@@ -539,6 +542,7 @@ function advanceToNextPlayersTurn(betAmount) { // should take a parameter here
 }
 
 function findNextPlayerTurn() {
+    console.log(currentTurnPlayerId);
     return findNextKeyWithWrap(players, currentTurnPlayerId, v => v.foldedThisTurn !== true);
 
     function findNextKeyWithWrap(map, startKey, predicate) {
@@ -581,12 +585,19 @@ function bettingRoundIsComplete() {
          
 function commenceEquationForming() {
     wss.clients.forEach((client) => {
-        if (players.get(client.userId).folded !== true) { // can't allow folded players to form equations
+        if (players.get(client.userId).foldedThisTurn !== true) { // can't allow folded players to form equations
             if (client.readyState === WebSocket.OPEN) {
-            const payload = JSON.stringify({ 
-                type: "commence-equation-forming", 
-            });
-            client.send(payload);
+                const payload = JSON.stringify({ 
+                    type: "commence-equation-forming", 
+                });
+                client.send(payload);
+            }
+        } else {
+            if (client.readyState === WebSocket.OPEN) {
+                const payload = JSON.stringify({ 
+                    type: "players-are-equation-forming", 
+                });
+                client.send(payload);
             }
         }
       });
@@ -614,7 +625,7 @@ function endEquationForming() {
 
 function commenceHiLoSelection() {
     wss.clients.forEach((client) => {
-        if (players.get(client.userId).folded !== true) { // can't allow folded players to participate in betting
+        if (players.get(client.userId).foldedThisTurn !== true) { // can't allow folded players to participate in betting
             if (client.readyState === WebSocket.OPEN) {
             const payload = JSON.stringify({ 
                 type: "hi-lo-selection", 
@@ -706,9 +717,6 @@ function determineWinners() {
         }
     }
       
-    console.log(hiWinner);
-    console.log(loWinner);
-      
     // notify everyone about the winners
     let payload;
     // there's distinct lo and hi winners
@@ -736,10 +744,8 @@ function determineWinners() {
     });
 
     // send chips to the winners
-    // if both, split the pot
+    // if there are both lo and hi betters, split the pot among the winner of each
     if (loWinner !== null && hiWinner !== null) {
-        console.log('loWinner !== null && hiWinner !== null');
-
         if (pot % 2 !== 0) {
             pot = pot - 1 // discard a chip if pot is uneven
         }
@@ -754,17 +760,12 @@ function determineWinners() {
         });
 
         wss.clients.forEach((client) => {
-            // send to only the winners
-            console.log(client.userId);
-            console.log(hiWinner?.id);
-            console.log(loWinner?.id);
-
+            // only send chips to the winners
             if ((client.userId === hiWinner.id || client.userId === loWinner.id) && client.readyState === WebSocket.OPEN) {
                 client.send(payload);
             }
         });
     } else if (loWinner !== null) {
-        console.log('loWinner is not null');
         players.get(loWinner.id).chipCount += pot;
 
         payload = JSON.stringify({
@@ -773,8 +774,6 @@ function determineWinners() {
         });
 
         wss.clients.forEach((client) => {
-            console.log(client.userId);
-            console.log(loWinner?.id);
             // send to only the winners
             if (client.userId === loWinner.id && client.readyState === WebSocket.OPEN) {
                 client.send(payload);
@@ -801,19 +800,36 @@ function determineWinners() {
     //TODO check if any players reached 0, and kick them out of the game.
 }
   
-// TODO add instructions for when I send it people. It can be a nice css page
-// doesn't have to be live
-// TODO bug: people don't see people that have joined before they opened the page.
-//          need to show whole lobby upon joining (this would be better w http requests)
+// function printDeck(deck, n) {
+//     const columns = Math.ceil(deck.length / n);
+//     const rows = n;
+  
+//     // Initialize an array of columns
+//     const colData = Array.from({ length: columns }, (_, colIndex) =>
+//       deck.slice(colIndex * n, (colIndex + 1) * n)
+//     );
+  
+//     // Print row by row
+//     for (let row = 0; row < rows; row++) {
+//       let line = '';
+//       for (let col = 0; col < columns; col++) {
+//         const card = colData[col][row] || ''; // pad if column is shorter
+//         console.log(card);
+//         line += `${getANSICodeFromSuit(card.suit)}${card.value.toString()}\x1b[0m`;
+//       }
+//       console.log(line);
+//     }
 
-// so the new overall structure will be - turn of game, phase of turn, etc
-
-// what if the game doesn't expect a certain socket message yet anyway, but the user sends it
-// let's say I send a betting message when it's in the dealing phase. we need phases
-
-
-// need to send the variable which is the lowest player's chips
-// or keep it client side?
-// then have a pot variable which is total chips
-
-//TODO need to handle if a multiply is dealt in second round
+//     function getANSICodeFromSuit(suit) {
+//         switch(suit) {
+//             case 0:
+//                 return '\x1b[90m';
+//             case 1:
+//                 return '\x1b[33m';
+//             case 2:
+//                 return '\x1b[37m';
+//             case 3:
+//                 return '\x1b[33;1m';
+//         }
+//     }
+// }
