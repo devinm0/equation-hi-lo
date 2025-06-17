@@ -449,7 +449,7 @@ function dealLastOpenCardToEachPlayer(ws) {
     
         // technically i should be putting returned cards at the bottom, but the math should be the same
 
-        if (draw.value === 'ROOT') {
+        if (draw.value === 'root') {
             let draw2 = dealNumberCard();
             player.hand.push(draw2);
         }

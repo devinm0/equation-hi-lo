@@ -344,23 +344,43 @@
         playerChipsStacksContainerDiv.id = "chipStacksContainer-" + id;
         handDivs[id].appendChild(playerChipsStacksContainerDiv);
         
-        hand.forEach((card) => {
+        hand.forEach((card, index) => {
             const cardDiv = document.createElement("div");
-            const cardDivParagraph = document.createElement("p");
+            
+            let cardDivParagraph;
+            if (card.value === "root"){
+                // for roots, need to draw it by hand since font is bad
+                const canvas = document.createElement('canvas');
+                canvas.width = 120;
+                canvas.height = 180;
+                canvas.id = `sqrt-canvas-${id}-${index}`;
+                const ctx = canvas.getContext('2d');
 
-            cardDivParagraph.innerHTML = `${getTextFromCardValue(card.value)}`;
-            cardDiv.appendChild(cardDivParagraph);
+                // draw root
+                ctx.fillStyle = 'white';
+                ctx.fillRect(0, 0, 120, 180);
+                ctx.strokeStyle = 'black';
+                ctx.lineWidth = 14;
+                ctx.lineCap = 'butt'; 
+                ctx.beginPath();
+                ctx.moveTo(20, 98);
+                ctx.lineTo(40, 128);
+                ctx.lineTo(70, 48);
+                ctx.lineTo(100, 48);
+                ctx.stroke();
+
+                cardDiv.appendChild(canvas);
+            } else {
+                cardDivParagraph = document.createElement("p");
+                cardDivParagraph.innerHTML = `${getTextFromCardValue(card.value)}`;
+                cardDiv.appendChild(cardDivParagraph);
+            }
             cardDiv.className = card.value ? "card" : "card-back";
 
             // careful with card and cardDiv naming like this
             if (card.value === "TEN"){
                 cardDivParagraph.style.letterSpacing = '-1rem';
                 cardDivParagraph.style.transform = 'translateX(-0.7rem)';
-            }
-
-            if (card.value === "root"){
-                cardDivParagraph.style.fontSize = '95px';
-                cardDivParagraph.style.transform = 'scale(1.3, 1) translateY(10px) translateX(-3px)';
             }
 
             if (
