@@ -51,13 +51,15 @@ for (let i = 0; i < 4; i++) {
 // add all numbers of all suits to deck
 for (const number of Object.values(NumberCards)) {
     for (const suit of Object.values(Suits)) {
-        deck.push(new Card(number, suit));
+        if (suit !== Suits.OPERATOR) {
+            deck.push(new Card(number, suit));
+        }
     }
 }
 
 deck.sort(() => Math.random() - 0.5);
 
-console.log(deck);
+printDeck(deck, 10);
 let hostId = null;
 // rather than global variables how can we make this functional
 let numPlayersThatHaveDiscarded = 0;
@@ -800,36 +802,65 @@ function determineWinners() {
     //TODO check if any players reached 0, and kick them out of the game.
 }
   
-// function printDeck(deck, n) {
-//     const columns = Math.ceil(deck.length / n);
-//     const rows = n;
-  
-//     // Initialize an array of columns
-//     const colData = Array.from({ length: columns }, (_, colIndex) =>
-//       deck.slice(colIndex * n, (colIndex + 1) * n)
-//     );
-  
-//     // Print row by row
-//     for (let row = 0; row < rows; row++) {
-//       let line = '';
-//       for (let col = 0; col < columns; col++) {
-//         const card = colData[col][row] || ''; // pad if column is shorter
-//         console.log(card);
-//         line += `${getANSICodeFromSuit(card.suit)}${card.value.toString()}\x1b[0m`;
-//       }
-//       console.log(line);
-//     }
+function printDeck(deck, n) {
+    console.log("Deck size:", deck.length, "cards.");
 
-//     function getANSICodeFromSuit(suit) {
-//         switch(suit) {
-//             case 0:
-//                 return '\x1b[90m';
-//             case 1:
-//                 return '\x1b[33m';
-//             case 2:
-//                 return '\x1b[37m';
-//             case 3:
-//                 return '\x1b[33;1m';
-//         }
-//     }
-// }
+    const columns = Math.ceil(deck.length / n);
+    const rows = n;
+  
+    const toPrint = Array.from({ length: n }, () => []);
+    // Initialize an array of columns
+    deck.forEach((card, index) => {
+        toPrint[index % n].push(card);
+    });
+  
+    // Print row by row
+    for (let r = 0; r < rows; r++) {
+        let rowOutput = '';
+        for (let c = 0; c < toPrint[r].length; c++) {
+            let card = toPrint[r][c]
+            let cardOutput = getStringFromSuit(card.suit) + ' ' + card.value + ', ';
+            let colorCodedCardOutput = getANSICodeFromSuit(card.suit) + cardOutput.padEnd(12) + '\x1b[0m'
+            rowOutput += colorCodedCardOutput;
+        }
+        console.log(rowOutput);
+    //   let line = '';
+    //   for (let col = 0; col < columns; col++) {
+    //     console.log("col, row: ", col, row);
+    //     const card = colData[col][row] || ''; // pad if column is shorter
+    //     console.log(card);
+    //     line += `${getANSICodeFromSuit(card.suit)}${card.value}\x1b[0m`;
+    //   }
+    //   console.log(line);
+    }
+
+    function getANSICodeFromSuit(suit) {
+        switch(suit) {
+            case 0:
+                return '\x1b[90m';
+            case 1:
+                return '\x1b[33m';
+            case 2:
+                return '\x1b[37m';
+            case 3:
+                return '\x1b[33;1m';
+            default: // operators
+                return ''
+        }
+    }
+
+    function getStringFromSuit(suit) {
+        switch(suit) {
+            case 0:
+                return 'Stone';
+            case 1:
+                return 'Bronze';
+            case 2:
+                return 'Silver';
+            case 3:
+                return 'Gold';
+            default: // operators
+                return 'Operator';
+        }
+    }
+}
