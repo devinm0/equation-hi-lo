@@ -26,6 +26,7 @@ class Player {
 let players = new Map();
 let currentTurnPlayerId = 0;
 let pot = 0;
+let handNumber = 0; // hand, as in round of play
 
 const GamePhases = {
     FIRSTDEAL: "firstdeal",
@@ -41,25 +42,7 @@ class Card {
         this.hidden = hidden
     }
 }
-let deck = []
-// add 5 each of multiply and root cards to deck
-for (let i = 0; i < 4; i++) {
-    deck.push(new Card(OperatorCards.MULTIPLY, Suits.OPERATOR));
-    deck.push(new Card(OperatorCards.ROOT, Suits.OPERATOR));
-}
-
-// add all numbers of all suits to deck
-for (const number of Object.values(NumberCards)) {
-    for (const suit of Object.values(Suits)) {
-        if (suit !== Suits.OPERATOR) {
-            deck.push(new Card(number, suit));
-        }
-    }
-}
-
-deck.sort(() => Math.random() - 0.5);
-
-printDeck(deck, 10);
+let deck;
 let hostId = null;
 // rather than global variables how can we make this functional
 let numPlayersThatHaveDiscarded = 0;
@@ -122,7 +105,7 @@ wss.on("connection", (ws) => {
         const draw = dealNumberCard();
         player.hand.push(draw);
 
-        notifyAllPlayersOfNewlyDealtCards(ws, player);
+        notifyAllPlayersOfNewlyDealtCards(player);
 
         numPlayersThatHaveDiscarded += 1;
 
@@ -148,27 +131,18 @@ wss.on("connection", (ws) => {
             return;
         }
 
-        initializeGame(ws);
-
         wss.clients.forEach((client) => {
             if (client.readyState === WebSocket.OPEN) {
               const payload = JSON.stringify({ 
                 type: "game-started", 
-                chipCount: players.get(client.userId).chipCount, 
-                id: client.userId, 
-                hand: players.get(client.userId).hand 
+                chipCount: players.get(client.userId).chipCount, // TODO have we initialized chip count here
+                id: client.userId
             });
               client.send(payload);
             }
           });
 
-        dealFirstHiddenCardToEachPlayer(ws); // okay so ws is whoever started the game
-    
-        dealTwoOpenCardsToEachPlayer(ws); // okay so ws is whoever started the game
-
-        if (numPlayersThatNeedToDiscard == 0) {
-            commenceFirstRoundBetting();
-        }
+        initializeHand();
     }
 
     if (data.type === "leave") {
@@ -196,7 +170,7 @@ wss.on("connection", (ws) => {
 
         // have to reassign userId because what if someone refreshes? have to ignore the init message
         ws.userId = data.userId;
-        players.set(data.userId, new Player(data.userId, data.username, [], Math.floor(Math.random()*10) + 10));
+        players.set(data.userId, new Player(data.userId, data.username, [], 25));
 
         wss.clients.forEach((client) => {
             if (client.readyState === WebSocket.OPEN) {
@@ -265,6 +239,58 @@ wss.on("connection", (ws) => {
             });
         }
 
+        const nonFoldedPlayers = Array.from(players).filter(([id, player]) => player.foldedThisTurn !== true)
+        if (nonFoldedPlayers.length === 1){
+            // end turn
+            console.log("All but one player folded this hand. Ending hand.");
+
+            const onlyRemainingPlayerThisHand = nonFoldedPlayers[0];
+
+            wss.clients.forEach((client) => {
+                if (/*client !== ws && */client.readyState === WebSocket.OPEN) {
+                    let message;
+                    if (client.userId === onlyRemainingPlayerThisHand.id) {
+                        message = "Everyone else folded. You take the pot by default.";
+                    } else {
+                        message = `Everyone but ${onlyRemainingPlayerThisHand.username} has folded. They take the pot of ${pot}`;
+                    }
+                    let payload = JSON.stringify({
+                        type: "round-result",
+                        message: message
+                    });
+                    client.send(payload);
+                }
+            });
+
+            // that person takes the whole pot
+            onlyRemainingPlayerThisHand.chipCount += pot;
+            pot = 0;
+
+            // send chip distribution. need to refactor this out. also i don't think
+            // all clients update chip stacks, only the receiver does
+            wss.clients.forEach((client) => {
+                // send to only the winners
+                if (client.userId === onlyRemainingPlayerThisHand.id && client.readyState === WebSocket.OPEN) {
+                    const payload = JSON.stringify({
+                        type: "chip-distribution",
+                        chipCount: pot
+                    });
+                    client.send(payload);
+                }
+            });
+
+            // need to call endBettingRound because we have to reset everyone's bets. Otherwise
+            // next hand will begin with toCall equaling the raise from the first hand
+            console.log("bet-placed");
+            players.values().forEach(player => {
+                console.log(player.username, "chipCount:", player.chipCount);
+            })
+        
+            firstRoundBettingCompleted ? endBettingRound("second") : endBettingRound("first");
+            endHand();
+            return;
+        }
+
         if (bettingRoundIsComplete()) {
             // need a check on game state here if firstRoundBetting, dealLastOpenCard. if lastroundBetting, go to equation making mode
             if (firstRoundBettingCompleted) { // confusing, sounds like we end second round at the end of first. rename to in secondroundbetting
@@ -307,7 +333,10 @@ wss.on("connection", (ws) => {
         // check that every player submitted choices
         if (nonFoldedPlayers.every(player => player.choices.length > 0)) {
             console.log('everyone submitted their hi or lo selections');
+
             determineWinners();
+
+            endHand();
         }
     }
   });
@@ -317,19 +346,19 @@ server.listen(3000, "0.0.0.0", () => {
   console.log("Server running on http://localhost:3000");
 });
 
-function initializeGame(ws) {    // don't need ws
-    console.log("initializeGame");
-
+function clearHandsAndDealOperatorCards() {    // don't need ws
     players.forEach((player, id) => { // why does value come before key. so annoying
+        player.hand = [];
+
         player.hand.push(new Card(OperatorCards.ADD, Suits.OPERATOR));
         player.hand.push(new Card(OperatorCards.DIVIDE, Suits.OPERATOR));
         player.hand.push(new Card(OperatorCards.SUBTRACT, Suits.OPERATOR));
 
-        notifyAllPlayersOfNewlyDealtCards(ws, player);
+        notifyAllPlayersOfNewlyDealtCards(player);
     })
 }
 
-function dealFirstHiddenCardToEachPlayer(ws) {
+function dealFirstHiddenCardToEachPlayer() {
     players.forEach((player, id) => { // why does value come before key. so annoying
         for (let i = 0; i < deck.length; i++) {
             // cannot be operator card
@@ -342,7 +371,7 @@ function dealFirstHiddenCardToEachPlayer(ws) {
             }
         }
 
-        notifyAllPlayersOfNewlyDealtCards(ws, player);
+        notifyAllPlayersOfNewlyDealtCards(player);
     });
 }
 
@@ -364,15 +393,13 @@ function dealAnyCard() {
 // that two operators cannot be dealt
 // that number count is now 3 if there's a root
 
-function dealTwoOpenCardsToEachPlayer(ws) {
-    // could be three if there is a root
+function dealTwoOpenCardsToEachPlayer() {
     players.forEach((player, id) => { // why does value come before key. so annoying    
         // first card can be any card
         const draw = dealAnyCard();
         player.hand.push(draw);
     
         // technically i should be putting returned cards at the bottom, but the math should be the same
-        // TODO also need to program in the new card being dealt after discard choice
         let draw2;
         if (draw.suit === Suits.OPERATOR) {
             draw2 = dealNumberCard();
@@ -392,7 +419,7 @@ function dealTwoOpenCardsToEachPlayer(ws) {
             multiplicationCardDealt = true;
         }
 
-        notifyAllPlayersOfNewlyDealtCards(ws, player, multiplicationCardDealt); // magic bool parameters are bad. just call notifyOfFirstOpenDeal
+        notifyAllPlayersOfNewlyDealtCards(player, multiplicationCardDealt); // magic bool parameters are bad. just call notifyOfFirstOpenDeal
 
         console.log("dealt two open cards to " + player.id);
         console.log(player.hand);
@@ -401,7 +428,7 @@ function dealTwoOpenCardsToEachPlayer(ws) {
     return numPlayersThatNeedToDiscard;
 }
 
-function dealLastOpenCardToEachPlayer(ws) {
+function dealLastOpenCardToEachPlayer() {
     // can't wanna deal to folded players
     const nonFoldedPlayers = [...players.values()].filter(player => player.foldedThisTurn !== true);
     nonFoldedPlayers.forEach((player, id) => { // why does value come before key. so annoying    
@@ -423,10 +450,89 @@ function dealLastOpenCardToEachPlayer(ws) {
             multiplicationCardDealt = true;
         }
 
-        notifyAllPlayersOfNewlyDealtCards(ws, player, multiplicationCardDealt);
+        notifyAllPlayersOfNewlyDealtCards(player, multiplicationCardDealt);
     });
 
     return numPlayersThatNeedToDiscard;    
+}
+
+function endHand() {
+    // need to check if anyone is down to 0 chips
+    console.log("endHand");
+    players.values().forEach(player => {
+        console.log(player.username, "chipCount:", player.chipCount);
+    })
+
+    firstRoundBettingCompleted = false;
+    handNumber += 1;
+    numPlayersThatHaveDiscarded = 0;
+    numPlayersThatNeedToDiscard = 0; 
+    players.values().forEach(player => {
+        if (player.chipCount === 0) {
+            wss.clients.forEach((client) => {
+                if (client.readyState === WebSocket.OPEN) {
+                    const payload = JSON.stringify({ 
+                        type: "kicked",
+                        userId: player.id
+                    });
+                    client.send(payload);
+                }
+            });
+
+            // or, just set their status to "out" so they can still view the game
+            // players.delete(player.id);
+        }
+
+        player.foldedThisTurn = false;
+        player.equationResult = null;
+        player.choices = [];
+    })
+    // send socket message
+
+    initializeHand();
+}
+
+function initializeHand() { // means start a hand of play
+    console.log("initializedHand");
+    players.values().forEach(player => {
+        console.log(player.username, "chipCount:", player.chipCount);
+    })
+    deck = generateDeck()
+    printDeck(deck, 10);    
+    
+    // so client can say "beginning hand number n!"
+    wss.clients.forEach((client) => {
+        if (client.readyState === WebSocket.OPEN) {
+            const payload = JSON.stringify({ 
+                type: "begin-hand", 
+                handNumber: handNumber 
+            });
+            client.send(payload);
+        }
+    });
+    
+    clearHandsAndDealOperatorCards(); // this should actually be initializeHand
+
+    //TODO maybe don't need this?
+    wss.clients.forEach((client) => {
+        if (client.readyState === WebSocket.OPEN) {
+            const payload = JSON.stringify({ 
+            type: "deal", 
+            chipCount: players.get(client.userId).chipCount, 
+            id: client.userId, 
+            hand: players.get(client.userId).hand 
+        });
+            client.send(payload);
+        }
+        });
+
+    dealFirstHiddenCardToEachPlayer(); 
+
+    dealTwoOpenCardsToEachPlayer();
+
+    if (numPlayersThatNeedToDiscard === 0) {
+        commenceFirstRoundBetting();
+    }
 }
 
 function endBettingRound(round) {
@@ -448,7 +554,7 @@ function endBettingRound(round) {
     });
 
 }
-function notifyAllPlayersOfNewlyDealtCards(ws, player, multiplicationCardDealt = false) {
+function notifyAllPlayersOfNewlyDealtCards(player, multiplicationCardDealt = false) {
     wss.clients.forEach((client) => {
         let payload;
         if (client.userId == player.id) { // need to check if client = username
@@ -568,11 +674,7 @@ function findNextPlayerTurn() {
 
 function bettingRoundIsComplete() {
     const nonFoldedPlayers = Array.from(players).filter(([id, player]) => player.foldedThisTurn !== true)
-    if (nonFoldedPlayers.length === 1){
-        // end turn
-        console.log("only one active player");
-        return true;
-    }
+
     const playerBetAmounts = nonFoldedPlayers.map(([id, player]) => player.betAmount);
     const setOfBets = new Set(playerBetAmounts);
     // bets are all equal AND active players have all bet at least once, then betting round is complete
@@ -676,7 +778,7 @@ function determineWinners() {
             // technically a waste, only need to compare if we end up with two lowest cards.
             // as it is, a tie for second place gets compared
             let currentPlayersLowestCard = findLowestCard(player.hand);
-            let currentLowestPlayersLowestCard = findLowestCard(player.hand);
+            let currentLowestPlayersLowestCard = findLowestCard(loWinner.hand);
 
             if (currentPlayersLowestCard.value < currentLowestPlayersLowestCard.value) {
                 loWinner = player;
@@ -689,8 +791,6 @@ function determineWinners() {
         }
     }
     
-
-
     let hiWinner = null;
     minDiff = Infinity;
       
@@ -706,7 +806,7 @@ function determineWinners() {
             // technically a waste, only need to compare if we end up with two highest cards.
             // as it is, a tie for second place gets compared
             let currentPlayersHighestCard = findHighestCard(player.hand);
-            let currentHighestPlayersHighestCard = findHighestCard(player.hand);
+            let currentHighestPlayersHighestCard = findHighestCard(hiWinner.hand);
 
             if (currentPlayersHighestCard.value > currentHighestPlayersHighestCard.value) {
                 hiWinner = player;
@@ -797,9 +897,7 @@ function determineWinners() {
         });
     }
 
-    pot = 0;
-
-    //TODO check if any players reached 0, and kick them out of the game.
+    pot = 0; // TODO put this inside of endHand??
 }
   
 function printDeck(deck, n) {
@@ -824,14 +922,6 @@ function printDeck(deck, n) {
             rowOutput += colorCodedCardOutput;
         }
         console.log(rowOutput);
-    //   let line = '';
-    //   for (let col = 0; col < columns; col++) {
-    //     console.log("col, row: ", col, row);
-    //     const card = colData[col][row] || ''; // pad if column is shorter
-    //     console.log(card);
-    //     line += `${getANSICodeFromSuit(card.suit)}${card.value}\x1b[0m`;
-    //   }
-    //   console.log(line);
     }
 
     function getANSICodeFromSuit(suit) {
@@ -863,4 +953,26 @@ function printDeck(deck, n) {
                 return 'Operator';
         }
     }
+}
+
+function generateDeck() {
+    let deck = []
+    // add 5 each of multiply and root cards to deck
+    for (let i = 0; i < 4; i++) {
+        deck.push(new Card(OperatorCards.MULTIPLY, Suits.OPERATOR));
+        deck.push(new Card(OperatorCards.ROOT, Suits.OPERATOR));
+    }
+    
+    // add all numbers of all suits to deck
+    for (const number of Object.values(NumberCards)) {
+        for (const suit of Object.values(Suits)) {
+            if (suit !== Suits.OPERATOR) {
+                deck.push(new Card(number, suit));
+            }
+        }
+    }
+    
+    deck.sort(() => Math.random() - 0.5);
+    
+    return deck;
 }
