@@ -73,20 +73,17 @@ app.use(express.static("public"));
 // as if it's one "user"? 
 // difference between wss and ws
 wss.on("connection", (ws) => {
-    // ahhh, i guess the ws represents this one user's conenction
+    // ahhh, i guess the ws represents this one user's connection
   const userId = uuidv4();
-  ws.userId = userId; // Store on socket
+  ws.userId = userId; // Store on socket. does this mean client.userId later? 
   
-  console.log('checking host');
-
   if (!hostId) { // ! applies to null!?
-    console.log('not host');
     hostId = userId;
     ws.isHost = true;
     console.log("hostId is " + hostId);
   }
 
-  const userColor = `hsl(${Math.random() * 360}, 100%, 50%)`;
+  const userColor = `hsl(${Math.random() * 360}, 100%, 70%)`;
   // need to remove this... it's a user that never gets used
   // only log it if socket message comes BACK
   console.log(`User connected: ${userId}`);
@@ -190,31 +187,21 @@ wss.on("connection", (ws) => {
     }
 
     if (data.type === "join") {
-        console.log('player actually joined here' + data.username);
-
         if (ws.isHost) { // without this, later players joining become the host
-            // but don't have a start button. so game can't start
             currentTurnPlayerId = data.userId;
             hostId = data.userId; // just use ws.userId here?
         }
-        console.log(data.userId + " " + hostId);
+
+        console.log(`***** 👩‍💻 ${hostId === data.userId ? 'Host' : 'Player'} joined: ${data.username} *****`);
+
+        // have to reassign userId because what if someone refreshes? have to ignore the init message
         ws.userId = data.userId;
-        // hostId = data.userId;
-        console.log(hostId + " " + ws.userId);
-        // need a null check on players[data.id] here
         players.set(data.userId, new Player(data.userId, data.username, [], Math.floor(Math.random()*10) + 10));
 
-        console.log(data.userId);
-            // notify other players of joining
-        
         wss.clients.forEach((client) => {
             if (client.readyState === WebSocket.OPEN) {
-                console.log(client.userId, hostId);
                 const payload = JSON.stringify({
                     type: "player-joined",
-                    //id: data.id,
-                    //x: data.x,
-                    //y: data.y,
                     isHost: client.userId === hostId,
                     color: data.color, // what happens if we put user color here?
                     username: data.username

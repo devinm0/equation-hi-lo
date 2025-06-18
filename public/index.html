@@ -107,9 +107,7 @@
 
         console.log('init ' + myId);
         console.log(event.data);
-
         if (!myId || !timestamp || now - timestamp > EXPIRATION_TIME) {
-            console.log('no stored token');
             myId = msg.id;
             myColor = msg.color;
             localStorage.setItem(USER_ID_KEY, myId);
@@ -451,7 +449,7 @@
         let lobbyPlayerListContainer = document.getElementById("lobbyPlayerListContainer");
         const div = document.createElement("div");
         div.className = "lobbyPlayerListItem";
-        div.innerHTML = `<p>${username}</p>` + (isHost ? ' (Host)' : ''); // injection
+        div.innerHTML = `<p>👩‍💻 ${username}</p>` + (isHost ? ' (Host)' : ''); // injection
         div.style.color = color;
         lobbyPlayerListContainer.appendChild(div);
     }
