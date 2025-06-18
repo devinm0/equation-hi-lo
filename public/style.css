@@ -11,6 +11,7 @@ body { margin: 0; /*overflow: hidden; */background-color: hsl(183, 89%, 31%); fo
     font-weight: bold;
     color: white;
 }
+
 #leaveButton {
     position: absolute;
     top: 5%;

@@ -92,6 +92,7 @@
     let timestamp = localStorage.getItem(TIMESTAMP_KEY);
     let myHand = null; // TODO this needs to be a serialized object
     let sortable = null; // allows for rearranging our hand to form the equation
+    let numPlayersJoined = 0;
 
     //sounds like we are telling socket to listen but no we are listening to socket
     socket.addEventListener("message", (event) => {
@@ -130,6 +131,8 @@
         drawHand(msg.id, msg.username, msg.hand); // should this be true?
         updateChipStack(msg.chipCount, document.getElementById("chipStacksContainer-" + myId));
         alert("The game has started!");
+      } else if (msg.type === "reject") {
+        alert("At least 2 players must join before starting the game.");
       } else if (msg.type === "deal") {
         if (msg.id === myId) {
             myHand = msg.hand;
@@ -168,7 +171,10 @@
       } else if (msg.type === "player-joined") {
         drawPlayer(msg.color, msg.username, msg.isHost);
 
-        if (msg.isHost) {
+        numPlayersJoined += 1;
+        //msg.isHost kind of misleading. sounds like sender is host. 
+        // but server is telling US we are the host.
+        if (numPlayersJoined >= 2 && msg.isHost) {
             const button = document.getElementById("startBtn")
             button.disabled = false;            
         }

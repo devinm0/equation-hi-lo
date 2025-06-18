@@ -145,6 +145,12 @@ wss.on("connection", (ws) => {
     if (data.type === "start" /*&& ws.userId === hostId*/) { // should I check isHost instead?
         console.log("150" + ws.userId + " " + hostId);
 
+        // can't start the game with only one player
+        if (players.size < 2) {
+            ws.send(JSON.stringify({ type: "reject" }));
+            return;
+        }
+
         initializeGame(ws);
 
         wss.clients.forEach((client) => {
@@ -193,25 +199,27 @@ wss.on("connection", (ws) => {
         }
         console.log(data.userId + " " + hostId);
         ws.userId = data.userId;
-        hostId = data.userId;
+        // hostId = data.userId;
         console.log(hostId + " " + ws.userId);
         // need a null check on players[data.id] here
         players.set(data.userId, new Player(data.userId, data.username, [], Math.floor(Math.random()*10) + 10));
 
         console.log(data.userId);
             // notify other players of joining
-        const payload = JSON.stringify({
-            type: "player-joined",
-            //id: data.id,
-            //x: data.x,
-            //y: data.y,
-            isHost: ws.isHost,
-            color: data.color, // what happens if we put user color here?
-            username: data.username
-        });
-
+        
         wss.clients.forEach((client) => {
             if (client.readyState === WebSocket.OPEN) {
+                console.log(client.userId, hostId);
+                const payload = JSON.stringify({
+                    type: "player-joined",
+                    //id: data.id,
+                    //x: data.x,
+                    //y: data.y,
+                    isHost: client.userId === hostId,
+                    color: data.color, // what happens if we put user color here?
+                    username: data.username
+                });
+
                 client.send(payload);
             }
         });
@@ -556,6 +564,10 @@ function findNextPlayerTurn() {
       
         const total = entries.length;
       
+        // for loop won't execute if total is 1
+        // doesn't matter because we should end the game if there's only one player
+        // don't start unless there's >= 2 players
+        // end ROUND if there's only 1
         for (let i = 1; i < total; i++) {
           const [key, value] = entries[(startIndex + i) % total];
           if (predicate(value, key)) {
