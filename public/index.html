@@ -33,6 +33,7 @@
     </div>
 
     <div id="uiContainer">
+        <div id="lobbyTitleContainer">Equation Hi Lo</div>
         <div id="lobbyPlayerListContainer"></div>
         <div id="nameContainer">
             <input type="text" id="nameInput" placeholder="Enter your name" />
@@ -126,6 +127,7 @@
         btn.parentNode.removeChild(btn);
         document.getElementById("leaveButton").style.display = "block";
         document.getElementById("lobbyPlayerListContainer").remove();
+        document.getElementById("lobbyTitleContainer").remove();
         alert("The game has started!");
       } else if (msg.type === "reject") {
         alert("At least 2 players must join before starting the game.");
