@@ -176,9 +176,10 @@ wss.on("connection", (ws) => {
             if (client.readyState === WebSocket.OPEN) {
                 const payload = JSON.stringify({
                     type: "player-joined",
-                    isHost: client.userId === hostId,
+                    isHost: data.userId === hostId,// client.userId === hostId, // this is wrong because it means the host will show everyone joining as host
                     color: data.color, // what happens if we put user color here?
-                    username: data.username
+                    username: data.username,
+                    receivingSocketIsHost: client.userId === hostId
                 });
 
                 client.send(payload);

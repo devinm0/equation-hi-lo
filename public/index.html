@@ -76,7 +76,7 @@
         }
     }
 
-    const socket = new WebSocket(`ws://192.168.1.220:3000`);
+    const socket = new WebSocket(`ws://localhost:3000`);
     const handDivs = {};
     const lobbyPlayerDivs = {};
 
@@ -167,12 +167,12 @@
             }
         });
       } else if (msg.type === "player-joined") {
-        drawPlayer(msg.color, msg.username, msg.isHost);
+        drawPlayer(msg.color, msg.username, msg.isHost, msg.receivingSocketIsHost);
 
         numPlayersJoined += 1;
         //msg.isHost kind of misleading. sounds like sender is host. 
         // but server is telling US we are the host.
-        if (numPlayersJoined >= 2 && msg.isHost) {
+        if (numPlayersJoined >= 2 && msg.receivingSocketIsHost) {
             const button = document.getElementById("startBtn")
             button.disabled = false;            
         }
@@ -358,6 +358,7 @@
             const cardDiv = document.createElement("div");
             
             let cardDivParagraph;
+
             if (card.value === OperatorCards.ROOT){
                 // for roots, need to draw it by hand since font is bad
                 const canvas = document.createElement('canvas');
@@ -387,6 +388,8 @@
                 } // TODO injection
                 cardDiv.appendChild(cardDivParagraph);
             }
+
+            cardDiv.dataset.value = card.value; // for applyOps later
             cardDiv.className = card.value !== null ? "card" : "card-back"; // without null check, 0 becomes card-back since equivalent to false
 
             // careful with card and cardDiv naming like this
@@ -462,10 +465,6 @@
     }
 
     function getColorFromSuit(suit) {
-        console.log("suit " + suit);
-        console.log(suit + 1);
-        console.log(Suits.OPERATOR === suit);
-
         switch(suit) {
             case Suits.GOLD:
                 console.log(Suits.GOLD);
@@ -582,10 +581,10 @@
 
         // Convert each card <div> into a token (number or operator)
         for (const card of cardElements) {
-            const p = card.querySelector('p');
-            if (!p) continue;
+            const value = card.dataset.value;
+            if (!value) continue;
 
-            const val = p.textContent.trim();
+            const val = value.trim();
 
             if (!isNaN(val)) {
                 tokens.push(Number(val));
