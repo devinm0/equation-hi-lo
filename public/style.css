@@ -224,6 +224,7 @@ background-color: #333;
     gap: 12px;
     margin: 20px auto;
     width: fit-content;
+    position: relative;
 }
 
 .chip-stack {
@@ -232,6 +233,19 @@ background-color: #333;
     align-items: center;
     gap: 2px;
     transition: all 0.3s ease;
+}
+
+.chip-count-overlay {
+    position: relative;
+    top: -0.5rem;
+    right: -0.5rem;
+    background: black;
+    color: white;
+    font-size: 0.8rem;
+    padding: 2px 5px;
+    border-radius: 999px;
+    z-index: 10;
+    pointer-events: none;
 }
 
 .chip {
@@ -351,4 +365,27 @@ background-color: #333;
 
 .hidden {
   display: none;
+}
+
+@media (max-width: 500px) {
+    #lobbyTitleContainer {
+        font-size: 80px;
+    }
+
+    .hand {
+        gap: 2px;
+    }
+
+    .card, .card-back {
+        width: 40px;
+        height: 60px;
+        font-size: 40px;
+        margin: 2px;
+    }
+
+    .chip {
+        width: 20px;
+        height: 10px;
+        margin: -5px; 
+    }
 }

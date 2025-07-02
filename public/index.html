@@ -125,7 +125,7 @@
       } else if (msg.type === "game-started") {
         const btn = document.getElementById("startBtn");
         btn.parentNode.removeChild(btn);
-        document.getElementById("leaveButton").style.display = "block";
+        // document.getElementById("leaveButton").style.display = "block";
         document.getElementById("lobbyPlayerListContainer").remove();
         document.getElementById("lobbyTitleContainer").remove();
         alert("The game has started!");
@@ -134,13 +134,15 @@
       } else if (msg.type === "begin-hand") {
         alert("Beginning hand " + msg.handNumber);
       } else if (msg.type === "deal") {
+        console.log(msg);
         if (msg.id === myId) {
             myHand = msg.hand;
         }        
         drawHand(msg.id, msg.username, msg.hand, msg.multiplicationCardDealt);
     
         if (msg.chipCount !== undefined) {
-            updateChipStack(msg.chipCount, document.getElementById("chipStacksContainer-" + myId));
+            // this should be msg.id I guess. originally I was only using the deal message for myself
+            updateChipStack(msg.chipCount, document.getElementById("chipStacksContainer-" + msg.id));
         }
         // TODO 5/20
         // need the same bool to only do this with alert.
@@ -208,8 +210,20 @@
         } else {
             notifyThatAnotherPlayerIsBetting(msg.username);
         }
+
+        // highlight only the betting person's hand
+        document.querySelectorAll(".handLabel").forEach(el => {
+            el.style.backgroundColor = "";
+        });
+        let handLabel = document.getElementById("handLabel-" + msg.currentTurnPlayerId)
+        handLabel.style.color = "yellow";
         // chips move from your stack to a staging stack
       } else if (msg.type === "end-betting-round") {
+        // remove highlights from who is betting
+        document.querySelectorAll(".handLabel").forEach(el => {
+            el.style.backgroundColor = "";
+        });
+
         console.log("socket message end-betting-round");
         if (msg.round === 'first'){
             alert('First betting round complete. Dealing last open card');
@@ -315,6 +329,7 @@
         if (!handDivs[id]) { // check if hand has ever been drawn since game start
             const div = document.createElement("div");
             div.className = "hand";
+            div.id = "hand-" + id;
             document.body.appendChild(div);
             handDivs[id] = div;
 
@@ -346,6 +361,7 @@
         }
         nameDiv.innerHTML = '<p>' + nameDivContents + '</p>';
         nameDiv.className = "handLabel";
+        nameDiv.id = "handLabel-" + id;
         if (folded) {
             nameDiv.classList.add("folded");
         }
@@ -364,22 +380,32 @@
             if (card.value === OperatorCards.ROOT){
                 // for roots, need to draw it by hand since font is bad
                 const canvas = document.createElement('canvas');
-                canvas.width = 120;
-                canvas.height = 180;
+                let scaleFactor;
+                if (window.matchMedia("(max-width: 600px)").matches) {
+                    // Mobile device canvas
+                    scaleFactor = 3 / 10;
+                } else {
+                    // Larger device canvas
+                    scaleFactor = 1;
+                }
+                
+                canvas.width = scaleFactor * 120;
+                canvas.height = scaleFactor * 180;
+
                 canvas.id = `sqrt-canvas-${id}-${index}`;
                 const ctx = canvas.getContext('2d');
 
                 // draw root
                 ctx.fillStyle = 'white';
-                ctx.fillRect(0, 0, 120, 180);
+                ctx.fillRect(0, 0, scaleFactor * 120, scaleFactor * 180);
                 ctx.strokeStyle = 'black';
-                ctx.lineWidth = 14;
+                ctx.lineWidth = scaleFactor * 14;
                 ctx.lineCap = 'butt'; 
                 ctx.beginPath();
-                ctx.moveTo(20, 98);
-                ctx.lineTo(40, 128);
-                ctx.lineTo(70, 48);
-                ctx.lineTo(100, 48);
+                ctx.moveTo(scaleFactor * 20, scaleFactor * 98);
+                ctx.lineTo(scaleFactor * 40, scaleFactor * 128);
+                ctx.lineTo(scaleFactor * 70, scaleFactor * 48);
+                ctx.lineTo(scaleFactor * 100, scaleFactor * 48);
                 ctx.stroke();
 
                 cardDiv.appendChild(canvas);
@@ -396,7 +422,13 @@
 
             // careful with card and cardDiv naming like this
             if (card.value === NumberCards.TEN){
-                cardDivParagraph.style.letterSpacing = '-1rem';
+                if (window.matchMedia("(max-width: 600px)").matches) {
+                    // Mobile device canvas
+                    cardDivParagraph.style.letterSpacing = '-.1rem';
+                } else {
+                    // Larger device canvas
+                    cardDivParagraph.style.letterSpacing = '-1rem';
+                }
                 cardDivParagraph.style.transform = 'translateX(-0.7rem)';
             }
 
@@ -545,10 +577,17 @@
     let chipCount = 0;
 
     function updateChipStack(newCount, containerToUpdate) {
+        console.log("updateChipStack called: " + newCount + " " + containerToUpdate);
         chipCount = newCount;
-        
-        // Clear all previous stacks
+
+        // Clear all previous stacks and any previous overlay
         containerToUpdate.innerHTML = "";
+
+        // Create and add the overlay for total chip count
+        const overlay = document.createElement("div");
+        overlay.classList.add("chip-count-overlay");
+        overlay.textContent = chipCount;
+        containerToUpdate.appendChild(overlay);
 
         const fullStacks = Math.floor(chipCount / maxStackSize);
         const remainder = chipCount % maxStackSize;

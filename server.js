@@ -422,8 +422,8 @@ function dealTwoOpenCardsToEachPlayer() {
 
         notifyAllPlayersOfNewlyDealtCards(player, multiplicationCardDealt); // magic bool parameters are bad. just call notifyOfFirstOpenDeal
 
-        console.log("dealt two open cards to " + player.id);
-        console.log(player.hand);
+        console.log("dealt 2 open cards to " + player.username);
+        printHand(player.hand);
     });
 
     return numPlayersThatNeedToDiscard;
@@ -518,14 +518,15 @@ function initializeHand() { // means start a hand of play
     wss.clients.forEach((client) => {
         if (client.readyState === WebSocket.OPEN) {
             const payload = JSON.stringify({ 
-            type: "deal", 
-            chipCount: players.get(client.userId).chipCount, 
-            id: client.userId, 
-            hand: players.get(client.userId).hand 
-        });
+                type: "deal", 
+                // something to do with client.userId not equaling anyone's userId
+                chipCount: players.get(client.userId).chipCount, 
+                id: client.userId, 
+                hand: players.get(client.userId).hand 
+            });
             client.send(payload);
         }
-        });
+    });
 
     dealFirstHiddenCardToEachPlayer(); 
 
@@ -627,7 +628,6 @@ function commenceSecondRoundBetting() {
 function advanceToNextPlayersTurn(betAmount) { // should take a parameter here
     const playerChipCounts = players.values().map(player => player.chipCount);
     const maxBet = Math.min(...playerChipCounts);
-    console.log("NOTIFICATION", maxBet, currentTurnPlayerId, players.get(currentTurnPlayerId));
     
     // modify this so that we don't trust the client?
     // but technically we do because only currentTurnPlayer can send a betting message.
@@ -924,35 +924,47 @@ function printDeck(deck, n) {
         }
         console.log(rowOutput);
     }
+}
 
-    function getANSICodeFromSuit(suit) {
-        switch(suit) {
-            case 0:
-                return '\x1b[90m';
-            case 1:
-                return '\x1b[33m';
-            case 2:
-                return '\x1b[37m';
-            case 3:
-                return '\x1b[33;1m';
-            default: // operators
-                return ''
-        }
+function printHand(hand) {
+    let output = '';
+    for (let c = 0; c < hand.length; c++) {
+        let card = hand[c];
+        // this is repeated from printDeck. modularize.
+        let cardOutput = card.value + ', ';
+        let colorCodedCardOutput = getANSICodeFromSuit(card.suit) + cardOutput.padEnd(12) + '\x1b[0m'
+        output += colorCodedCardOutput;
     }
+    console.log(output);
+}
 
-    function getStringFromSuit(suit) {
-        switch(suit) {
-            case 0:
-                return 'Stone';
-            case 1:
-                return 'Bronze';
-            case 2:
-                return 'Silver';
-            case 3:
-                return 'Gold';
-            default: // operators
-                return 'Operator';
-        }
+function getANSICodeFromSuit(suit) {
+    switch(suit) {
+        case 0:
+            return '\x1b[90m';
+        case 1:
+            return '\x1b[33m';
+        case 2:
+            return '\x1b[37m';
+        case 3:
+            return '\x1b[33;1m';
+        default: // operators
+            return ''
+    }
+}
+
+function getStringFromSuit(suit) {
+    switch(suit) {
+        case 0:
+            return 'Stone';
+        case 1:
+            return 'Bronze';
+        case 2:
+            return 'Silver';
+        case 3:
+            return 'Gold';
+        default: // operators
+            return 'Operator';
     }
 }
 
