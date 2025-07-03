@@ -63,6 +63,16 @@ background-color: #333;
     touch-action: manipulation;
 }
 
+.result-card {
+    background-color: transparent;
+    box-shadow: none;
+}
+
+.difference-card {
+    background-color: transparent;
+    box-shadow: none;
+}
+
 .card-highlighted {
     background-color: rgb(255, 252, 216);
     box-shadow: 0px 0px 5px rgba(255, 255, 0, 0.4);

@@ -28,6 +28,14 @@
         </div>
     </div>
 
+    <button id="confirmResults" class="hidden">Next Hand</button>
+    <!-- <div id="handResultsModal" class="modal-overlay hidden">
+        <div class="modal">
+            <div class="buttons">
+            </div>
+        </div>
+    </div> -->
+
     <div id="notificationWrapper">
         <div id="notificationDiv" style="display: none;"></div>
     </div>
@@ -54,7 +62,6 @@
             <button class="button" id="callRaiseButton">Call</button>
             <button class="button" id="allInButton">All In</button>
         </div>
-        
     </div>
 
     <button class="button" id="leaveButton" style="display:none;">Leave Game</button>
@@ -276,11 +283,13 @@
             }
             });
       } else if (msg.type === "round-result") {
-        alert(msg.message);
+        // alert(msg.message);
         // reset  pot
         document.getElementById("potDiv").textContent = "Pot: 0";
         updateChipStack(0, document.getElementById("chipStacksContainer")); //should rename it to potStacksContainer
-      } else if (msg.type === "chip-distribution") {
+        
+        displayHandResults(msg);
+    } else if (msg.type === "chip-distribution") {
         console.log("socket message chip-distribution");
 
         updateChipStack(msg.chipCount, document.getElementById("chipStacksContainer-" + myId));
@@ -709,6 +718,74 @@
         // };
     }
 
+    function displayHandResults(msg) {
+        const confirmResults = document.getElementById('confirmResults');
+
+        confirmResults.classList.remove('hidden');
+
+        msg.results.forEach(result => {
+            const cardDiv = document.createElement("div");
+            
+            let cardDivParagraph = document.createElement("p");
+            cardDivParagraph.innerHTML = "=" + formatNumber(result.result);
+            cardDiv.appendChild(cardDivParagraph);
+
+            cardDiv.className = "card"; // without null check, 0 becomes card-back since equivalent to false
+            cardDiv.classList.add("result-card"); // without null check, 0 becomes card-back since equivalent to false
+
+            if (result.result >= 10){ // TODO this is different for the refactor
+                if (window.matchMedia("(max-width: 600px)").matches) {
+                    // Mobile device canvas
+                    cardDivParagraph.style.letterSpacing = '-.1rem';
+                } else {
+                    // Larger device canvas
+                    cardDivParagraph.style.letterSpacing = '-1rem';
+                }
+                cardDivParagraph.style.transform = 'translateX(-0.7rem)';
+            }
+
+            cardDiv.style.color = "black";
+
+            handDivs[result.id].appendChild(cardDiv);
+
+            // starts over here. TODO don't duplicate code
+            const differenceCardDiv = document.createElement("div");
+
+            let differenceCardDivParagraph = document.createElement("p");
+            differenceCardDivParagraph.innerHTML = "(" + formatNumber(result.difference) + ")";
+            differenceCardDiv.appendChild(differenceCardDivParagraph);
+
+            differenceCardDiv.className = "card"; // without null check, 0 becomes card-back since equivalent to false
+            differenceCardDiv.classList.add("difference-card"); // without null check, 0 becomes card-back since equivalent to false
+
+            if (result.difference >= 10){ // TODO this is different for the refactor
+                if (window.matchMedia("(max-width: 600px)").matches) {
+                    // Mobile device canvas
+                    differenceCardDivParagraph.style.letterSpacing = '-.1rem';
+                } else {
+                    // Larger device canvas
+                    differenceCardDivParagraph.style.letterSpacing = '-1rem';
+                }
+                differenceCardDivParagraph.style.transform = 'translateX(-0.7rem)';
+            }
+
+            differenceCardDiv.style.color = "red";
+
+            handDivs[result.id].appendChild(differenceCardDiv);
+        })
+        
+        document.getElementById('confirmResults').onclick = () => {
+            socket.send(JSON.stringify({ type: "acknowledge-results", userId: myId }));
+            confirmResults.classList.add('hidden');
+        };
+    }
+
+function formatNumber(num, decimals) {
+    if (Number.isInteger(num)) {
+        return num.toString();
+    }
+    return parseFloat(num.toFixed(decimals)).toString();
+}
 </script>
 </body>
 </html>

@@ -100,8 +100,12 @@ wss.on("connection", (ws) => {
         });
 
         const player = players.get(data.id);
-        // remove discarded card
-        player.hand = player.hand.filter(card => card.value != data.value);
+        // remove discarded card ( fixed this from before )
+        const index = player.hand.findIndex(card => card.value === data.value);
+        if (index !== -1) {
+            player.hand.splice(index, 1);
+        }
+
         const draw = dealNumberCard();
         player.hand.push(draw);
 
@@ -336,6 +340,18 @@ wss.on("connection", (ws) => {
             console.log('everyone submitted their hi or lo selections');
 
             determineWinners();
+        }
+    }
+
+    // need this so that players have time to view results
+    if (data.type === "acknowledge-results") {
+        const player = players.get(data.userId);
+        player.acknowledgedResults = true;
+
+        const nonFoldedPlayers = [...players.values()].filter(player => player.foldedThisTurn !== true);
+        // check that every player submitted choices
+        if (nonFoldedPlayers.every(player => player.acknowledgedResults === true)) {
+            console.log('everyone acknowledged the hand');
 
             endHand();
         }
@@ -487,6 +503,7 @@ function endHand() {
         player.foldedThisTurn = false;
         player.equationResult = null;
         player.choices = [];
+        player.acknowledgedResults = false;
     })
     // send socket message
 
@@ -822,21 +839,40 @@ function determineWinners() {
       
     // notify everyone about the winners
     let payload;
+    // TODO only for nonFoldedPlayers!!!
+    let results = [...nonFoldedPlayers.values()].map(player => ({
+        id: player.id,
+        hand: player.hand,
+        result: player.equationResult,
+        choice: player.choices[0], // TODO adjust this for swing betting, need to send choices
+        difference: player.choices[0] === "low" ? Math.abs(player.equationResult - 1) : Math.abs(player.equationResult - 20),
+        isHiWinner: player.id === hiWinner?.id,
+        isLoWinner: player.id === loWinner?.id
+    }));
     // there's distinct lo and hi winners
     if (loWinner !== null && hiWinner !== null) {
         payload = JSON.stringify({
             type: "round-result",
-            message: loWinner.username + " won the low bet and " + hiWinner.username + " won the high bet."
+            message: loWinner.username + " won the low bet and " + hiWinner.username + " won the high bet.",
+            loWinner: loWinner,
+            hiWinner: hiWinner,
+            results: results
         });
     } else if (loWinner !== null) { // players only bet on lo
         payload = JSON.stringify({
             type: "round-result",
-            message: loWinner.username + " won the low bet."
+            message: loWinner.username + " won the low bet.",
+            loWinner: loWinner,
+            hiWinner: hiWinner,
+            results: results
         });
     } else if (hiWinner !== null) { // players only bet on hi
         payload = JSON.stringify({
             type: "round-result",
-            message: hiWinner.username + " won the high bet."
+            message: hiWinner.username + " won the high bet.",
+            loWinner: loWinner,
+            hiWinner: hiWinner,
+            results: results
         });
     }
 
