@@ -202,7 +202,7 @@ wss.on("connection", (ws) => {
         //TODO need to skip following logic if player folded
         //TODO rename betAmount to total bet this round
 
-        if (data.folded) {
+        if (data.folded) { 
             justPlayedPlayer.foldedThisTurn = data.folded; // can we pass nothing in the case of placing a bet?
             
             wss.clients.forEach((client) => {
@@ -218,12 +218,12 @@ wss.on("connection", (ws) => {
                     }
                 } 
                 if (/*client !== ws && */client.readyState === WebSocket.OPEN) {
-                client.send(JSON.stringify({
-                    type: "player-folded",
-                    id: data.userId,
-                    username: players.get(data.userId).username,
-                    hand: handToSend
-                }));
+                    client.send(JSON.stringify({
+                        type: "player-folded",
+                        id: data.userId,
+                        username: players.get(data.userId).username,
+                        hand: handToSend
+                    }));
                 }
             });
         } else {
@@ -261,7 +261,8 @@ wss.on("connection", (ws) => {
                     }
                     let payload = JSON.stringify({
                         type: "round-result",
-                        message: message
+                        message: message,
+                        becauseAllButOneFolded: true
                     });
                     client.send(payload);
                 }
@@ -271,6 +272,7 @@ wss.on("connection", (ws) => {
             onlyRemainingPlayerThisHand.chipCount += pot;
             pot = 0;
 
+            // TODO this all seems wrong
             // send chip distribution. need to refactor this out. also i don't think
             // all clients update chip stacks, only the receiver does
             wss.clients.forEach((client) => {
@@ -278,7 +280,8 @@ wss.on("connection", (ws) => {
                 if (client.userId === onlyRemainingPlayerThisHand.id && client.readyState === WebSocket.OPEN) {
                     const payload = JSON.stringify({
                         type: "chip-distribution",
-                        chipCount: pot
+                        chipCount: pot,
+                        id: onlyRemainingPlayerThisHand.id
                     });
                     client.send(payload);
                 }
@@ -327,6 +330,34 @@ wss.on("connection", (ws) => {
         player.equationResult = data.result;
         // TODO will have to reset this with each round.
         // I guess I should just have an object I throw everything in which gets reset when a new round happens
+    }
+
+    if (data.type === "folded") {
+        justPlayedPlayer.foldedThisTurn = data.folded; // can we pass nothing in the case of placing a bet?
+            
+        wss.clients.forEach((client) => {
+            let handToSend = JSON.parse(JSON.stringify(players.get(data.userId).hand));
+            
+            if (client.userId !== data.userId) {
+                // keep the card hidden, if it the receiver of the socket message is not the owner of the card
+                // this code is duplicated from the notifyPlayersOfAnewDeal method. 
+                // TODO refactor for DRY. it's repeated
+                for (let i = 0; i < handToSend.length; i++) {
+                    if (handToSend[i].hidden === true) {
+                        handToSend[i] = new Card(null, 'hidden');
+                    }
+                }
+            } 
+            
+            if (/*client !== ws && */client.readyState === WebSocket.OPEN) {
+                client.send(JSON.stringify({
+                    type: "player-folded",
+                    id: data.userId,
+                    username: players.get(data.userId).username,
+                    hand: handToSend
+                }));
+            }
+        })
     }
 
     if (data.type === "hi-lo-selected") {

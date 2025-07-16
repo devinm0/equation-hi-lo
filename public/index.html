@@ -202,7 +202,7 @@
             updateChipStack(msg.chipCount, document.getElementById("chipStacksContainer-" + msg.id));
 
             // update pot
-            document.getElementById("potDiv").textContent = "Pot: " + msg.pot;
+            document.getElementById("potDiv").textContent = "Pot";
             updateChipStack(msg.pot, document.getElementById("chipStacksContainer")); //should rename it to potStacksContainer
       } else if (msg.type === "next-turn") {
         console.log("socket message next-turn");
@@ -254,7 +254,12 @@
 
             sortable.option("disabled", true)
 
-            const equationResult = applyOps(handDivs[myId].querySelectorAll('.card'));
+            let equationResult;
+            try {
+                equationResult = applyOps(handDivs[myId].querySelectorAll('.card'));
+            } catch (e) {
+                socket.send(JSON.stringify({ type: "folded", userId: myId }));
+            }
             console.log(equationResult);
             const data = {
                 type: "equation-result",
@@ -285,10 +290,13 @@
       } else if (msg.type === "round-result") {
         // alert(msg.message);
         // reset  pot
-        document.getElementById("potDiv").textContent = "Pot: 0";
+        document.getElementById("potDiv").textContent = "Pot";
         updateChipStack(0, document.getElementById("chipStacksContainer")); //should rename it to potStacksContainer
         
-        displayHandResults(msg);
+        if (! msg.becauseAllButOneFolded) {
+            displayHandResults(msg); // in the case of everyone but one folding, we don't need to show results
+            // a message saying the whole pot went to the last person by default is sufficient.
+        }
     } else if (msg.type === "chip-distribution") {
         console.log("socket message chip-distribution");
 
@@ -395,7 +403,7 @@
                     scaleFactor = 3 / 10;
                 } else {
                     // Larger device canvas
-                    scaleFactor = 1;
+                    scaleFactor = 0.75;
                 }
                 
                 canvas.width = scaleFactor * 120;
@@ -780,7 +788,7 @@
         };
     }
 
-function formatNumber(num, decimals) {
+function formatNumber(num, decimals = 2) {
     if (Number.isInteger(num)) {
         return num.toString();
     }

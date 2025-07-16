@@ -27,9 +27,9 @@ body { margin: 0; /*overflow: hidden; */background-color: hsl(183, 89%, 31%); fo
     box-shadow: 2px 2px 10px rgba(0, 0, 0, 0.5);
     transition: background 0.3s;
 }
-  
+
 .button:hover {
-background-color: #333;
+    background-color: #333;
 }
 
 .hand {
@@ -45,22 +45,28 @@ background-color: #333;
     font-weight: bold;
 }
 
+.handLabel p {
+    margin-block: 0;
+    text-align: center;
+}
+
 .card {
-    width: 120px;
-    height: 180px;
+    width: 90px;
+    height: 135px;
     background-color: white;
     border-radius: 12px;
     box-shadow: 2px 4px 5px rgba(0, 0, 0, 0.4);
     display: flex;
     align-items: center;
     justify-content: center;
-    font-size: 128px;
+    font-size: 100px;
     font-weight: bold;
     font-family: 'Arial', serif;
     color: black;
     margin: 8px;
     user-select: none;
     touch-action: manipulation;
+    overflow: hidden;
 }
 
 .result-card {
@@ -84,8 +90,8 @@ background-color: #333;
 }
 
 .card-back {
-    width: 120px;
-    height: 180px;
+    width: 90px;
+    height: 135px;
     background: repeating-linear-gradient(
         45deg,
         #1400c4,
@@ -117,6 +123,7 @@ background-color: #333;
 
 #bettingControls {
     position: absolute;
+    width: 336px;
     top: 90%;
     left: 50%;
     transform: translate(-50%, -50%);
@@ -231,8 +238,8 @@ background-color: #333;
     display: flex;
     justify-content: center;
     align-items: flex-end;
-    gap: 12px;
-    margin: 20px auto;
+    gap: 6px;
+    margin: /*20px */auto;
     width: fit-content;
     position: relative;
 }
@@ -259,8 +266,8 @@ background-color: #333;
 }
 
 .chip {
-    width: 80px;
-    height: 20px;
+    width: 50px;
+    height: 15px;
     margin: -8px; /* so that they stack on top of each other */
     border-radius: 50% / 40%;
     background-color: crimson;
