@@ -196,6 +196,9 @@
       } else if (msg.type === "player-folded") {
             alert(msg.username + " folded.");
             drawHand(msg.id, msg.username, msg.hand, false, true);
+      } else if (msg.type === "player-formed-equation") {
+        // no new cards are dealt, so we need this special message to make everyone redraw the reordered hands 
+            drawHand(msg.id, msg.username, msg.hand, false, false); 
       } else if (msg.type === "bet-placed") {
         console.log("socket message bet-placed");
             alert(msg.username + " bet " + msg.betAmount);
@@ -260,12 +263,13 @@
             } catch (e) {
                 socket.send(JSON.stringify({ type: "folded", userId: myId }));
             }
-            console.log(equationResult);
+            console.log(Array.from(handDivs[myId].querySelectorAll('.card')).map(card => card.dataset.id));
             const data = {
                 type: "equation-result",
                 userId: myId,
                 username: myName,
-                result: equationResult
+                result: equationResult,
+                order: Array.from(handDivs[myId].querySelectorAll('.card')).map(card => card.dataset.id)
             };
             socket.send(JSON.stringify(data));
       } else if (msg.type === "hi-lo-selection") {
@@ -469,6 +473,7 @@
                 cardDiv.classList.add("folded");
             }
 
+            cardDiv.dataset.id = index;
             handDivs[id].appendChild(cardDiv);
         });
     }

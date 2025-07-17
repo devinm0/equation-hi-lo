@@ -341,12 +341,38 @@ wss.on("connection", (ws) => {
 
     if (data.type === "equation-result") {
         // definitely DON'T want to tell everyone what the results are yet
-
         const player = players.get(data.userId);
         console.log(data.result);
+        console.log("ORDER");
+        console.log(data.order);
+
+        player.hand = data.order.map(i => player.hand[i]);
         player.equationResult = data.result;
-        // TODO will have to reset this with each round.
-        // I guess I should just have an object I throw everything in which gets reset when a new round happens
+
+        // let everyone else know I've moved my cards, so they can see the order.
+        wss.clients.forEach((client) => {
+            let handToSend = JSON.parse(JSON.stringify(player.hand));
+            
+            if (client.userId !== data.userId) {
+                // keep the card hidden, if it the receiver of the socket message is not the owner of the card
+                // this code is duplicated from the notifyPlayersOfAnewDeal method. 
+                // TODO refactor for DRY. it's repeated
+                for (let i = 0; i < handToSend.length; i++) {
+                    if (handToSend[i].hidden === true) {
+                        handToSend[i] = new Card(null, 'hidden');
+                    }
+                }
+            } 
+            
+            if (/*client !== ws && */client.readyState === WebSocket.OPEN) {
+                client.send(JSON.stringify({
+                    type: "player-formed-equation",
+                    id: data.userId,
+                    username: players.get(data.userId).username,
+                    hand: handToSend
+                }));
+            }
+        })
     }
 
     if (data.type === "folded") {
