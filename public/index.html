@@ -261,6 +261,7 @@
             try {
                 equationResult = applyOps(handDivs[myId].querySelectorAll('.card'));
             } catch (e) {
+                alert("You were unable to form an equation. You fold automatically.");
                 socket.send(JSON.stringify({ type: "folded", userId: myId }));
             }
             console.log(Array.from(handDivs[myId].querySelectorAll('.card')).map(card => card.dataset.id));
@@ -304,7 +305,7 @@
     } else if (msg.type === "chip-distribution") {
         console.log("socket message chip-distribution");
 
-        updateChipStack(msg.chipCount, document.getElementById("chipStacksContainer-" + myId));
+        updateChipStack(msg.chipCount, document.getElementById("chipStacksContainer-" + msg.id));
         // do I need code here to actually keep track of MY chip count? or server does it
       } else if (msg.type === "kicked") {
         if (msg.userId === myId) {
@@ -572,12 +573,10 @@
         allInButton.onclick = () => {
             slider.value = slider.max;
             slider.dispatchEvent(new Event("input")); // update UI
-            // You may also trigger the bet here, if appropriate
         };
 
         callRaiseButton.onclick = () => {
             const bet = parseInt(slider.value);
-            // TODO Emit or handle bet logic
             console.log("Bet placed:", bet);
             socket.send(JSON.stringify({ type: "bet-placed", userId: myId, betAmount: bet, folded: false }));
 

@@ -10,7 +10,7 @@ const server = http.createServer(app);
 const wss = new WebSocket.Server({ server });
 
 class Player {
-    constructor(id, username, hand, chipCount, foldedThisTurn = false, betAmount = 0, turnTakenThisRound = false, equationResult = 0, choices = []) {
+    constructor(id, username, hand, chipCount, foldedThisTurn = false, betAmount = 0, turnTakenThisRound = false, equationResult = null, choices = []) {
         this.id = id;
         this.username = username;
         this.hand = hand;
@@ -263,56 +263,7 @@ wss.on("connection", (ws) => {
 
         const nonFoldedPlayers = Array.from(players).filter(([id, player]) => player.foldedThisTurn !== true)
         if (nonFoldedPlayers.length === 1){
-            // end turn
-            console.log("All but one player folded this hand. Ending hand.");
-
-            const onlyRemainingPlayerThisHand = nonFoldedPlayers[0];
-
-            wss.clients.forEach((client) => {
-                if (/*client !== ws && */client.readyState === WebSocket.OPEN) {
-                    let message;
-                    if (client.userId === onlyRemainingPlayerThisHand.id) {
-                        message = "Everyone else folded. You take the pot by default.";
-                    } else {
-                        message = `Everyone but ${onlyRemainingPlayerThisHand.username} has folded. They take the pot of ${pot}`;
-                    }
-                    let payload = JSON.stringify({
-                        type: "round-result",
-                        message: message,
-                        becauseAllButOneFolded: true
-                    });
-                    client.send(payload);
-                }
-            });
-
-            // that person takes the whole pot
-            onlyRemainingPlayerThisHand.chipCount += pot;
-            pot = 0;
-
-            // TODO this all seems wrong
-            // send chip distribution. need to refactor this out. also i don't think
-            // all clients update chip stacks, only the receiver does
-            wss.clients.forEach((client) => {
-                // send to only the winners
-                if (client.userId === onlyRemainingPlayerThisHand.id && client.readyState === WebSocket.OPEN) {
-                    const payload = JSON.stringify({
-                        type: "chip-distribution",
-                        chipCount: pot,
-                        id: onlyRemainingPlayerThisHand.id
-                    });
-                    client.send(payload);
-                }
-            });
-
-            // need to call endBettingRound because we have to reset everyone's bets. Otherwise
-            // next hand will begin with toCall equaling the raise from the first hand
-            console.log("bet-placed");
-            players.values().forEach(player => {
-                console.log(player.username, "chipCount:", player.chipCount);
-            })
-        
-            firstRoundBettingCompleted ? endBettingRound("second") : endBettingRound("first");
-            endHand();
+            distributePotToOnlyRemainingPlayer(nonFoldedPlayers[0]);
             return;
         }
 
@@ -343,8 +294,6 @@ wss.on("connection", (ws) => {
         // definitely DON'T want to tell everyone what the results are yet
         const player = players.get(data.userId);
         console.log(data.result);
-        console.log("ORDER");
-        console.log(data.order);
 
         player.hand = data.order.map(i => player.hand[i]);
         player.equationResult = data.result;
@@ -355,7 +304,7 @@ wss.on("connection", (ws) => {
             
             if (client.userId !== data.userId) {
                 // keep the card hidden, if it the receiver of the socket message is not the owner of the card
-                // this code is duplicated from the notifyPlayersOfAnewDeal method. 
+                // this code is duplicated from the notifyPlayersOfANewDeal method. 
                 // TODO refactor for DRY. it's repeated
                 for (let i = 0; i < handToSend.length; i++) {
                     if (handToSend[i].hidden === true) {
@@ -373,10 +322,24 @@ wss.on("connection", (ws) => {
                 }));
             }
         })
+
+        // if we've received equation result socket messages from every player, we can proceed to second round of betting.
+        const nonFoldedPlayers = [...players.values()].filter(player => player.foldedThisTurn !== true);
+        if (nonFoldedPlayers.length === 1){
+            distributePotToOnlyRemainingPlayer(nonFoldedPlayers[0]);
+            return;
+        }
+
+        // check that every player submitted choices
+        if (nonFoldedPlayers.every(player => player.equationResult !== null)) {
+            console.log('All equations received. Proceeding to second round of betting.');
+
+            commenceSecondRoundBetting();
+        }
     }
 
     if (data.type === "folded") {
-        justPlayedPlayer.foldedThisTurn = data.folded; // can we pass nothing in the case of placing a bet?
+        players.get(data.userId).foldedThisTurn = true; // can we pass nothing in the case of placing a bet?
             
         wss.clients.forEach((client) => {
             let handToSend = JSON.parse(JSON.stringify(players.get(data.userId).hand));
@@ -801,7 +764,7 @@ function commenceEquationForming() {
     console.log("Waiting 60 seconds...");
 
     setTimeout(() => {
-        console.log("Equation forming over, notifying clients.");
+        console.log("Timer expired for equation forming, notifying clients to receive equation results.");
         endEquationForming();
     }, 60000);
 }
@@ -815,8 +778,6 @@ function endEquationForming() {
           client.send(payload);
         }
       });
-
-    commenceSecondRoundBetting();
 }
 
 function commenceHiLoSelection() {
@@ -830,6 +791,53 @@ function commenceHiLoSelection() {
             }
         }
       });
+}
+
+function distributePotToOnlyRemainingPlayer(onlyRemainingPlayerThisHand){
+    // end turn
+    console.log("All but one player folded this hand. Ending hand.");
+
+    wss.clients.forEach((client) => {
+        if (/*client !== ws && */client.readyState === WebSocket.OPEN) {
+            let message;
+            if (client.userId === onlyRemainingPlayerThisHand.id) {
+                message = "Everyone else folded. You take the pot by default.";
+            } else {
+                message = `Everyone but ${onlyRemainingPlayerThisHand.username} has folded. They take the pot of ${pot}`;
+            }
+            let payload = JSON.stringify({
+                type: "round-result",
+                message: message,
+                becauseAllButOneFolded: true
+            });
+            client.send(payload);
+        }
+    });
+
+    // that person takes the whole pot
+    onlyRemainingPlayerThisHand.chipCount += pot;
+    pot = 0;
+
+    wss.clients.forEach((client) => {
+        if (client.readyState === WebSocket.OPEN) {
+            const payload = JSON.stringify({
+                type: "chip-distribution",
+                chipCount: pot,
+                id: onlyRemainingPlayerThisHand.id
+            });
+            client.send(payload);
+        }
+    });
+
+    // need to call endBettingRound because we have to reset everyone's bets. Otherwise
+    // next hand will begin with toCall equaling the raise from the first hand
+    console.log("bet-placed");
+    players.values().forEach(player => {
+        console.log(player.username, "chipCount:", player.chipCount);
+    })
+
+    firstRoundBettingCompleted ? endBettingRound("second") : endBettingRound("first");
+    endHand();    
 }
 
 function determineWinners() {
