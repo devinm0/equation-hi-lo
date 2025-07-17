@@ -74,6 +74,17 @@ wss.on("connection", (ws) => {
   // Send init message with the userId
   ws.send(JSON.stringify({ type: "init", id: userId, color: userColor, isHost: ws.isHost || false }));
 
+  // send a newly connected player the list of all players that have joined thus far
+  players.forEach(player => {
+    ws.send(JSON.stringify({
+        type: "player-joined",
+        isHost: player.id === hostId,// client.userId === hostId, // this is wrong because it means the host will show everyone joining as host
+        color: player.color, // what happens if we put user color here?
+        username: player.username,
+        receivingSocketIsHost: ws.userId === hostId // will always be false because this player hasn't joined yet
+    }));
+  });
+
   ws.on("message", (message) => {
     const str = message.toString();
     let data;
@@ -188,6 +199,12 @@ wss.on("connection", (ws) => {
 
                 client.send(payload);
             }
+        });
+
+        console.log(players);
+        // log all ws userIds and all playerIds to make sure they all match at all times
+        wss.clients.forEach((client) => {
+            console.log(client.userId);
         });
     }
     if (data.type === "bet-placed"){
