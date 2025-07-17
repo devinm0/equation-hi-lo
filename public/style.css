@@ -72,11 +72,13 @@ body { margin: 0; /*overflow: hidden; */background-color: hsl(183, 89%, 31%); fo
 .result-card {
     background-color: transparent;
     box-shadow: none;
+    overflow: visible;
 }
 
 .difference-card {
     background-color: transparent;
     box-shadow: none;
+    overflow: visible;
 }
 
 .card-highlighted {
@@ -402,7 +404,16 @@ body { margin: 0; /*overflow: hidden; */background-color: hsl(183, 89%, 31%); fo
 
     .chip {
         width: 20px;
-        height: 10px;
-        margin: -5px; 
+        height: 20px;
+        margin: -12px; 
+    }
+
+    /* make the chip stacks just one chip on mobile */
+    .chip-stacks-container {
+        gap: 0px;
+    }
+
+    .chip-stack {
+        gap: 0px;
     }
 }

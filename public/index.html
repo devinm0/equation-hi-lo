@@ -442,11 +442,12 @@
                 if (window.matchMedia("(max-width: 600px)").matches) {
                     // Mobile device canvas
                     cardDivParagraph.style.letterSpacing = '-.1rem';
+                    cardDivParagraph.style.transform = 'translateX(-0.2rem)';
                 } else {
                     // Larger device canvas
                     cardDivParagraph.style.letterSpacing = '-1rem';
+                    cardDivParagraph.style.transform = 'translateX(-0.7rem)';
                 }
-                cardDivParagraph.style.transform = 'translateX(-0.7rem)';
             }
 
             // is one of the three discardable operators
