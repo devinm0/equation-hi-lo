@@ -20,6 +20,7 @@ class Player {
         this.turnTakenThisRound = turnTakenThisRound;
         this.equationResult = equationResult;
         this.choices = choices;
+        this.out = false;
     }
 }
 
@@ -171,8 +172,8 @@ wss.on("connection", (ws) => {
           }
         });
 
-        players.delete(ws.userId); //ws.userId or userId??
-        console.log(`User disconnected: ${ws.userId}`);
+        players.get(ws.userId).out = true; //ws.userId or userId??
+        // console.log(`User disconnected: ${ws.userId}`);
     }
 
     if (data.type === "join") {
@@ -534,7 +535,7 @@ function endHand() {
             });
 
             // or, just set their status to "out" so they can still view the game
-            // players.delete(player.id);
+            // players.delete(player.id); // TODO make them folded permanently
         }
 
         player.foldedThisTurn = false;
@@ -550,7 +551,11 @@ function endHand() {
 function initializeHand() { // means start a hand of play
     console.log("initializedHand");
     players.values().forEach(player => {
-        console.log(player.username, "chipCount:", player.chipCount);
+        if (player.out) { // fold automatically if out
+            player.foldedThisTurn = true;
+        } else {
+            console.log(player.username, "chipCount:", player.chipCount);
+        }
     })
     deck = generateDeck()
     printDeck(deck, 10);    
@@ -586,6 +591,7 @@ function initializeHand() { // means start a hand of play
 
     dealTwoOpenCardsToEachPlayer();
 
+    console.log("toDiscard, haveDiscarded:", numPlayersThatNeedToDiscard, numPlayersThatHaveDiscarded)
     if (numPlayersThatNeedToDiscard === 0) {
         commenceFirstRoundBetting();
     }
@@ -650,6 +656,7 @@ function notifyAllPlayersOfNewlyDealtCards(player, multiplicationCardDealt = fal
 }
 
 function commenceFirstRoundBetting() {
+    console.log("Commencing first round of betting")
     wss.clients.forEach((client) => {
         if (/*client !== ws && */client.readyState === WebSocket.OPEN) {
           client.send(JSON.stringify({
@@ -680,6 +687,7 @@ function commenceSecondRoundBetting() {
 }
 
 function advanceToNextPlayersTurn(betAmount) { // should take a parameter here
+    console.log("Advancing to next player's turn, with id:", currentTurnPlayerId);
     const playerChipCounts = players.values().map(player => player.chipCount);
     const maxBet = Math.min(...playerChipCounts);
     
@@ -761,17 +769,17 @@ function commenceEquationForming() {
         }
       });
     
-    console.log("Waiting 60 seconds...");
+    console.log("Waiting 60 seconds for equation forming...");
 
     setTimeout(() => {
         console.log("Timer expired for equation forming, notifying clients to receive equation results.");
         endEquationForming();
-    }, 60000);
+    }, 90000);
 }
 
 function endEquationForming() {
     wss.clients.forEach((client) => {
-        if (client.readyState === WebSocket.OPEN) {
+        if (client.readyState === WebSocket.OPEN && players.get(client.userId).foldedThisTurn !== true) {
           const payload = JSON.stringify({ 
             type: "end-equation-forming", 
         });
@@ -864,6 +872,9 @@ function determineWinners() {
     const loTarget = 1;
     const hiTarget = 20;
       
+    let currentHighestPlayersHighestCard = null;
+    let currentLowestPlayersLowestCard = null;
+
     let loWinner = null;
     let minDiff = Infinity;
     
@@ -878,7 +889,7 @@ function determineWinners() {
             // technically a waste, only need to compare if we end up with two lowest cards.
             // as it is, a tie for second place gets compared
             let currentPlayersLowestCard = findLowestCard(player.hand);
-            let currentLowestPlayersLowestCard = findLowestCard(loWinner.hand);
+            currentLowestPlayersLowestCard = findLowestCard(loWinner.hand);
 
             if (currentPlayersLowestCard.value < currentLowestPlayersLowestCard.value) {
                 loWinner = player;
@@ -893,7 +904,6 @@ function determineWinners() {
     
     let hiWinner = null;
     minDiff = Infinity;
-      
     for (const player of hiBettingPlayers) {
         const diff = Math.abs(player.equationResult - hiTarget);
         if (diff < minDiff) {
@@ -906,7 +916,7 @@ function determineWinners() {
             // technically a waste, only need to compare if we end up with two highest cards.
             // as it is, a tie for second place gets compared
             let currentPlayersHighestCard = findHighestCard(player.hand);
-            let currentHighestPlayersHighestCard = findHighestCard(hiWinner.hand);
+            currentHighestPlayersHighestCard = findHighestCard(hiWinner.hand);
 
             if (currentPlayersHighestCard.value > currentHighestPlayersHighestCard.value) {
                 hiWinner = player;
@@ -921,7 +931,6 @@ function determineWinners() {
       
     // notify everyone about the winners
     let payload;
-    // TODO only for nonFoldedPlayers!!!
     let results = [...nonFoldedPlayers.values()].map(player => ({
         id: player.id,
         hand: player.hand,
@@ -929,7 +938,10 @@ function determineWinners() {
         choice: player.choices[0], // TODO adjust this for swing betting, need to send choices
         difference: player.choices[0] === "low" ? Math.abs(player.equationResult - 1) : Math.abs(player.equationResult - 20),
         isHiWinner: player.id === hiWinner?.id,
-        isLoWinner: player.id === loWinner?.id
+        isLoWinner: player.id === loWinner?.id,
+        currentLowestPlayersLowestCard: currentLowestPlayersLowestCard?.value,
+        currentHighestPlayersHighestCard: currentHighestPlayersHighestCard?.value
+        // TODO pass in lo cards and hi cards here.
     }));
     // there's distinct lo and hi winners
     if (loWinner !== null && hiWinner !== null) {

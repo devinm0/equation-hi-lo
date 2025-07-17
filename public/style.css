@@ -91,6 +91,16 @@ body { margin: 0; /*overflow: hidden; */background-color: hsl(183, 89%, 31%); fo
     filter: grayscale(100%);
 }
 
+.lo-winner {
+    background-color: white;
+    color: black;
+}
+
+.hi-winner {
+    background-color: black;
+    color: white;
+}
+
 .card-back {
     width: 90px;
     height: 135px;
@@ -161,7 +171,8 @@ body { margin: 0; /*overflow: hidden; */background-color: hsl(183, 89%, 31%); fo
 #callRaiseButton,
 #foldButton,
 #allInButton,
-#startBtn {
+#startBtn,
+#confirmResults {
     padding: 10px 16px;
     font-size: 16px;
     border: none;
@@ -176,7 +187,8 @@ body { margin: 0; /*overflow: hidden; */background-color: hsl(183, 89%, 31%); fo
 #callRaiseButton:hover,
 #foldButton:hover,
 #allInButton:hover,
-#startBtn:hover {
+#startBtn:hover,
+#confirmResult:hover {
     background-color: #222;
 }
 

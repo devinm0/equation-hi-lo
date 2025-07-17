@@ -28,7 +28,6 @@
         </div>
     </div>
 
-    <button id="confirmResults" class="hidden">Next Hand</button>
     <!-- <div id="handResultsModal" class="modal-overlay hidden">
         <div class="modal">
             <div class="buttons">
@@ -64,11 +63,13 @@
         </div>
     </div>
 
+    <button id="confirmResults" class="hidden">Next Hand</button>
+
     <button class="button" id="leaveButton" style="display:none;">Leave Game</button>
     <script src="https://cdn.jsdelivr.net/npm/sortablejs@1.15.0/Sortable.min.js"></script>
     <script type="module">
     import { NumberCards, OperatorCards, Suits } from './enums.js';
-    const totalDuration = 60 * 1000; // 60 seconds
+    const totalDuration = 90 * 1000; // 60 seconds
     const display = document.getElementById('notificationDiv');
 
     let startTime = Date.now();
@@ -84,7 +85,7 @@
         }
     }
 
-    const socket = new WebSocket(`ws://localhost:3000`);
+    const socket = new WebSocket(`ws://172.20.10.5:3000`);
     const handDivs = {};
     const lobbyPlayerDivs = {};
 
@@ -190,6 +191,7 @@
       } else if (msg.type === "player-discarded") {
         alert(msg.username + " discarded their " + msg.value + " card.");
       } else if (msg.type === "first-round-betting-commenced") {
+        console.log("First round betting commenced.");
         alert("First round betting has commenced.");
       } else if (msg.type === "second-round-betting-commenced") {
           alert("Second round betting has commenced.");
@@ -223,7 +225,7 @@
 
         // highlight only the betting person's hand
         document.querySelectorAll(".handLabel").forEach(el => {
-            el.style.backgroundColor = "";
+            el.style.color = "";
         });
         let handLabel = document.getElementById("handLabel-" + msg.currentTurnPlayerId)
         handLabel.style.color = "yellow";
@@ -242,7 +244,7 @@
         }
       } else if (msg.type === "commence-equation-forming") {
         console.log("socket message commence-equation-forming");
-            alert('60 seconds! Drag cards to get close to 1 or 20.');
+            alert('90 seconds! Drag cards to get close to 1 or 20.');
             beginCountdownNotification();
             sortable.option("disabled", false)
 
@@ -293,7 +295,7 @@
             }
             });
       } else if (msg.type === "round-result") {
-        // alert(msg.message);
+        alert(msg.message);
         // reset  pot
         document.getElementById("potDiv").textContent = "Pot";
         updateChipStack(0, document.getElementById("chipStacksContainer")); //should rename it to potStacksContainer
@@ -312,7 +314,7 @@
             alert("No more chips! You're out. Better luck next time!");
         } else {
             //TODO redraw hand to be out (red and strikethrough)
-            alert(msg.userId + " has no more chips and is out of the game.");
+            alert(msg.username + " has no more chips and is out of the game.");
         }
       }
     });
@@ -418,7 +420,7 @@
                 const ctx = canvas.getContext('2d');
 
                 // draw root
-                ctx.fillStyle = 'white';
+                ctx.fillStyle = folded ? 'grey' : 'white';
                 ctx.fillRect(0, 0, scaleFactor * 120, scaleFactor * 180);
                 ctx.strokeStyle = 'black';
                 ctx.lineWidth = scaleFactor * 14;
@@ -498,7 +500,7 @@
     function beginCountdownNotification(){
         let notificationDiv = document.getElementById("notificationDiv");
         notificationDiv.style.display = "block";
-        notificationDiv.textContent = "60";
+        notificationDiv.textContent = "90";
 
         // begin countdown
         startTime = Date.now();
@@ -588,6 +590,7 @@
             console.log("Player folded, toCall is " + toCall);
             // need to send betAmount so that it doesn't get reset. refactor to track on server side
             socket.send(JSON.stringify({ type: "bet-placed", userId: myId, betAmount: toCall, folded: true }));
+            hideBettingControls();
         };
     }
 
@@ -737,6 +740,19 @@
         confirmResults.classList.remove('hidden');
 
         msg.results.forEach(result => {
+            if (result.isHiWinner) {
+                let nameDiv = document.getElementById("handLabel-" + result.id);
+                nameDiv.classList.add("hi-winner");
+
+                // TODO redraw by indexOf currentHighestPlayersHighestCard
+            }
+
+            if (result.isLoWinner) {
+                let nameDiv = document.getElementById("handLabel-" + result.id);
+                nameDiv.classList.add("lo-winner");
+                // TODO redraw by indexOf currentLowestPlayersLowestCard
+
+            }
             const cardDiv = document.createElement("div");
             
             let cardDivParagraph = document.createElement("p");
