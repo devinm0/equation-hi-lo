@@ -8,6 +8,7 @@ const { v4: uuidv4 } = require("uuid");
 const app = express();
 const server = http.createServer(app);
 const wss = new WebSocket.Server({ server });
+app.use(express.static("public"));
 
 class Player {
     constructor(id, username, hand, chipCount, foldedThisTurn = false, betAmount = 0, turnTakenThisRound = false, equationResult = null, choices = []) {
@@ -21,6 +22,7 @@ class Player {
         this.equationResult = equationResult;
         this.choices = choices;
         this.out = false;
+        this.color = null;
     }
 }
 
@@ -50,39 +52,30 @@ let numPlayersThatHaveDiscarded = 0;
 let numPlayersThatNeedToDiscard = 0; 
 firstRoundBettingCompleted = false; // TODO reset to false when a whole game round is done
 
-app.use(express.static("public"));
-
-// still not clear whether we use myColor or just color from the 
-// messages. is all code inside connection block here
-// as if it's one "user"? 
-// difference between wss and ws
 wss.on("connection", (ws) => {
-    // ahhh, i guess the ws represents this one user's connection
   const userId = uuidv4();
-  ws.userId = userId; // Store on socket. does this mean client.userId later? 
+  ws.userId = userId; // in the case of rejoin, this will be overwritten later
+  const userColor = `hsl(${Math.random() * 360}, 100%, 70%)`; // same here
   
-  if (!hostId) { // ! applies to null!?
+  if (!hostId) {
     hostId = userId;
     ws.isHost = true;
     console.log("hostId is " + hostId);
   }
 
-  const userColor = `hsl(${Math.random() * 360}, 100%, 70%)`;
-  // need to remove this... it's a user that never gets used
-  // only log it if socket message comes BACK
-  console.log(`User connected: ${userId}`);
+  console.log(`Socket connected, generating userId ${userId} but it may not be used in the case that someone is rejoining, in which case the existing client userId will overwrite this.`);
 
-  // Send init message with the userId
-  ws.send(JSON.stringify({ type: "init", id: userId, color: userColor, isHost: ws.isHost || false }));
+  // Send init message with the userId                                 
+  ws.send(JSON.stringify({ type: "init", id: userId, color: userColor, hostId: hostId }));
 
   // send a newly connected player the list of all players that have joined thus far
   players.forEach(player => {
     ws.send(JSON.stringify({
         type: "player-joined",
-        isHost: player.id === hostId,// client.userId === hostId, // this is wrong because it means the host will show everyone joining as host
+        id: player.id,
+        hostId: hostId,// client.userId === hostId, // this is wrong because it means the host will show everyone joining as host
         color: player.color, // what happens if we put user color here?
         username: player.username,
-        receivingSocketIsHost: ws.userId === hostId // will always be false because this player hasn't joined yet
     }));
   });
 
@@ -138,10 +131,7 @@ wss.on("connection", (ws) => {
         }
     }
     
-    if (data.type === "start" /*&& ws.userId === hostId*/) { // should I check isHost instead?
-        console.log("150" + ws.userId + " " + hostId);
-
-        // can't start the game with only one player
+    if (data.type === "start" && msg.id === hostId) { // should I check isHost instead?
         if (players.size < 2) {
             ws.send(JSON.stringify({ type: "reject" }));
             return;
@@ -162,18 +152,28 @@ wss.on("connection", (ws) => {
     }
 
     if (data.type === "leave") {
-        if (ws.userId === hostId) {
+        if (data.id === hostId) {
             // set a new host. if last player, end the game
         }
-        const payload = JSON.stringify({ type: "player-left" });
         wss.clients.forEach((client) => {
           if (client.readyState === WebSocket.OPEN) {
-            client.send(payload);
+            client.send(JSON.stringify({ type: "player-left" }));
           }
         });
 
-        players.get(ws.userId).out = true; //ws.userId or userId??
+        players.get(data.id).out = true; //ws.userId or userId??
         // console.log(`User disconnected: ${ws.userId}`);
+    }
+
+    if (data.type === "rejoin") {
+        console.log("ws.userId and data.userId", ws.userId, data.id);
+        ws.userId = data.id;
+        players.get(data.id).color = data.color;
+
+        console.log("listing all clients now. on rejoin, this should match up to what it was before");
+        wss.clients.forEach((client) => {
+            console.log(client.userId);
+        });
     }
 
     if (data.type === "join") {
@@ -185,17 +185,19 @@ wss.on("connection", (ws) => {
         console.log(`***** 👩‍💻 ${hostId === data.userId ? 'Host' : 'Player'} joined: ${data.username} *****`);
 
         // have to reassign userId because what if someone refreshes? have to ignore the init message
+        // need to assign ws.userId because it's used to check clientId === id on server
         ws.userId = data.userId;
         players.set(data.userId, new Player(data.userId, data.username, [], 25));
+        players.get(data.userId).color = data.color;
 
         wss.clients.forEach((client) => {
             if (client.readyState === WebSocket.OPEN) {
                 const payload = JSON.stringify({
                     type: "player-joined",
-                    isHost: data.userId === hostId,// client.userId === hostId, // this is wrong because it means the host will show everyone joining as host
+                    id: data.userId,
+                    hostId: hostId,// client.userId === hostId, // this is wrong because it means the host will show everyone joining as host
                     color: data.color, // what happens if we put user color here?
                     username: data.username,
-                    receivingSocketIsHost: client.userId === hostId
                 });
 
                 client.send(payload);

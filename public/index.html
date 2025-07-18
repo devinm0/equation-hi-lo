@@ -43,10 +43,11 @@
         <div id="lobbyTitleContainer">Equation Hi Lo</div>
         <div id="lobbyPlayerListContainer"></div>
         <div id="nameContainer">
-            <input type="text" id="nameInput" placeholder="Enter your name" />
-            <button id="saveName">Join</button>
+            <input type="text" id="nameInput" placeholder="Enter your name" pattern="^[a-zA-Z0-9]{1,16}$" required title="Username consists of 1-16 letters or numbers"/>
+            <p id="error" style="color: red;"></p>
+            <button id="joinButton">Join</button>
         </div>
-        <button class="button" id="startBtn" style="display:none;" disabled>Start Game</button>
+        <button class="button" id="startButton" style="display:none;" disabled>Start Game</button>
     </div>
 
     <div id="potDiv" style="text-align: center; font-weight: bold; margin-bottom: 10px;"></div>
@@ -68,7 +69,10 @@
     <button class="button" id="leaveButton" style="display:none;">Leave Game</button>
     <script src="https://cdn.jsdelivr.net/npm/sortablejs@1.15.0/Sortable.min.js"></script>
     <script type="module">
+    
     import { NumberCards, OperatorCards, Suits } from './enums.js';
+
+    // SECTION Countdown timer code. //
     const totalDuration = 90 * 1000; // 60 seconds
     const display = document.getElementById('notificationDiv');
 
@@ -84,10 +88,11 @@
             requestAnimationFrame(updateTimer); // More accurate and smoother
         }
     }
+    // END SECTION Countdown timer code. //
 
     const socket = new WebSocket(`ws://172.20.10.5:3000`);
-    const handDivs = {};
-    const lobbyPlayerDivs = {};
+    const handDivs = {}; // list of divs, one for each player
+    const lobbyPlayerDivs = {}; // list of nametags basically, for game lobby. one per player
 
     const EXPIRATION_TIME = 1000 * 60 * 60 * 24;  // 1 day in milliseconds
     const USER_ID_KEY = 'userId';
@@ -103,35 +108,41 @@
     let sortable = null; // allows for rearranging our hand to form the equation
     let numPlayersJoined = 0;
 
-    //sounds like we are telling socket to listen but no we are listening to socket
     socket.addEventListener("message", (event) => {
-      // what if it doesn't have all the fields?
       const msg = JSON.parse(event.data);
 
-      // TODO don't send init message if an existing player is connecting?
-      // for now, check if myId is not null and take the init message id if it is
-      // this means the server is generating unneeded ids
       if (msg.type === "init") {
         const now = Date.now();
 
-        console.log('init ' + myId);
-        console.log(event.data);
-        if (!myId || !timestamp || now - timestamp > EXPIRATION_TIME) {
+        console.log("myId is: ", myId, " server message is: ", event.data, " So if the userIds don't match, it means we've rejoined. Discarding the server generated id.");
+        if (!myId || !timestamp || now - timestamp > EXPIRATION_TIME) { // nothing in localStorage, means we are new, fill in with server generated user data
             myId = msg.id;
             myColor = msg.color;
             localStorage.setItem(USER_ID_KEY, myId);
             localStorage.setItem(USER_COLOR_KEY, myColor);
             localStorage.setItem(TIMESTAMP_KEY, now);
+        } else { // items exist in localStorage = we exist = page refreshed
+            // send rejoin socket message
+            const data = {
+                type: "rejoin",
+                id: myId,
+                color: myColor,
+                username: myName
+            };
+            socket.send(JSON.stringify(data));
+
+            // if we rejoin after joining, but before the game starts, we are still in the lobby.
+            // don't show name input controls in that case. We've already joined.
+            document.getElementById("nameContainer").style.display = "none";
         }
 
-        // need to change this
-        if (msg.isHost) {
-            const button = document.getElementById("startBtn")
+        if (msg.hostId === myId) { 
+            const button = document.getElementById("startButton")
             button.style.display = "block";
             button.disabled = true; // only enable it once the host joins
         }
       } else if (msg.type === "game-started") {
-        const btn = document.getElementById("startBtn");
+        const btn = document.getElementById("startButton");
         btn.parentNode.removeChild(btn);
         // document.getElementById("leaveButton").style.display = "block";
         document.getElementById("lobbyPlayerListContainer").remove();
@@ -140,7 +151,7 @@
       } else if (msg.type === "reject") {
         alert("At least 2 players must join before starting the game.");
       } else if (msg.type === "begin-hand") {
-        alert("Beginning hand " + msg.handNumber);
+        alert("Beginning hand " + (msg.handNumber + 1));
       } else if (msg.type === "deal") {
         console.log(msg);
         if (msg.id === myId) {
@@ -179,14 +190,13 @@
             }
         });
       } else if (msg.type === "player-joined") {
-        drawPlayer(msg.color, msg.username, msg.isHost, msg.receivingSocketIsHost);
+        drawPlayer(msg.id, msg.color, msg.username, msg.hostId);
 
         numPlayersJoined += 1;
-        //msg.isHost kind of misleading. sounds like sender is host. 
-        // but server is telling US we are the host.
-        if (numPlayersJoined >= 2 && msg.receivingSocketIsHost) {
-            const button = document.getElementById("startBtn")
-            button.disabled = false;            
+
+        if (numPlayersJoined >= 2 && msg.hostId === myId) {
+            // we are the Host, and there's at least one other player, so game can be started
+            document.getElementById("startButton").disabled = false;            
         }
       } else if (msg.type === "player-discarded") {
         alert(msg.username + " discarded their " + msg.value + " card.");
@@ -319,26 +329,41 @@
       }
     });
 
-    document.getElementById("saveName").addEventListener("click", () => {
-        if (myName !== undefined) { // server prevents username being set twice
+    document.getElementById("joinButton").addEventListener("click", () => {
+        if (myName === null || myName === undefined) { // server prevents username being set twice
             const nameInput = document.getElementById("nameInput");
-            myName = nameInput.value; //.trim();
-            localStorage.setItem('userName', myName);
+            const error = document.getElementById("error");
 
-            const data = {
-                type: "join",
-                color: myColor,
-                userId: myId,
-                username: myName
-            };
-            socket.send(JSON.stringify(data));
+            console.log(error);
+            const regex = /^[a-zA-Z0-9]{1,16}$/;
+
+            if (!regex.test(nameInput.value)) {
+                console.log("Must be 1-16 alphanumeric characters.");
+                error.textContent = "Must be 1-16 alphanumeric characters.";
+            } else {
+                console.log("Name input value succeeds regex validation.");
+
+                error.textContent = "";
+            
+                myName = nameInput.value; //.trim();
+                localStorage.setItem('userName', myName);
+
+                const data = {
+                    type: "join",
+                    color: myColor,
+                    userId: myId,
+                    username: myName
+                };
+                socket.send(JSON.stringify(data));
+
+                document.getElementById("nameContainer").style.display = "none";
+            }
         }
 
-        document.getElementById("nameContainer").style.display = "none";
     });
 
-    document.getElementById("startBtn").addEventListener("click", () => {
-        socket.send(JSON.stringify({ type: "start" }));
+    document.getElementById("startButton").addEventListener("click", () => {
+        socket.send(JSON.stringify({ type: "start", id: myId }));
     });
 
     document.getElementById('leaveButton').addEventListener('click', () => {
@@ -515,11 +540,11 @@
         notificationDiv.textContent = "";
     }
 
-    function drawPlayer(color, username, isHost) {
+    function drawPlayer(id, color, username, hostId) {
         let lobbyPlayerListContainer = document.getElementById("lobbyPlayerListContainer");
         const div = document.createElement("div");
         div.className = "lobbyPlayerListItem";
-        div.innerHTML = `<p>👩‍💻 ${username}</p>` + (isHost ? ' (Host)' : ''); // injection
+        div.innerHTML = `<p>👩‍💻 ${username}</p>` + (hostId === id ? ' (Host)' : '') + (id === myId ? ' (You)' : ''); // injection
         div.style.color = color;
         lobbyPlayerListContainer.appendChild(div);
     }
