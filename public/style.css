@@ -76,9 +76,22 @@ body { margin: 0; /*overflow: hidden; */background-color: hsl(183, 89%, 31%); fo
 }
 
 .difference-card {
+    display: block; /* need to display two lines in this card */
+    font-size: 50px;
     background-color: transparent;
     box-shadow: none;
     overflow: visible;
+}
+
+.result-paragraph {
+    margin-block-start: 0.2em;
+    color: black;
+}
+
+.difference-paragraph {
+    letter-spacing: -1rem;
+    margin-block-start: 0em;
+    color: red;
 }
 
 .card-highlighted {
@@ -91,14 +104,18 @@ body { margin: 0; /*overflow: hidden; */background-color: hsl(183, 89%, 31%); fo
     filter: grayscale(100%);
 }
 
-.lo-winner {
+.lo-better {
     background-color: white;
     color: black;
 }
 
-.hi-winner {
+.hi-better {
     background-color: black;
     color: white;
+}
+
+.lo-winner, .hi-winner {
+    color: red;
 }
 
 .card-back {
@@ -272,7 +289,7 @@ body { margin: 0; /*overflow: hidden; */background-color: hsl(183, 89%, 31%); fo
     right: -0.5rem;
     background: black;
     color: white;
-    font-size: 0.8rem;
+    font-size: 1.4rem;
     padding: 2px 5px;
     border-radius: 999px;
     z-index: 10;
@@ -428,4 +445,8 @@ body { margin: 0; /*overflow: hidden; */background-color: hsl(183, 89%, 31%); fo
     .chip-stack {
         gap: 0px;
     }
+
+    .difference-paragraph {
+        letter-spacing: -.1rem;
+    }    
 }

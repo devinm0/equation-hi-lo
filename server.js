@@ -11,7 +11,7 @@ const wss = new WebSocket.Server({ server });
 app.use(express.static("public"));
 
 class Player {
-    constructor(id, username, hand, chipCount, foldedThisTurn = false, betAmount = 0, turnTakenThisRound = false, equationResult = null, choices = []) {
+    constructor(id, username, hand, chipCount, foldedThisTurn = false, betAmount = 0, turnTakenThisRound = false, equationResult = null, choices = [], color = null) {
         this.id = id;
         this.username = username;
         this.hand = hand;
@@ -22,7 +22,7 @@ class Player {
         this.equationResult = equationResult;
         this.choices = choices;
         this.out = false;
-        this.color = null;
+        this.color = color;
     }
 }
 
@@ -131,7 +131,7 @@ wss.on("connection", (ws) => {
         }
     }
     
-    if (data.type === "start" && msg.id === hostId) { // should I check isHost instead?
+    if (data.type === "start" && data.id === hostId) {
         if (players.size < 2) {
             ws.send(JSON.stringify({ type: "reject" }));
             return;
@@ -166,9 +166,11 @@ wss.on("connection", (ws) => {
     }
 
     if (data.type === "rejoin") {
+        console.log(players);
         console.log("ws.userId and data.userId", ws.userId, data.id);
         ws.userId = data.id;
-        players.get(data.id).color = data.color;
+        console.log(players.get(data.id));
+        // players.get(data.id).color = data.color;
 
         console.log("listing all clients now. on rejoin, this should match up to what it was before");
         wss.clients.forEach((client) => {
@@ -226,17 +228,8 @@ wss.on("connection", (ws) => {
             justPlayedPlayer.foldedThisTurn = data.folded; // can we pass nothing in the case of placing a bet?
             
             wss.clients.forEach((client) => {
-                let handToSend = JSON.parse(JSON.stringify(players.get(data.userId).hand));
-                if (client.userId !== data.userId) {
-                    // keep the card hidden, if it the receiver of the socket message is not the owner of the card
-                    // this code is duplicated from the notifyPlayersOfAnewDeal method. 
-                    // TODO refactor for DRY. it's repeated
-                    for (let i = 0; i < handToSend.length; i++) {
-                        if (handToSend[i].hidden === true) {
-                            handToSend[i] = new Card(null, 'hidden');
-                        }
-                    }
-                } 
+                let handToSend = getHandToSendFromHand(players.get(data.userId).hand, client.userId === data.userId);
+
                 if (/*client !== ws && */client.readyState === WebSocket.OPEN) {
                     client.send(JSON.stringify({
                         type: "player-folded",
@@ -303,18 +296,7 @@ wss.on("connection", (ws) => {
 
         // let everyone else know I've moved my cards, so they can see the order.
         wss.clients.forEach((client) => {
-            let handToSend = JSON.parse(JSON.stringify(player.hand));
-            
-            if (client.userId !== data.userId) {
-                // keep the card hidden, if it the receiver of the socket message is not the owner of the card
-                // this code is duplicated from the notifyPlayersOfANewDeal method. 
-                // TODO refactor for DRY. it's repeated
-                for (let i = 0; i < handToSend.length; i++) {
-                    if (handToSend[i].hidden === true) {
-                        handToSend[i] = new Card(null, 'hidden');
-                    }
-                }
-            } 
+            let handToSend = getHandToSendFromHand(player.hand, client.userId === data.userId);
             
             if (/*client !== ws && */client.readyState === WebSocket.OPEN) {
                 client.send(JSON.stringify({
@@ -345,18 +327,7 @@ wss.on("connection", (ws) => {
         players.get(data.userId).foldedThisTurn = true; // can we pass nothing in the case of placing a bet?
             
         wss.clients.forEach((client) => {
-            let handToSend = JSON.parse(JSON.stringify(players.get(data.userId).hand));
-            
-            if (client.userId !== data.userId) {
-                // keep the card hidden, if it the receiver of the socket message is not the owner of the card
-                // this code is duplicated from the notifyPlayersOfAnewDeal method. 
-                // TODO refactor for DRY. it's repeated
-                for (let i = 0; i < handToSend.length; i++) {
-                    if (handToSend[i].hidden === true) {
-                        handToSend[i] = new Card(null, 'hidden');
-                    }
-                }
-            } 
+            let handToSend = getHandToSendFromHand(players.get(data.userId).hand, client.userId === data.userId);
             
             if (/*client !== ws && */client.readyState === WebSocket.OPEN) {
                 client.send(JSON.stringify({
@@ -621,7 +592,7 @@ function endBettingRound(round) {
 function notifyAllPlayersOfNewlyDealtCards(player, multiplicationCardDealt = false) {
     wss.clients.forEach((client) => {
         let payload;
-        if (client.userId == player.id) { // need to check if client = username
+        if (client.userId == player.id) {
              payload = JSON.stringify({
                 type: "deal",
                 id: player.id,
@@ -635,12 +606,7 @@ function notifyAllPlayersOfNewlyDealtCards(player, multiplicationCardDealt = fal
               });
             } else {
                 // hide the hidden card.
-                let handToSend = JSON.parse(JSON.stringify(player.hand));
-                for (let i = 0; i < handToSend.length; i++) {
-                    if (handToSend[i].hidden === true) {
-                        handToSend[i] = new Card(null, 'hidden');
-                    }
-                }
+                let handToSend = getHandToSendFromHand(player.hand, client.userId === player.id);
                 // [...hand] //  only works if contains primitives
              payload = JSON.stringify({
                 type: "deal",
@@ -1120,4 +1086,19 @@ function generateDeck() {
     deck.sort(() => Math.random() - 0.5);
     
     return deck;
+}
+
+function getHandToSendFromHand(hand, isOwnerOfHand) {
+    let handToSend = JSON.parse(JSON.stringify(hand));
+
+    for (let i = 0; i < handToSend.length; i++) {
+        if (handToSend[i].hidden === true) {
+            if (!isOwnerOfHand) {
+                // hide the card if the user is not the owner of the card
+                handToSend[i] = new Card(null, null, true);
+            }
+        }
+    }
+
+    return handToSend;
 }

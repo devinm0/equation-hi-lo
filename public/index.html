@@ -90,7 +90,7 @@
     }
     // END SECTION Countdown timer code. //
 
-    const socket = new WebSocket(`ws://172.20.10.5:3000`);
+    const socket = new WebSocket(`ws://localhost:3000`);
     const handDivs = {}; // list of divs, one for each player
     const lobbyPlayerDivs = {}; // list of nametags basically, for game lobby. one per player
 
@@ -445,7 +445,7 @@
                 const ctx = canvas.getContext('2d');
 
                 // draw root
-                ctx.fillStyle = folded ? 'grey' : 'white';
+                ctx.fillStyle = folded ? 'lightgrey' : 'white';
                 ctx.fillRect(0, 0, scaleFactor * 120, scaleFactor * 180);
                 ctx.strokeStyle = 'black';
                 ctx.lineWidth = scaleFactor * 14;
@@ -502,6 +502,10 @@
             }
 
             cardDiv.dataset.id = index;
+
+            if (card.hidden) {
+                cardDiv.style.backgroundColor = 'lightblue';
+            }
             handDivs[id].appendChild(cardDiv);
         });
     }
@@ -765,10 +769,16 @@
         confirmResults.classList.remove('hidden');
 
         msg.results.forEach(result => {
-            if (result.isHiWinner) {
-                let nameDiv = document.getElementById("handLabel-" + result.id);
-                nameDiv.classList.add("hi-winner");
+            let nameDiv = document.getElementById("handLabel-" + result.id);
 
+            if (result.choice === "low") {
+                nameDiv.classList.add("lo-better");
+            }
+            if (result.choice === "high") {
+                nameDiv.classList.add("hi-better");
+            }
+            if (result.isHiWinner) {
+                nameDiv.classList.add("hi-winner");
                 // TODO redraw by indexOf currentHighestPlayersHighestCard
             }
 
@@ -779,51 +789,25 @@
 
             }
             const cardDiv = document.createElement("div");
-            
-            let cardDivParagraph = document.createElement("p");
-            cardDivParagraph.innerHTML = "=" + formatNumber(result.result);
-            cardDiv.appendChild(cardDivParagraph);
+
+            let cardDivResultParagraph = document.createElement("p");
+            let cardDivDifferenceParagraph = document.createElement("p");
+
+            cardDivResultParagraph.className = "result-paragraph"; // without null check, 0 becomes card-back since equivalent to false
+            cardDivDifferenceParagraph.className = "difference-paragraph"; // without null check, 0 becomes card-back since equivalent to false
+
+            cardDivResultParagraph.innerHTML = "=" + formatNumber(result.result);
+            cardDivDifferenceParagraph.innerHTML = "(" + formatNumber(result.difference) + ")";
+
+            cardDiv.appendChild(differenceCardDivResultParagraph);
+            cardDiv.appendChild(differenceCardDivDifferenceParagraph);
 
             cardDiv.className = "card"; // without null check, 0 becomes card-back since equivalent to false
-            cardDiv.classList.add("result-card"); // without null check, 0 becomes card-back since equivalent to false
-
-            if (result.result >= 10){ // TODO this is different for the refactor
-                if (window.matchMedia("(max-width: 600px)").matches) {
-                    // Mobile device canvas
-                    cardDivParagraph.style.letterSpacing = '-.1rem';
-                } else {
-                    // Larger device canvas
-                    cardDivParagraph.style.letterSpacing = '-1rem';
-                }
-                cardDivParagraph.style.transform = 'translateX(-0.7rem)';
-            }
-
-            cardDiv.style.color = "black";
-
-            handDivs[result.id].appendChild(cardDiv);
-
-            // starts over here. TODO don't duplicate code
-            const differenceCardDiv = document.createElement("div");
-
-            let differenceCardDivParagraph = document.createElement("p");
-            differenceCardDivParagraph.innerHTML = "(" + formatNumber(result.difference) + ")";
-            differenceCardDiv.appendChild(differenceCardDivParagraph);
-
-            differenceCardDiv.className = "card"; // without null check, 0 becomes card-back since equivalent to false
-            differenceCardDiv.classList.add("difference-card"); // without null check, 0 becomes card-back since equivalent to false
+            cardDiv.classList.add("difference-card"); // without null check, 0 becomes card-back since equivalent to false
 
             if (result.difference >= 10){ // TODO this is different for the refactor
-                if (window.matchMedia("(max-width: 600px)").matches) {
-                    // Mobile device canvas
-                    differenceCardDivParagraph.style.letterSpacing = '-.1rem';
-                } else {
-                    // Larger device canvas
-                    differenceCardDivParagraph.style.letterSpacing = '-1rem';
-                }
-                differenceCardDivParagraph.style.transform = 'translateX(-0.7rem)';
+                cardDivParagraph.style.transform = 'translateX(-0.7rem)';
             }
-
-            differenceCardDiv.style.color = "red";
 
             handDivs[result.id].appendChild(differenceCardDiv);
         })
