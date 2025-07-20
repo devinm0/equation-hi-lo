@@ -303,6 +303,7 @@ wss.on("connection", (ws) => {
                     type: "player-formed-equation",
                     id: data.userId,
                     username: players.get(data.userId).username,
+                    chipCount: players.get(data.userId).chipCount,
                     hand: handToSend
                 }));
             }
@@ -346,9 +347,12 @@ wss.on("connection", (ws) => {
         player.choices = data.choices;
 
         const nonFoldedPlayers = [...players.values()].filter(player => player.foldedThisTurn !== true);
+        
         // check that every player submitted choices
         if (nonFoldedPlayers.every(player => player.choices.length > 0)) {
             console.log('everyone submitted their hi or lo selections');
+
+            revealHiddenCards(nonFoldedPlayers);
 
             determineWinners();
         }
@@ -816,6 +820,27 @@ function distributePotToOnlyRemainingPlayer(onlyRemainingPlayerThisHand){
     endHand();    
 }
 
+function revealHiddenCards(nonFoldedPlayers) {
+    // Don't reveal folded players' hidden cards
+
+    // TODO deal is kind of a misnomer ... we are just rerendering the whole hand, not dealing cards
+    // maybe name it "render hand"
+    nonFoldedPlayers.forEach((player) => {
+        wss.clients.forEach((client) => {
+            let handToSend = getHandToSendFromHand(player.hand, revealCard = true);
+            
+            if (/*client !== ws && */client.readyState === WebSocket.OPEN) {
+                client.send(JSON.stringify({
+                    type: "deal",
+                    id: player.id,
+                    username: player.username,
+                    hand: handToSend
+                }));
+            }
+        })
+    })
+}
+
 function determineWinners() {
     function findLowestCard(hand) {
         return hand.filter(card => card.suit !== Suits.OPERATOR).reduce((minCard, currentCard) => {
@@ -1088,12 +1113,12 @@ function generateDeck() {
     return deck;
 }
 
-function getHandToSendFromHand(hand, isOwnerOfHand) {
+function getHandToSendFromHand(hand, revealHiddenCard) {
     let handToSend = JSON.parse(JSON.stringify(hand));
 
     for (let i = 0; i < handToSend.length; i++) {
         if (handToSend[i].hidden === true) {
-            if (!isOwnerOfHand) {
+            if (!revealHiddenCard) {
                 // hide the card if the user is not the owner of the card
                 handToSend[i] = new Card(null, null, true);
             }

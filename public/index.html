@@ -64,7 +64,7 @@
         </div>
     </div>
 
-    <button id="confirmResults" class="hidden">Next Hand</button>
+    <button id="confirmResults" class="hidden">Next Hand ✅</button>
 
     <button class="button" id="leaveButton" style="display:none;">Leave Game</button>
     <script src="https://cdn.jsdelivr.net/npm/sortablejs@1.15.0/Sortable.min.js"></script>
@@ -233,12 +233,7 @@
             notifyThatAnotherPlayerIsBetting(msg.username);
         }
 
-        // highlight only the betting person's hand
-        document.querySelectorAll(".handLabel").forEach(el => {
-            el.style.color = "";
-        });
-        let handLabel = document.getElementById("handLabel-" + msg.currentTurnPlayerId)
-        handLabel.style.color = "yellow";
+        highlightCurrentBettingPlayerAndDehighlightOthers(msg.currentTurnPlayerId);
         // chips move from your stack to a staging stack
       } else if (msg.type === "end-betting-round") {
         // remove highlights from who is betting
@@ -254,8 +249,8 @@
         }
       } else if (msg.type === "commence-equation-forming") {
         console.log("socket message commence-equation-forming");
-            alert('90 seconds! Drag cards to get close to 1 or 20.');
             beginCountdownNotification();
+            alert('90 seconds! Drag cards to get close to 1 or 20.');
             sortable.option("disabled", false)
 
       } else if (msg.type === "players-are-equation-forming") {
@@ -504,7 +499,8 @@
             cardDiv.dataset.id = index;
 
             if (card.hidden) {
-                cardDiv.style.backgroundColor = 'lightblue';
+                cardDiv.style.boxShadow = '0px 0px 30px rgba(0, 0, 0, 0.5) inset, 2px 4px 5px rgba(0, 0, 0, 0.4)';
+                cardDiv.style.backgroundColor = 'lightgrey';
             }
             handDivs[id].appendChild(cardDiv);
         });
@@ -524,6 +520,15 @@
         let notificationDiv = document.getElementById("notificationDiv");
         notificationDiv.style.display = "block";
         notificationDiv.textContent = name + " is betting";
+    }
+
+    function highlightCurrentBettingPlayerAndDehighlightOthers(currentTurnPlayerId){
+        // highlight only the betting person's hand
+        document.querySelectorAll(".handLabel").forEach(el => {
+            el.style.color = "";
+        });
+        let handLabel = document.getElementById("handLabel-" + currentTurnPlayerId)
+        handLabel.style.color = "yellow";
     }
 
     function beginCountdownNotification(){
@@ -799,8 +804,8 @@
             cardDivResultParagraph.innerHTML = "=" + formatNumber(result.result);
             cardDivDifferenceParagraph.innerHTML = "(" + formatNumber(result.difference) + ")";
 
-            cardDiv.appendChild(differenceCardDivResultParagraph);
-            cardDiv.appendChild(differenceCardDivDifferenceParagraph);
+            cardDiv.appendChild(cardDivResultParagraph);
+            cardDiv.appendChild(cardDivDifferenceParagraph);
 
             cardDiv.className = "card"; // without null check, 0 becomes card-back since equivalent to false
             cardDiv.classList.add("difference-card"); // without null check, 0 becomes card-back since equivalent to false
@@ -809,7 +814,7 @@
                 cardDivParagraph.style.transform = 'translateX(-0.7rem)';
             }
 
-            handDivs[result.id].appendChild(differenceCardDiv);
+            handDivs[result.id].appendChild(cardDiv);
         })
         
         document.getElementById('confirmResults').onclick = () => {
@@ -818,12 +823,12 @@
         };
     }
 
-function formatNumber(num, decimals = 2) {
-    if (Number.isInteger(num)) {
-        return num.toString();
+    function formatNumber(num, decimals = 2) {
+        if (Number.isInteger(num)) {
+            return num.toString();
+        }
+        return parseFloat(num.toFixed(decimals)).toString();
     }
-    return parseFloat(num.toFixed(decimals)).toString();
-}
 </script>
 </body>
 </html>
