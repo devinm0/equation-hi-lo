@@ -40,9 +40,17 @@ body { margin: 0; /*overflow: hidden; */background-color: hsl(183, 89%, 31%); fo
 }
 
 .handLabel {
+    display: flex;
+    justify-content: center;
     width: 100%;
     color: white;
     font-weight: bold;
+    gap: 8px;
+}
+
+.handLabel span {
+    display: inline-flex;
+    align-items: center;
 }
 
 .handLabel p {
@@ -81,6 +89,8 @@ body { margin: 0; /*overflow: hidden; */background-color: hsl(183, 89%, 31%); fo
     background-color: transparent;
     box-shadow: none;
     overflow: visible;
+    width: auto; /* otherwise it's fixed width like the rest of the cards, 
+    and goes off screen causing scrolling. */
 }
 
 .result-paragraph {
@@ -103,20 +113,6 @@ body { margin: 0; /*overflow: hidden; */background-color: hsl(183, 89%, 31%); fo
 .folded {
     background-color: #ccc;
     filter: grayscale(100%);
-}
-
-.lo-better {
-    background-color: white;
-    color: black;
-}
-
-.hi-better {
-    background-color: black;
-    color: white;
-}
-
-.lo-winner, .hi-winner {
-    color: red;
 }
 
 .card-back {
@@ -405,6 +401,11 @@ body { margin: 0; /*overflow: hidden; */background-color: hsl(183, 89%, 31%); fo
   align-items: center;
   justify-content: center;
   font-weight: bold;
+  color: black;
+}
+
+.trophy-div {
+    font-size: 20px;
 }
 
 .high-symbol {
@@ -418,6 +419,13 @@ body { margin: 0; /*overflow: hidden; */background-color: hsl(183, 89%, 31%); fo
   align-items: center;
   justify-content: center;
   font-weight: bold;
+  color: white;
+}
+
+.low-symbol-mini, .high-symbol-mini {
+    width: 30px;
+    height: 30px;
+    font-size: 20px;
 }
 
 .buttons {

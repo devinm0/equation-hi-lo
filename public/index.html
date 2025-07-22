@@ -67,7 +67,7 @@
     <button id="confirmResults" class="hidden">Next Hand ✅</button>
 
     <button class="button" id="leaveButton" style="display:none;">Leave Game</button>
-    <script src="https://cdn.jsdelivr.net/npm/sortablejs@1.15.0/Sortable.min.js"></script>
+    <script src="./sortable.js"></script>
     <script type="module">
     
     import { NumberCards, OperatorCards, Suits } from './enums.js';
@@ -396,20 +396,48 @@
         // clear the hand, so we can redraw all cards on every deal
         handDivs[id].innerHTML = `<p></p>`; // injection
         const nameDiv = document.createElement("div");
-        let nameDivContents = username;
-        if (id === myId) {
-            nameDivContents += ' (me)'; // injection
-        }
-        if (folded) {
-            nameDivContents += ' (folded)'; // injection
-        }
-        nameDiv.innerHTML = '<p>' + nameDivContents + '</p>';
+        
         nameDiv.className = "handLabel";
         nameDiv.id = "handLabel-" + id;
         if (folded) {
             nameDiv.classList.add("folded");
         }
         handDivs[id].appendChild(nameDiv);
+
+        const trophyDiv = document.createElement("div");
+        trophyDiv.id = "trophy-" + id;
+        trophyDiv.className = "trophy";
+        trophyDiv.classList.add("hidden");
+        trophyDiv.textContent = "🏆";
+        nameDiv.appendChild(trophyDiv); // TODO will need to put it at the beginning not the end
+
+        // TODO create a span for the name and add it after
+        const loOptionDiv = document.createElement("div");
+        loOptionDiv.id = "low-symbol-" + id;
+        loOptionDiv.className = "low-symbol";
+        loOptionDiv.classList.add("hidden");
+        loOptionDiv.classList.add("low-symbol-mini");
+        loOptionDiv.textContent = 1;
+        nameDiv.appendChild(loOptionDiv); // TODO will need to put it at the beginning not the end
+
+        const hiOptionDiv = document.createElement("div");
+        hiOptionDiv.id = "high-symbol-" + id;
+        hiOptionDiv.className = "high-symbol";
+        hiOptionDiv.classList.add("hidden");
+        hiOptionDiv.classList.add("high-symbol-mini");
+        hiOptionDiv.textContent = 1;
+        nameDiv.appendChild(hiOptionDiv); // TODO will need to put it at the beginning not the end
+
+        const nameSpan = document.createElement("span");
+        let nameSpanContents = username;
+        if (id === myId) {
+            nameSpanContents += ' (me)'; // injection
+        }
+        if (folded) {
+            nameSpanContents += ' (folded)'; // injection
+        }
+        nameSpan.innerHTML = '<p>' + nameSpanContents + '</p>';
+        nameDiv.appendChild(nameSpan);
 
         const playerChipsStacksContainerDiv = document.createElement("div");
         playerChipsStacksContainerDiv.className = "chip-stacks-container";
@@ -775,21 +803,24 @@
 
         msg.results.forEach(result => {
             let nameDiv = document.getElementById("handLabel-" + result.id);
+            let loOptionDiv = document.getElementById("low-symbol-" + result.id);
+            let hiOptionDiv = document.getElementById("high-symbol-" + result.id);
+            let trophyDiv = document.getElementById("trophy-" + result.id);
 
             if (result.choice === "low") {
-                nameDiv.classList.add("lo-better");
+                loOptionDiv.classList.remove("hidden");
             }
             if (result.choice === "high") {
-                nameDiv.classList.add("hi-better");
+                hiOptionDiv.classList.remove("hidden");
             }
             if (result.isHiWinner) {
-                nameDiv.classList.add("hi-winner");
+                trophyDiv.classList.remove("hidden");
                 // TODO redraw by indexOf currentHighestPlayersHighestCard
             }
 
             if (result.isLoWinner) {
+                trophyDiv.classList.remove("hidden");
                 let nameDiv = document.getElementById("handLabel-" + result.id);
-                nameDiv.classList.add("lo-winner");
                 // TODO redraw by indexOf currentLowestPlayersLowestCard
 
             }
@@ -811,7 +842,7 @@
             cardDiv.classList.add("difference-card"); // without null check, 0 becomes card-back since equivalent to false
 
             if (result.difference >= 10){ // TODO this is different for the refactor
-                cardDivParagraph.style.transform = 'translateX(-0.7rem)';
+                cardDivResultParagraph.style.transform = 'translateX(-0.7rem)';
             }
 
             handDivs[result.id].appendChild(cardDiv);
