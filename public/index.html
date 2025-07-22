@@ -10,7 +10,7 @@
     <!-- Choice Modal -->
     <div id="choiceModal" class="modal-overlay hidden">
         <div class="modal">
-        <!-- <h2>Select Your Option</h2> -->
+        <h2>Select Hi, Lo, or Swing Betting</h2>
         <div class="options">
             <div class="option" data-choice="low">
             <div class="low-symbol">1</div>
@@ -27,13 +27,6 @@
         </div>
         </div>
     </div>
-
-    <!-- <div id="handResultsModal" class="modal-overlay hidden">
-        <div class="modal">
-            <div class="buttons">
-            </div>
-        </div>
-    </div> -->
 
     <div id="notificationWrapper">
         <div id="notificationDiv" style="display: none;"></div>
@@ -408,7 +401,7 @@
         trophyDiv.id = "trophy-" + id;
         trophyDiv.className = "trophy";
         trophyDiv.classList.add("hidden");
-        trophyDiv.textContent = "🏆";
+        trophyDiv.textContent = "👑";
         nameDiv.appendChild(trophyDiv); // TODO will need to put it at the beginning not the end
 
         // TODO create a span for the name and add it after

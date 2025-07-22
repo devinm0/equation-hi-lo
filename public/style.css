@@ -40,17 +40,13 @@ body { margin: 0; /*overflow: hidden; */background-color: hsl(183, 89%, 31%); fo
 }
 
 .handLabel {
-    display: flex;
+    display: inline-flex;
+    align-items: center;
     justify-content: center;
     width: 100%;
     color: white;
     font-weight: bold;
     gap: 8px;
-}
-
-.handLabel span {
-    display: inline-flex;
-    align-items: center;
 }
 
 .handLabel p {
@@ -185,7 +181,8 @@ body { margin: 0; /*overflow: hidden; */background-color: hsl(183, 89%, 31%); fo
 #callRaiseButton,
 #foldButton,
 #allInButton,
-#startButton {
+#startButton,
+#confirmChoice {
     padding: 10px 16px;
     font-size: 16px;
     border: none;
@@ -216,7 +213,8 @@ body { margin: 0; /*overflow: hidden; */background-color: hsl(183, 89%, 31%); fo
 #foldButton:hover,
 #allInButton:hover,
 #startButton:hover,
-#confirmResult:hover {
+#confirmResult:hover,
+#confirmChoice:hover {
     background-color: #222;
 }
 
@@ -372,6 +370,10 @@ body { margin: 0; /*overflow: hidden; */background-color: hsl(183, 89%, 31%); fo
   text-align: center;
 }
 
+.modal h2 {
+    color: white;
+}
+
 .options {
   display: flex;
   justify-content: space-around;
@@ -430,7 +432,7 @@ body { margin: 0; /*overflow: hidden; */background-color: hsl(183, 89%, 31%); fo
 
 .buttons {
   display: flex;
-  justify-content: space-between;
+  justify-content: center;
   margin-top: 16px;
 }
 
