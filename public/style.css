@@ -22,7 +22,7 @@ body { margin: 0; /*overflow: hidden; */background-color: hsl(183, 89%, 31%); fo
     background-color: black;
     color: white;
     border: none;
-    border-radius: 8px;
+    border-radius: 16px;
     cursor: pointer;
     box-shadow: 2px 2px 10px rgba(0, 0, 0, 0.5);
     transition: background 0.3s;
@@ -58,19 +58,31 @@ body { margin: 0; /*overflow: hidden; */background-color: hsl(183, 89%, 31%); fo
     width: 90px;
     height: 135px;
     background-color: white;
-    border-radius: 12px;
+    border-radius: 16px;
     box-shadow: 2px 4px 5px rgba(0, 0, 0, 0.4);
     display: flex;
     align-items: center;
     justify-content: center;
     font-size: 100px;
     font-weight: bold;
-    font-family: 'Arial', serif;
+    font-family: 'AppleMyungjo', serif;
     color: black;
     margin: 8px;
     user-select: none;
     touch-action: manipulation;
     overflow: hidden;
+    transition: all 0.2s ease;
+}
+
+.number-card p {
+    transform: translateY(6%);
+}
+
+.operator-card {
+    font-family: 'Arial', serif;
+    font-weight: 100;
+    font-size: 110px;
+    color: rgb(40,40,40);
 }
 
 .result-card {
@@ -121,14 +133,13 @@ body { margin: 0; /*overflow: hidden; */background-color: hsl(183, 89%, 31%); fo
         #ffffff 10px,
         #ffffff 10px
     );
-    border-radius: 12px;
+    border-radius: 16px;
     box-shadow: 2px 4px 10px rgba(0, 0, 0, 0.2);
     margin: 8px;
     position: relative;
 }
 
 .card:hover {
-    transition: all 0.2s ease;
     transform: scale(1.05);
 }
 
@@ -145,7 +156,7 @@ body { margin: 0; /*overflow: hidden; */background-color: hsl(183, 89%, 31%); fo
 
 #bettingControls {
     position: absolute;
-    width: 336px;
+    width:348px;
     top: 90%;
     left: 50%;
     transform: translate(-50%, -50%);
@@ -166,7 +177,7 @@ body { margin: 0; /*overflow: hidden; */background-color: hsl(183, 89%, 31%); fo
     padding: 10px 16px;
     font-size: 16px;
     border: none;
-    border-radius: 6px;
+    border-radius: 16px;
     background-color: white;
     color: black;
     outline: none;
@@ -186,7 +197,7 @@ body { margin: 0; /*overflow: hidden; */background-color: hsl(183, 89%, 31%); fo
     padding: 10px 16px;
     font-size: 16px;
     border: none;
-    border-radius: 6px;
+    border-radius: 16px;
     background-color: black;
     color: white;
     transition: background-color 0.2s ease;
@@ -197,7 +208,7 @@ body { margin: 0; /*overflow: hidden; */background-color: hsl(183, 89%, 31%); fo
     padding: 10px 16px;
     font-size: 16px;
     border: none;
-    border-radius: 6px;
+    border-radius: 16px;
     background-color: limegreen;
     color: white;
     transition: background-color 0.2s ease;
@@ -233,7 +244,7 @@ body { margin: 0; /*overflow: hidden; */background-color: hsl(183, 89%, 31%); fo
 
 #notificationDiv {
     text-align: center;
-    border-radius: 6px;
+    border-radius: 16px;
     background-color: #cba135;
     padding: 16px 32px;
     font-size: 18px;
@@ -297,9 +308,9 @@ body { margin: 0; /*overflow: hidden; */background-color: hsl(183, 89%, 31%); fo
     top: -0.5rem;
     right: -0.5rem;
     background: black;
-    color: white;
-    font-size: 1.4rem;
-    padding: 2px 5px;
+    color: rgb(231, 231, 231);
+    font-size: 1.1rem;
+    padding: 5px 10px 4px 10px;
     border-radius: 999px;
     z-index: 10;
     pointer-events: none;
@@ -308,10 +319,10 @@ body { margin: 0; /*overflow: hidden; */background-color: hsl(183, 89%, 31%); fo
 .chip {
     width: 50px;
     height: 15px;
-    margin: -8px; /* so that they stack on top of each other */
+    margin: -7.5px; /* so that they stack on top of each other */
     border-radius: 50% / 40%;
     background-color: crimson;
-    border: 2px solid rgb(62, 62, 62);
+    border: 2px solid rgb(149, 31, 31);
     box-shadow: 0 2px 4px rgba(0, 0, 0, 0.3);
     opacity: 0;
     transform: translateY(10px);
@@ -340,11 +351,11 @@ body { margin: 0; /*overflow: hidden; */background-color: hsl(183, 89%, 31%); fo
     opacity: 1;
     transform: scale(1.05);
     box-shadow: 0 0 10px rgba(0, 0, 0, 0.3);
-    border-radius: 12px;
+    border-radius: 16px;
 }
 
 .sortable-ghost {
-    border-radius: 12px;
+    border-radius: 16px;
     opacity: 0;
 }
 
@@ -364,7 +375,7 @@ body { margin: 0; /*overflow: hidden; */background-color: hsl(183, 89%, 31%); fo
 .modal {
   background: rgba(150,150,150,0.9);
   padding: 24px 32px;
-  border-radius: 12px;
+  border-radius: 16px;
   max-width: 400px;
   width: 90%;
   text-align: center;

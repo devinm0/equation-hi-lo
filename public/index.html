@@ -454,17 +454,25 @@
                     scaleFactor = 0.75;
                 }
                 
-                canvas.width = scaleFactor * 120;
-                canvas.height = scaleFactor * 180;
-
                 canvas.id = `sqrt-canvas-${id}-${index}`;
                 const ctx = canvas.getContext('2d');
+
+                const width = scaleFactor * 120;
+                const height = scaleFactor * 180;
+                const ratio = window.devicePixelRatio || 1;
+                canvas.width = width * ratio;
+                canvas.height = height * ratio;
+
+                canvas.style.width = width + 'px'
+                canvas.style.height = height + 'px'
+
+                ctx.scale(ratio, ratio);
 
                 // draw root
                 ctx.fillStyle = folded ? 'lightgrey' : 'white';
                 ctx.fillRect(0, 0, scaleFactor * 120, scaleFactor * 180);
-                ctx.strokeStyle = 'black';
-                ctx.lineWidth = scaleFactor * 14;
+                ctx.strokeStyle = 'rgb(40,40,40)';
+                ctx.lineWidth = scaleFactor * 10;
                 ctx.lineCap = 'butt'; 
                 ctx.beginPath();
                 ctx.moveTo(scaleFactor * 20, scaleFactor * 98);
@@ -476,6 +484,7 @@
                 cardDiv.appendChild(canvas);
             } else {
                 cardDivParagraph = document.createElement("p");
+
                 if (card.value !== null) { // will be null in the case of hidden cards
                     cardDivParagraph.innerHTML = `${card.value}`;
                 } // TODO injection
@@ -485,16 +494,22 @@
             cardDiv.dataset.value = card.value; // for applyOps later
             cardDiv.className = card.value !== null ? "card" : "card-back"; // without null check, 0 becomes card-back since equivalent to false
 
+            if (card.suit === 4) {
+                cardDiv.classList.add("operator-card");
+            } else {
+                cardDiv.classList.add("number-card");
+            }
+
             // careful with card and cardDiv naming like this
             if (card.value === NumberCards.TEN){
                 if (window.matchMedia("(max-width: 600px)").matches) {
                     // Mobile device canvas
                     cardDivParagraph.style.letterSpacing = '-.1rem';
-                    cardDivParagraph.style.transform = 'translateX(-0.2rem)';
+                    cardDivParagraph.style.transform = 'translate(-0.2rem, -0.7rem)';
                 } else {
                     // Larger device canvas
-                    cardDivParagraph.style.letterSpacing = '-1rem';
-                    cardDivParagraph.style.transform = 'translateX(-0.7rem)';
+                    cardDivParagraph.style.letterSpacing = '-1.7rem';
+                    cardDivParagraph.style.transform = 'translateX(-0.7rem, -0.7rem)';
                 }
             }
 
@@ -520,7 +535,7 @@
             cardDiv.dataset.id = index;
 
             if (card.hidden) {
-                cardDiv.style.boxShadow = '0px 0px 30px rgba(0, 0, 0, 0.5) inset, 2px 4px 5px rgba(0, 0, 0, 0.4)';
+                cardDiv.style.boxShadow = 'rgba(0, 0, 0, 1) 0px 0px 10px inset, 2px 4px 5px rgba(0, 0, 0, 0.4)';
                 cardDiv.style.backgroundColor = 'lightgrey';
             }
             handDivs[id].appendChild(cardDiv);
@@ -583,11 +598,11 @@
         switch(suit) {
             case Suits.GOLD:
                 console.log(Suits.GOLD);
-                return 'rgb(228, 167, 1)';
+                return 'rgb(240, 198, 100)';
                 break;
             case Suits.SILVER:
                 console.log(Suits.SILVER);
-                return 'rgb(177, 177, 177)';
+                return 'rgb(200, 200, 200)';
                 break;
             case Suits.BRONZE:
                 console.log(Suits.BRONZE);
