@@ -50,7 +50,8 @@ let hostId = null;
 // rather than global variables how can we make this functional
 let numPlayersThatHaveDiscarded = 0;
 let numPlayersThatNeedToDiscard = 0; 
-firstRoundBettingCompleted = false; // TODO reset to false when a whole game round is done
+let firstRoundBettingCompleted = false; // TODO reset to false when a whole game round is done
+let betForThisRoundEqualsSmallestPlayersChips = false;
 
 wss.on("connection", (ws) => {
   const userId = uuidv4();
@@ -217,6 +218,8 @@ wss.on("connection", (ws) => {
 
         const justPlayedPlayer = players.get(data.userId);
         justPlayedPlayer.turnTakenThisRound = true;
+        // TODO this logic is unreadable. Come back and refactor after it's been a while
+        // It's actually good to refactor when I don't understand it. Forces me to make it understandable.
         justPlayedPlayer.betAmount += data.betAmount // even if folded. (just passing on last players bet amount) 
         // refactor to use a global server-side currentBetAmount variable
         // when I do, need to reset it in endBettingRound function
@@ -281,6 +284,10 @@ wss.on("connection", (ws) => {
             // using else so that we don't send the "next turn" even when it's over - 
             // but is this an issue for second betting round? 
             // who will we start with
+            if (justPlayedPlayer.chipCount === 0) {
+                // if anyone is 0, it means someone is all in and no one can bet anymore
+                betForThisRoundEqualsSmallestPlayersChips = true;
+            }
             currentTurnPlayerId = findNextPlayerTurn();
             advanceToNextPlayersTurn(justPlayedPlayer.betAmount);
         }
@@ -318,9 +325,26 @@ wss.on("connection", (ws) => {
 
         // check that every player submitted choices
         if (nonFoldedPlayers.every(player => player.equationResult !== null)) {
-            console.log('All equations received. Proceeding to second round of betting.');
+            if (betForThisRoundEqualsSmallestPlayersChips) {
+                console.log('Max bet was reached on first round of betting. Skipping second round.');
 
-            commenceSecondRoundBetting();
+                // TODO separate all of these into methods
+                wss.clients.forEach((client) => {
+                    if (players.get(client.userId).foldedThisTurn !== true) {
+                        if (/*client !== ws && */client.readyState === WebSocket.OPEN) {
+                        client.send(JSON.stringify({
+                            type: "second-round-betting-skipped",
+                        }));
+                        }
+                    }
+                });
+
+                commenceHiLoSelection();
+            } else {
+                console.log('All equations received. Proceeding to second round of betting.');
+
+                commenceSecondRoundBetting();
+            }
         }
     }
 
@@ -495,6 +519,7 @@ function endHand() {
         console.log(player.username, "chipCount:", player.chipCount);
     })
 
+    betForThisRoundEqualsSmallestPlayersChips = false;
     firstRoundBettingCompleted = false;
     handNumber += 1;
     numPlayersThatHaveDiscarded = 0;
@@ -505,7 +530,8 @@ function endHand() {
                 if (client.readyState === WebSocket.OPEN) {
                     const payload = JSON.stringify({ 
                         type: "kicked",
-                        userId: player.id
+                        userId: player.id,
+                        username: player.username
                     });
                     client.send(payload);
                 }
@@ -637,7 +663,7 @@ function commenceFirstRoundBetting() {
         }
     });
 
-    advanceToNextPlayersTurn(1);
+    advanceToNextPlayersTurn(1); // TODO change to anteAmount (and then modify as game goes on)
 }
 
 function commenceSecondRoundBetting() {
@@ -650,6 +676,16 @@ function commenceSecondRoundBetting() {
             }
         }
     });
+
+    /* TODO
+        What I SHOULD have is a variable on the server side of currentBet.
+
+        Then here, I can check if it's equal to the smallest players chips and forego 
+        the second betting round.
+
+        As is, I have to take the chipAmount from the socket message of the last player and 
+        set some bool from there.
+    */
 
     // put findNextPlayerTurn inside advanceToNextPlayersTurn
     // i think I want to just continue in round robin.

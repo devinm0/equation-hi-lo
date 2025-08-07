@@ -10,21 +10,20 @@
     <!-- Choice Modal -->
     <div id="choiceModal" class="modal-overlay hidden">
         <div class="modal">
-        <h2>Select Hi, Lo, or Swing Betting</h2>
-        <div class="options">
-            <div class="option" data-choice="low">
-            <div class="low-symbol">1</div>
-            <p>Low</p>
+            <h2>Select Hi, Lo, or Swing Betting</h2>
+            <div class="options">
+                <div class="option" data-choice="low">
+                    <div class="low-symbol">1</div>
+                    <p>Low</p>
+                </div>
+                <div class="option" data-choice="high">
+                    <div class="high-symbol">20</div>
+                    <p>High</p>
+                </div>
             </div>
-            <div class="option" data-choice="high">
-            <div class="high-symbol">20</div>
-            <p>High</p>
+            <div class="buttons">
+                <button id="confirmChoice" disabled>Confirm</button>
             </div>
-        </div>
-        <div class="buttons">
-            <button id="confirmChoice">Confirm</button>
-            <!-- <button id="cancelChoice">Cancel</button> -->
-        </div>
         </div>
     </div>
 
@@ -45,7 +44,7 @@
 
     <div id="potDiv" style="text-align: center; font-weight: bold; margin-bottom: 10px;"></div>
 
-    <div id="chipStacksContainer" class="chip-stacks-container"></div>
+    <div id="potChipStacksContainer" class="chip-stacks-container" style="width: 100%"></div>
 
     <div id="bettingControls" style="display:none;">
         <div id="chipStagingContainer" style="text-align:center; font-weight: bold; color: white;"><span id="betAmountLabel">0</span></div>
@@ -84,7 +83,8 @@
     // END SECTION Countdown timer code. //
 
     const socket = new WebSocket(`ws://localhost:3000`);
-    const handDivs = {}; // list of divs, one for each player
+    const handDivs = new Map(); // map of divs, one for each player
+    const handDivsList = []; // ordered list of divs, so that we can draw the user's hand last
     const lobbyPlayerDivs = {}; // list of nametags basically, for game lobby. one per player
 
     const EXPIRATION_TIME = 1000 * 60 * 60 * 24;  // 1 day in milliseconds
@@ -144,9 +144,10 @@
       } else if (msg.type === "reject") {
         alert("At least 2 players must join before starting the game.");
       } else if (msg.type === "begin-hand") {
+        showPlayingLayout();
         alert("Beginning hand " + (msg.handNumber + 1));
       } else if (msg.type === "deal") {
-        console.log(msg);
+        // console.log(msg);
         if (msg.id === myId) {
             myHand = msg.hand;
         }        
@@ -198,6 +199,8 @@
         alert("First round betting has commenced.");
       } else if (msg.type === "second-round-betting-commenced") {
           alert("Second round betting has commenced.");
+      } else if (msg.type === "second-round-betting-skipped") {
+          alert("1 or more players are all in. Second round betting skipped.");
       } else if (msg.type === "player-folded") {
             alert(msg.username + " folded.");
             drawHand(msg.id, msg.username, msg.hand, false, true);
@@ -209,9 +212,7 @@
             alert(msg.username + " bet " + msg.betAmount);
             updateChipStack(msg.chipCount, document.getElementById("chipStacksContainer-" + msg.id));
 
-            // update pot
-            document.getElementById("potDiv").textContent = "Pot";
-            updateChipStack(msg.pot, document.getElementById("chipStacksContainer")); //should rename it to potStacksContainer
+            updatePot(msg.pot);
       } else if (msg.type === "next-turn") {
         console.log("socket message next-turn");
         // document.getElementById("potDiv").textContent = "Pot: " + msg.pot;
@@ -259,18 +260,18 @@
 
             let equationResult;
             try {
-                equationResult = applyOps(handDivs[myId].querySelectorAll('.card'));
+                equationResult = applyOps(handDivs.get(myId).querySelectorAll('.card'));
             } catch (e) {
                 alert("You were unable to form an equation. You fold automatically.");
                 socket.send(JSON.stringify({ type: "folded", userId: myId }));
             }
-            console.log(Array.from(handDivs[myId].querySelectorAll('.card')).map(card => card.dataset.id));
+            console.log(Array.from(handDivs.get(myId).querySelectorAll('.card')).map(card => card.dataset.id));
             const data = {
                 type: "equation-result",
                 userId: myId,
                 username: myName,
                 result: equationResult,
-                order: Array.from(handDivs[myId].querySelectorAll('.card')).map(card => card.dataset.id)
+                order: Array.from(handDivs.get(myId).querySelectorAll('.card')).map(card => card.dataset.id)
             };
             socket.send(JSON.stringify(data));
       } else if (msg.type === "hi-lo-selection") {
@@ -294,10 +295,9 @@
             });
       } else if (msg.type === "round-result") {
         alert(msg.message);
-        // reset  pot
-        document.getElementById("potDiv").textContent = "Pot";
-        updateChipStack(0, document.getElementById("chipStacksContainer")); //should rename it to potStacksContainer
-        
+        updatePot(0);
+
+        showResultsLayout();
         if (! msg.becauseAllButOneFolded) {
             displayHandResults(msg); // in the case of everyone but one folding, we don't need to show results
             // a message saying the whole pot went to the last person by default is sufficient.
@@ -363,12 +363,15 @@
     });
 
     function drawHand(id, username, hand, multiplicationCardDealt = false, folded = false) {
-        if (!handDivs[id]) { // check if hand has ever been drawn since game start
+        let isRightHand = false;
+
+        if (!handDivs.has(id)) { // check if hand has ever been drawn since game start. basically that there is a holder.
             const div = document.createElement("div");
             div.className = "hand";
             div.id = "hand-" + id;
             document.body.appendChild(div);
-            handDivs[id] = div;
+            handDivs.set(id, div);
+            
 
             if (id === myId) {
                 // make it a sortable for when we make the equations
@@ -382,20 +385,47 @@
             }
         }
 
+        if (id === myId) {
+            handDivs.get(id).classList.add("myhand");
+            // handDivsList.push(id); // myhand doesn't even need to go in the list for now for determining even or odd (left or right margin)
+        } else {
+            handDivs.get(id).classList.add("small-hand");
+            // insert into penultimate index
+            // handDivsList.splice(handDivsList.length - 1, 0, id);
+            handDivsList.push(id); // TODO this may be broken once we support removing players.
+            // ^ push to a list. hands that aren't my hand need to be drawn in rows of 2.
+            // so every odd index hand will have margin-right: auto
+            if (handDivsList.indexOf(id) % 2 !== 0) {
+                console.log("adding class righthand and setting isRightHand to true");
+                handDivs.get(id).classList.add("righthand");
+                isRightHand = true;
+            }
+        }
+
         if (multiplicationCardDealt) {
             alert("Multiplication card received. Please discard either addition, subtraction, or multiplication card.");
         }        
 
         // clear the hand, so we can redraw all cards on every deal
-        handDivs[id].innerHTML = `<p></p>`; // injection
-        const nameDiv = document.createElement("div");
+        handDivs.get(id).innerHTML = ``; // injection
         
+        const playerInfoDiv = document.createElement("div");
+        playerInfoDiv.className = "player-info";
+
+        const nameDiv = document.createElement("div");
         nameDiv.className = "handLabel";
         nameDiv.id = "handLabel-" + id;
         if (folded) {
             nameDiv.classList.add("folded");
         }
-        handDivs[id].appendChild(nameDiv);
+        playerInfoDiv.appendChild(nameDiv);
+
+        const playerChipsStacksContainerDiv = document.createElement("div");
+        playerChipsStacksContainerDiv.className = "chip-stacks-container";
+        playerChipsStacksContainerDiv.id = "chipStacksContainer-" + id;
+        playerInfoDiv.appendChild(playerChipsStacksContainerDiv);
+
+        handDivs.get(id).appendChild(playerInfoDiv);
 
         const trophyDiv = document.createElement("div");
         trophyDiv.id = "trophy-" + id;
@@ -432,11 +462,6 @@
         nameSpan.innerHTML = '<p>' + nameSpanContents + '</p>';
         nameDiv.appendChild(nameSpan);
 
-        const playerChipsStacksContainerDiv = document.createElement("div");
-        playerChipsStacksContainerDiv.className = "chip-stacks-container";
-        playerChipsStacksContainerDiv.id = "chipStacksContainer-" + id;
-        handDivs[id].appendChild(playerChipsStacksContainerDiv);
-        
         hand.forEach((card, index) => {
             const cardDiv = document.createElement("div");
             
@@ -502,15 +527,9 @@
 
             // careful with card and cardDiv naming like this
             if (card.value === NumberCards.TEN){
-                if (window.matchMedia("(max-width: 600px)").matches) {
-                    // Mobile device canvas
-                    cardDivParagraph.style.letterSpacing = '-.1rem';
-                    cardDivParagraph.style.transform = 'translate(-0.2rem, -0.7rem)';
-                } else {
-                    // Larger device canvas
-                    cardDivParagraph.style.letterSpacing = '-1.7rem';
-                    cardDivParagraph.style.transform = 'translateX(-0.7rem, -0.7rem)';
-                }
+                cardDivParagraph.classList.add('ten');
+            } else if (card.suit !== Suits.OPERATOR) {
+                cardDivParagraph.classList.add('single-digit');
             }
 
             // is one of the three discardable operators
@@ -523,7 +542,7 @@
 
                 if (multiplicationCardDealt) { // TODO this is also a mess. We should have a separate drawHighlights function
                     // learned: be careful with capitalization
-                    cardDiv.className = "card card-highlighted"
+                    cardDiv.classList.add("card-highlighted");
                 }
             }
             cardDiv.style.color = getColorFromSuit(card.suit);
@@ -535,10 +554,10 @@
             cardDiv.dataset.id = index;
 
             if (card.hidden) {
-                cardDiv.style.boxShadow = 'rgba(0, 0, 0, 1) 0px 0px 10px inset, 2px 4px 5px rgba(0, 0, 0, 0.4)';
-                cardDiv.style.backgroundColor = 'lightgrey';
+                cardDiv.style.boxShadow = 'rgba(0, 0, 0, 1) 0px 0px inset, 4px 4px rgba(0, 0, 0, 0.3)';
+                // cardDiv.style.backgroundColor = 'lightgrey';
             }
-            handDivs[id].appendChild(cardDiv);
+            handDivs.get(id).appendChild(cardDiv);
         });
     }
 
@@ -594,22 +613,23 @@
         lobbyPlayerListContainer.appendChild(div);
     }
 
+    function updatePot(chipCount) {
+        document.getElementById("potDiv").textContent = "Pot";
+        updateChipStack(chipCount, document.getElementById("potChipStacksContainer")); //should rename it to potStacksContainer
+    }
+
     function getColorFromSuit(suit) {
         switch(suit) {
             case Suits.GOLD:
-                console.log(Suits.GOLD);
                 return 'rgb(240, 198, 100)';
                 break;
             case Suits.SILVER:
-                console.log(Suits.SILVER);
                 return 'rgb(200, 200, 200)';
                 break;
             case Suits.BRONZE:
-                console.log(Suits.BRONZE);
                 return 'rgb(122, 61, 0)';
                 break;
             case Suits.STONE:
-                console.log(Suits.STONE);
                 return 'rgb(66, 66, 66)';
                 break;
         }
@@ -672,7 +692,6 @@
     let chipCount = 0;
 
     function updateChipStack(newCount, containerToUpdate) {
-        console.log("updateChipStack called: " + newCount + " " + containerToUpdate);
         chipCount = newCount;
 
         // Clear all previous stacks and any previous overlay
@@ -775,6 +794,7 @@
     function openChoiceModal(onConfirm) {
         const modal = document.getElementById('choiceModal');
         const options = modal.querySelectorAll('.option');
+        const confirmButton = document.getElementById('confirmChoice');
         selectedChoices.clear();
         options.forEach(opt => opt.classList.remove('selected'));
 
@@ -782,18 +802,24 @@
 
         options.forEach(opt => {
             opt.onclick = () => {
-            const choice = opt.dataset.choice;
-            if (selectedChoices.has(choice)) {
-                selectedChoices.delete(choice);
-                opt.classList.remove('selected');
-            } else {
-                selectedChoices.add(choice);
-                opt.classList.add('selected');
-            }
+                const choice = opt.dataset.choice;
+                if (selectedChoices.has(choice)) {
+                    selectedChoices.delete(choice);
+                    opt.classList.remove('selected');
+                } else {
+                    selectedChoices.add(choice);
+                    opt.classList.add('selected');
+                }
+
+                if (selectedChoices.size > 0) {
+                    confirmButton.disabled = false;
+                } else {
+                    confirmButton.disabled = true;
+                }
             };
         });
 
-        document.getElementById('confirmChoice').onclick = () => {
+        confirmButton.onclick = () => {
             modal.classList.add('hidden');
             onConfirm(Array.from(selectedChoices));
         };
@@ -853,7 +879,7 @@
                 cardDivResultParagraph.style.transform = 'translateX(-0.7rem)';
             }
 
-            handDivs[result.id].appendChild(cardDiv);
+            handDivs.get(result.id).appendChild(cardDiv);
         })
         
         document.getElementById('confirmResults').onclick = () => {
@@ -867,6 +893,36 @@
             return num.toString();
         }
         return parseFloat(num.toFixed(decimals)).toString();
+    }
+
+    function showPlayingLayout() {
+        const fullWidthHands = document.querySelectorAll('.full-width-hand');
+        fullWidthHands.forEach(hand => {
+            hand.classList.remove('full-width-hand')
+        })
+
+        const myHand = document.querySelectorAll('.small-hand');
+        myHand.forEach(hand => {
+            hand.classList.remove('small-hand')
+        })
+    }
+
+    function showResultsLayout() {
+        const rightHands = document.querySelectorAll('.righthand');
+        rightHands.forEach(hand => {
+            hand.classList.remove('righthand')
+        })
+
+        const myHand = document.querySelectorAll('.myhand');
+        myHand.forEach(hand => {
+            hand.classList.remove('myhand')
+            hand.classList.add('small-hand')
+        })
+
+        const hands = document.querySelectorAll('.hand');
+        hands.forEach(hand => {
+            hand.classList.add('full-width-hand')
+        })
     }
 </script>
 </body>

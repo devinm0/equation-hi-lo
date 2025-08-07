@@ -1,4 +1,12 @@
-body { margin: 0; /*overflow: hidden; */background-color: hsl(183, 89%, 31%); font-family: 'Arial'}
+body { 
+    display: flex;
+    flex-wrap: wrap; 
+    margin: 0; 
+    /*overflow: hidden; */
+    background-color: hsl(183, 89%, 31%); 
+    font-family: 'Arial'
+}
+
 .cursor { 
     width: 10px;
     height: 10px;
@@ -8,6 +16,7 @@ body { margin: 0; /*overflow: hidden; */background-color: hsl(183, 89%, 31%); fo
 }
 
 #potDiv {
+    width: 100%;
     font-weight: bold;
     color: white;
 }
@@ -24,7 +33,7 @@ body { margin: 0; /*overflow: hidden; */background-color: hsl(183, 89%, 31%); fo
     border: none;
     border-radius: 16px;
     cursor: pointer;
-    box-shadow: 2px 2px 10px rgba(0, 0, 0, 0.5);
+    box-shadow: 4px 4px rgba(0, 0, 0, 0.3);
     transition: background 0.3s;
 }
 
@@ -33,10 +42,76 @@ body { margin: 0; /*overflow: hidden; */background-color: hsl(183, 89%, 31%); fo
 }
 
 .hand {
+    /* width: 50%; */
     display: flex;
-    gap: 8px;
+    /* gap: 4px; */
     flex-wrap: wrap;
     touch-action: none;
+    margin-left: 16px;
+    margin-right: 16px;
+}
+
+.full-width-hand {
+    width: 100%;
+    justify-content: center;
+}
+
+.myhand {
+    gap: 8px;
+    position: absolute;
+    width: 100%;
+    justify-content: center;
+    bottom: 10%;
+    margin-left: 0;
+}
+
+.ten {
+    transform: translate(-1rem, 6%);
+    letter-spacing: -1.7rem;
+}
+
+.small-hand .ten {
+    transform: translate(-20%,6%);
+    letter-spacing: -1rem;
+}
+
+.small-hand .card { /* scale didn't work because doesn't affect layout :( moreover, transforms don't compose. so highlighting a smaller card doubles the size*/
+    width: 55px;
+    height: 85px;
+    font-size: 60px;
+    border-radius: 11px;
+    /* box-shadow: 2px 2px rgba(0,0,0,0.3); */
+}
+
+.small-hand canvas { /* root symbol */
+    transform: scale(0.6);
+}
+
+.small-hand .card-back {
+    width: 55px;
+    height: 85px;
+    border-radius: 11px;
+    box-shadow: 2px 2px rgba(0,0,0,0.3);
+}
+
+.myhand .player-info {
+    width: 100%;
+    margin: 8px;
+}
+
+.myhand .chip {
+    width: 50px;
+    height: 15px;
+}
+
+.myhand .chip-stacks-container {
+    width: 100%;
+    margin: 10px 0px; /* or just use flex gap? */
+}
+
+.righthand {
+    margin-left: auto;
+    flex-direction: row-reverse;
 }
 
 .handLabel {
@@ -52,18 +127,22 @@ body { margin: 0; /*overflow: hidden; */background-color: hsl(183, 89%, 31%); fo
 .handLabel p {
     margin-block: 0;
     text-align: center;
+    background-color: rgba(0,0,0,0.5);
+    padding: 10px;
+    border-radius: 16px;
+    width: 100px;
 }
 
 .card {
     width: 90px;
     height: 135px;
-    background-color: white;
+    font-size: 100px;
     border-radius: 16px;
-    box-shadow: 2px 4px 5px rgba(0, 0, 0, 0.4);
+    background-color: rgb(251, 251, 250);
+    box-shadow: 4px 4px rgba(0, 0, 0, 0.3);
     display: flex;
     align-items: center;
     justify-content: center;
-    font-size: 100px;
     font-weight: bold;
     font-family: 'AppleMyungjo', serif;
     color: black;
@@ -74,15 +153,15 @@ body { margin: 0; /*overflow: hidden; */background-color: hsl(183, 89%, 31%); fo
     transition: all 0.2s ease;
 }
 
-.number-card p {
+.single-digit {
     transform: translateY(6%);
 }
 
 .operator-card {
     font-family: 'Arial', serif;
     font-weight: 100;
-    font-size: 110px;
-    color: rgb(40,40,40);
+    font-size: 100px;
+    color: rgb(40, 40, 40);
 }
 
 .result-card {
@@ -91,9 +170,9 @@ body { margin: 0; /*overflow: hidden; */background-color: hsl(183, 89%, 31%); fo
     overflow: visible;
 }
 
-.difference-card {
+.small-hand .difference-card {
     display: block; /* need to display two lines in this card */
-    font-size: 50px;
+    font-size: 30px; /* need to apply calc()*/ 
     background-color: transparent;
     box-shadow: none;
     overflow: visible;
@@ -110,12 +189,12 @@ body { margin: 0; /*overflow: hidden; */background-color: hsl(183, 89%, 31%); fo
 .difference-paragraph {
     letter-spacing: -.1rem;
     margin-block-start: 0em;
-    color: red;
+    color: rgb(240, 67, 67);
 }
 
 .card-highlighted {
-    background-color: rgb(255, 252, 216);
-    box-shadow: 0px 0px 5px rgba(255, 255, 0, 0.4);
+    background-color: rgb(252, 252, 170);
+    box-shadow: 4px 4px rgba(255, 215, 0, 0.9);
 }
 
 .folded {
@@ -126,6 +205,7 @@ body { margin: 0; /*overflow: hidden; */background-color: hsl(183, 89%, 31%); fo
 .card-back {
     width: 90px;
     height: 135px;
+    border-radius: 16px;
     background: repeating-linear-gradient(
         45deg,
         #1400c4,
@@ -133,8 +213,7 @@ body { margin: 0; /*overflow: hidden; */background-color: hsl(183, 89%, 31%); fo
         #ffffff 10px,
         #ffffff 10px
     );
-    border-radius: 16px;
-    box-shadow: 2px 4px 10px rgba(0, 0, 0, 0.2);
+    box-shadow: 4px 4px rgba(0, 0, 0, 0.3);
     margin: 8px;
     position: relative;
 }
@@ -157,9 +236,9 @@ body { margin: 0; /*overflow: hidden; */background-color: hsl(183, 89%, 31%); fo
 #bettingControls {
     position: absolute;
     width:348px;
-    top: 90%;
+    bottom: 1%;
     left: 50%;
-    transform: translate(-50%, -50%);
+    transform: translate(-50%, -0%);
     display: flex;
     flex-direction: column;
     align-items: center;
@@ -224,12 +303,13 @@ body { margin: 0; /*overflow: hidden; */background-color: hsl(183, 89%, 31%); fo
 #foldButton:hover,
 #allInButton:hover,
 #startButton:hover,
-#confirmResult:hover,
+#confirmResults:hover,
 #confirmChoice:hover {
     background-color: #222;
 }
 
-#startButton:disabled {
+#startButton:disabled,
+#confirmChoice:disabled {
     background-color: #999;
     cursor: not-allowed;
     pointer-events: all !important;
@@ -249,7 +329,7 @@ body { margin: 0; /*overflow: hidden; */background-color: hsl(183, 89%, 31%); fo
     padding: 16px 32px;
     font-size: 18px;
     color: white;
-    box-shadow: 2px 2px 10px rgba(0, 0, 0, 0.5);
+    box-shadow: 4px 4px rgba(0, 0, 0, 0.3);
 }
 
 #lobbyTitleContainer {
@@ -290,7 +370,7 @@ body { margin: 0; /*overflow: hidden; */background-color: hsl(183, 89%, 31%); fo
     justify-content: center;
     align-items: flex-end;
     gap: 6px;
-    margin: /*20px */auto;
+    margin: 20px;
     width: fit-content;
     position: relative;
 }
@@ -307,23 +387,23 @@ body { margin: 0; /*overflow: hidden; */background-color: hsl(183, 89%, 31%); fo
     position: relative;
     top: -0.5rem;
     right: -0.5rem;
-    background: black;
+    background: rgb(23, 43, 36);
     color: rgb(231, 231, 231);
     font-size: 1.1rem;
-    padding: 5px 10px 4px 10px;
+    padding: 6px 10px;
     border-radius: 999px;
     z-index: 10;
     pointer-events: none;
 }
 
 .chip {
-    width: 50px;
-    height: 15px;
+    width: 30px;
+    height: 13px;
     margin: -7.5px; /* so that they stack on top of each other */
     border-radius: 50% / 40%;
     background-color: crimson;
     border: 2px solid rgb(149, 31, 31);
-    box-shadow: 0 2px 4px rgba(0, 0, 0, 0.3);
+    box-shadow: 4px 4px rgba(0, 0, 0, 0.3);
     opacity: 0;
     transform: translateY(10px);
     animation: chipIn 0.3s ease forwards;
@@ -350,7 +430,7 @@ body { margin: 0; /*overflow: hidden; */background-color: hsl(183, 89%, 31%); fo
 .sortable-chosen {
     opacity: 1;
     transform: scale(1.05);
-    box-shadow: 0 0 10px rgba(0, 0, 0, 0.3);
+    box-shadow: 4px 4px rgba(0, 0, 0, 0.3);
     border-radius: 16px;
 }
 
@@ -408,7 +488,7 @@ body { margin: 0; /*overflow: hidden; */background-color: hsl(183, 89%, 31%); fo
   height: 100px;
   font-size: 50px;
   background: white;
-  border: 2px solid black;
+  /* border: 2px solid black; */
   border-radius: 50%;
   display: flex;
   align-items: center;
@@ -484,5 +564,10 @@ body { margin: 0; /*overflow: hidden; */background-color: hsl(183, 89%, 31%); fo
 
     .difference-paragraph {
         letter-spacing: -.1rem;
-    }    
+    }
+
+    .ten {
+        transform: translate(-0.2rem, -0.7rem);
+        letter-spacing: -.1rem;
+    }
 }
