@@ -17,7 +17,7 @@
                     <p>Low</p>
                 </div>
                 <div class="option" data-choice="high">
-                    <div class="high-symbol">20</div>
+                    <div class="high-symbol"><span id="high-symbol-span">20</span></div>
                     <p>High</p>
                 </div>
             </div>
@@ -27,8 +27,9 @@
         </div>
     </div>
 
-    <div id="notificationWrapper">
-        <div id="notificationDiv" style="display: none;"></div>
+    <div id="progressBarWrapper" style="display: none;">
+        <div id="progressBar" style="display: none;"></div>
+        <div id="progressBarOverlay" style="display: none;"></div>
     </div>
 
     <div id="notifications"></div>
@@ -52,7 +53,9 @@
         <div id="chipStagingContainer" style="text-align:center; font-weight: bold; color: white;"><span id="betAmountLabel">0</span></div>
         <div id="betContainer">
             <button class="button" id="foldButton">Fold</button>
-            <input type="range" min="0" max="1000" value="0" id="betSlider">
+                <span id="sliderMin" style="color:white">0</span>
+                <input type="range" min="0" max="1000" value="0" id="betSlider">
+                <span id="sliderMax" style="color:white">1000</span>
             <button class="button" id="callRaiseButton">Call</button>
             <button class="button" id="allInButton">All In</button>
         </div>
@@ -68,20 +71,25 @@
 
     // SECTION Countdown timer code. //
     const totalDuration = 90 * 1000; // 60 seconds
-    const display = document.getElementById('notificationDiv');
+    const progressBar = document.getElementById('progressBar');
+    const progressBarOverlay = document.getElementById('progressBarOverlay');
 
     let startTime = Date.now();
     let endTime = startTime + totalDuration;
 
     function updateTimer() {
         const now = Date.now();
-        const remaining = Math.max(0, Math.floor((endTime - now) / 1000));
-        display.textContent = remaining;
+        const remainingUnrounded = (endTime - now) / 1000;
+        const remaining = Math.max(0, Math.floor(remainingUnrounded));
+        progressBarOverlay.textContent = remaining;
+
+        progressBar.style.width = remainingUnrounded * 100 / 90 + "%";
 
         if (remaining > 0) {
             requestAnimationFrame(updateTimer); // More accurate and smoother
         }
     }
+
     // END SECTION Countdown timer code. //
 
     const socket = new WebSocket(`ws://localhost:3000`);
@@ -222,8 +230,8 @@
 
         if (msg.currentTurnPlayerId === myId) { // bad practice. trusting the client to do this.
             setupBettingControls(msg.toCall, msg.maxBet, msg.playerChipCount);
-            console.log("calling hideNotificationDiv from here");
-            hideNotificationDiv();
+            console.log("calling hideProgressBar from here");
+            hideProgressBar();
         } else {
             notifyThatAnotherPlayerIsBetting(msg.username);
         }
@@ -245,7 +253,7 @@
       } else if (msg.type === "commence-equation-forming") {
         console.log("socket message commence-equation-forming");
             beginCountdownNotification();
-            showNotification('90 seconds! Drag cards to get close to 1 or 20.', "limegreen", 90000);
+            showNotification('90 seconds! Drag cards to get close to 1 or 20.', "limegreen", 3000);
             sortable.option("disabled", false)
 
       } else if (msg.type === "players-are-equation-forming") {
@@ -254,7 +262,7 @@
 
       } else if (msg.type === "end-equation-forming") {
             console.log("socket message end-equation-forming");
-            hideNotificationDiv(); // do we call this actually? rename to resetAndHideNotificationDiv?
+            hideProgressBar(); // do we call this actually? rename to resetAndhideProgressBar?
             showNotification('Time is up!');
 
             sortable.option("disabled", true)
@@ -449,7 +457,7 @@
         hiOptionDiv.className = "high-symbol";
         hiOptionDiv.classList.add("hidden");
         hiOptionDiv.classList.add("high-symbol-mini");
-        hiOptionDiv.textContent = 1;
+        hiOptionDiv.textContent = 20;
         nameDiv.appendChild(hiOptionDiv); // TODO will need to put it at the beginning not the end
 
         const nameSpan = document.createElement("span");
@@ -562,20 +570,8 @@
         });
     }
 
-    function notify(message) {
-        let notificationDiv = document.getElementById("notificationDiv");
-        notificationDiv.style.display = "block";
-        notificationDiv.textContent = message;
-
-        setTimeout(() => {
-            hideNotificationDiv(); // this is actually wrong since we'll hide any other notifications coming in
-            // we need to implement a queue or just have fewer notifications
-        }, 1000);
-    }
     function notifyThatAnotherPlayerIsBetting(name){
-        let notificationDiv = document.getElementById("notificationDiv");
-        notificationDiv.style.display = "block";
-        notificationDiv.textContent = name + " is betting";
+        showNotification(name + " is betting", "yellow");
     }
 
     function highlightCurrentBettingPlayerAndDehighlightOthers(currentTurnPlayerId){
@@ -587,10 +583,16 @@
         handLabel.style.color = "yellow";
     }
 
-    function beginCountdownNotification(){
-        let notificationDiv = document.getElementById("notificationDiv");
-        notificationDiv.style.display = "block";
-        notificationDiv.textContent = "90";
+    function beginCountdownNotification() {
+        let progressBarWrapper = document.getElementById("progressBarWrapper");
+        progressBarWrapper.style.display = "block";
+
+        let progressBarOverlay = document.getElementById("progressBarOverlay");
+        progressBarOverlay.style.display = "block";
+
+        let progressBar = document.getElementById("progressBar");
+        progressBar.style.display = "block";
+        progressBar.style.width = "100%";
 
         // begin countdown
         startTime = Date.now();
@@ -598,11 +600,16 @@
         updateTimer(); // only call once because it call requestAnimationFrame recursively
     }
 
-    function hideNotificationDiv(){
-        console.log("function hideNotificationDiv called");
-        let notificationDiv = document.getElementById("notificationDiv");
-        notificationDiv.style.display = "none";
-        notificationDiv.textContent = "";
+    function hideProgressBar(){
+        let progressBarWrapper = document.getElementById("progressBarWrapper");
+        progressBarWrapper.style.display = "none";
+
+        let progressBarOverlay = document.getElementById("progressBarOverlay");
+        progressBarOverlay.style.display = "none";
+        progressBarOverlay.textContent = "";
+
+        let progressBar = document.getElementById("progressBar");
+        progressBar.style.display = "none";
     }
 
     function drawPlayer(id, color, username, hostId) {
@@ -641,7 +648,9 @@
         const betLabel = document.getElementById("betAmountLabel");
         const callRaiseButton = document.getElementById("callRaiseButton");
         const allInButton = document.getElementById("allInButton");
-
+        const sliderMin = document.getElementById("sliderMin");
+        const sliderMax = document.getElementById("sliderMax");
+        
         // Set slider range
         slider.min = toCall;
         slider.max = maxBet;
@@ -649,6 +658,8 @@
 
         // Initial label
         betLabel.textContent = toCall + " to call";
+        sliderMin.textContent = toCall;
+        sliderMax.textContent = maxBet;
         callRaiseButton.textContent = "Call";
 
         // Show controls
@@ -658,7 +669,7 @@
             const val = parseInt(slider.value);
             console.log(slider.min, slider.max, slider.value);
         
-            betLabel.textContent = "Bet " + val + " (Raise " + (val - toCall);
+            betLabel.textContent = "Bet " + val + " (Raise " + (val - toCall) + ")";
             // what if currentBet is null
             callRaiseButton.textContent = val > toCall ? "Raise" : "Call";
         };
