@@ -1,7 +1,7 @@
 <!DOCTYPE html>
 <html lang="en">
 <head>
-  <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no, minimal-ui">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no">
   <meta charset="UTF-8" />
   <title>Equation Hi Lo</title>
   <link rel="stylesheet" href="style.css">
@@ -31,12 +31,14 @@
         <div id="notificationDiv" style="display: none;"></div>
     </div>
 
+    <div id="notifications"></div>
+
     <div id="uiContainer">
         <div id="lobbyTitleContainer">Equation Hi Lo</div>
         <div id="lobbyPlayerListContainer"></div>
         <div id="nameContainer">
             <input type="text" id="nameInput" placeholder="Enter your name" pattern="^[a-zA-Z0-9]{1,16}$" required title="Username consists of 1-16 letters or numbers"/>
-            <p id="error" style="color: red;"></p>
+            <p id="error" style="color: rgb(221, 49, 49);"></p>
             <button id="joinButton">Join</button>
         </div>
         <button class="button" id="startButton" style="display:none;" disabled>Start Game</button>
@@ -140,14 +142,13 @@
         // document.getElementById("leaveButton").style.display = "block";
         document.getElementById("lobbyPlayerListContainer").remove();
         document.getElementById("lobbyTitleContainer").remove();
-        alert("The game has started!");
+        showNotification('The game has started!');
       } else if (msg.type === "reject") {
-        alert("At least 2 players must join before starting the game.");
+        showNotification("At least 2 players must join before starting the game.");
       } else if (msg.type === "begin-hand") {
         showPlayingLayout();
-        alert("Beginning hand " + (msg.handNumber + 1));
+        showNotification("Beginning hand " + (msg.handNumber + 1));
       } else if (msg.type === "deal") {
-        // console.log(msg);
         if (msg.id === myId) {
             myHand = msg.hand;
         }        
@@ -193,23 +194,23 @@
             document.getElementById("startButton").disabled = false;            
         }
       } else if (msg.type === "player-discarded") {
-        alert(msg.username + " discarded their " + msg.value + " card.");
+        showNotification(msg.username + " discarded their " + msg.value + " card.");
       } else if (msg.type === "first-round-betting-commenced") {
         console.log("First round betting commenced.");
-        alert("First round betting has commenced.");
+        showNotification("First round betting has commenced.");
       } else if (msg.type === "second-round-betting-commenced") {
-          alert("Second round betting has commenced.");
+        showNotification("Second round betting has commenced.");
       } else if (msg.type === "second-round-betting-skipped") {
-          alert("1 or more players are all in. Second round betting skipped.");
+        showNotification("1 or more players are all in. Second round betting skipped.");
       } else if (msg.type === "player-folded") {
-            alert(msg.username + " folded.");
+        showNotification(msg.username + " folded.");
             drawHand(msg.id, msg.username, msg.hand, false, true);
       } else if (msg.type === "player-formed-equation") {
         // no new cards are dealt, so we need this special message to make everyone redraw the reordered hands 
             drawHand(msg.id, msg.username, msg.hand, false, false); 
       } else if (msg.type === "bet-placed") {
-        console.log("socket message bet-placed");
-            alert(msg.username + " bet " + msg.betAmount);
+            console.log("socket message bet-placed");
+            showNotification(msg.username + " bet " + msg.betAmount);
             updateChipStack(msg.chipCount, document.getElementById("chipStacksContainer-" + msg.id));
 
             updatePot(msg.pot);
@@ -237,32 +238,33 @@
 
         console.log("socket message end-betting-round");
         if (msg.round === 'first'){
-            alert('First betting round complete. Dealing last open card');
+            showNotification('First betting round complete. Dealing last open card');
         } else if (msg.round === 'second') {
-            alert('Second betting round complete.');
+            showNotification('Second betting round complete.');
         }
       } else if (msg.type === "commence-equation-forming") {
         console.log("socket message commence-equation-forming");
             beginCountdownNotification();
-            alert('90 seconds! Drag cards to get close to 1 or 20.');
+            showNotification('90 seconds! Drag cards to get close to 1 or 20.', "limegreen", 90000);
             sortable.option("disabled", false)
 
       } else if (msg.type === "players-are-equation-forming") {
-            alert('Other players are forming their equations.');
+            showNotification('Other players are forming their equations.');
             beginCountdownNotification();
 
       } else if (msg.type === "end-equation-forming") {
             console.log("socket message end-equation-forming");
             hideNotificationDiv(); // do we call this actually? rename to resetAndHideNotificationDiv?
-            alert('Time is up!');
+            showNotification('Time is up!');
 
             sortable.option("disabled", true)
 
             let equationResult;
             try {
                 equationResult = applyOps(handDivs.get(myId).querySelectorAll('.card'));
+                console.log("265 equationResult " + equationResult);
             } catch (e) {
-                alert("You were unable to form an equation. You fold automatically.");
+                showNotification("You were unable to form an equation. You fold automatically.", "red", 5000);
                 socket.send(JSON.stringify({ type: "folded", userId: myId }));
             }
             console.log(Array.from(handDivs.get(myId).querySelectorAll('.card')).map(card => card.dataset.id));
@@ -275,7 +277,7 @@
             };
             socket.send(JSON.stringify(data));
       } else if (msg.type === "hi-lo-selection") {
-        alert("Select Hi, Lo, or Swing betting.");
+        showNotification("Select Hi, Lo, or Swing betting.");
 
         openChoiceModal(choices => {
             if (choices) {
@@ -294,7 +296,7 @@
             }
             });
       } else if (msg.type === "round-result") {
-        alert(msg.message);
+        showNotification(msg.message);
         updatePot(0);
 
         showResultsLayout();
@@ -309,10 +311,10 @@
         // do I need code here to actually keep track of MY chip count? or server does it
       } else if (msg.type === "kicked") {
         if (msg.userId === myId) {
-            alert("No more chips! You're out. Better luck next time!");
+            showNotification("No more chips! You're out. Better luck next time!", "red");
         } else {
             //TODO redraw hand to be out (red and strikethrough)
-            alert(msg.username + " has no more chips and is out of the game.");
+            showNotification(msg.username + " has no more chips and is out of the game.", "red");
         }
       }
     });
@@ -372,7 +374,6 @@
             document.body.appendChild(div);
             handDivs.set(id, div);
             
-
             if (id === myId) {
                 // make it a sortable for when we make the equations
                 const sortableTemp = Sortable.create(div, {
@@ -403,7 +404,7 @@
         }
 
         if (multiplicationCardDealt) {
-            alert("Multiplication card received. Please discard either addition, subtraction, or multiplication card.");
+            showNotification("Multiplication card received. Please discard either addition, subtraction, or multiplication card.", "yellow", 10000);
         }        
 
         // clear the hand, so we can redraw all cards on every deal
@@ -621,16 +622,16 @@
     function getColorFromSuit(suit) {
         switch(suit) {
             case Suits.GOLD:
-                return 'rgb(240, 198, 100)';
+                return 'rgb(232, 179, 64)';
                 break;
             case Suits.SILVER:
-                return 'rgb(200, 200, 200)';
+                return 'rgb(170, 170, 170)';
                 break;
             case Suits.BRONZE:
-                return 'rgb(122, 61, 0)';
+                return 'rgb(149, 90, 49)';
                 break;
             case Suits.STONE:
-                return 'rgb(66, 66, 66)';
+                return 'rgb(101, 101, 101)';
                 break;
         }
     }
@@ -923,6 +924,24 @@
         hands.forEach(hand => {
             hand.classList.add('full-width-hand')
         })
+    }
+
+    function showNotification(message, color = "white", duration = 3000) {
+        const container = document.getElementById('notifications');
+
+        const note = document.createElement('div');
+        note.className = 'notification';
+        note.textContent = message;
+        note.style.color = color;
+
+        note.style.setProperty('--duration', `${duration}ms`);
+
+        container.appendChild(note);
+
+        // Remove after animation finishes
+        setTimeout(() => {
+            note.remove();
+        }, duration + 300);
     }
 </script>
 </body>

@@ -296,7 +296,7 @@ wss.on("connection", (ws) => {
     if (data.type === "equation-result") {
         // definitely DON'T want to tell everyone what the results are yet
         const player = players.get(data.userId);
-        console.log(data.result);
+        console.log("299 equation-result received " + data.result);
 
         player.hand = data.order.map(i => player.hand[i]);
         player.equationResult = data.result;
@@ -777,7 +777,7 @@ function commenceEquationForming() {
         }
       });
     
-    console.log("Waiting 60 seconds for equation forming...");
+    console.log("Waiting 90 seconds for equation forming...");
 
     setTimeout(() => {
         console.log("Timer expired for equation forming, notifying clients to receive equation results.");
