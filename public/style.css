@@ -77,7 +77,7 @@ body {
 
 .small-hand .card { /* scale didn't work because doesn't affect layout :( moreover, transforms don't compose. so highlighting a smaller card doubles the size*/
     width: 55px;
-    height: 85px;
+    height: 83px;
     font-size: 60px;
     border-radius: 11px;
     /* box-shadow: 2px 2px rgba(0,0,0,0.3); */
@@ -156,6 +156,10 @@ body {
     transition: transform 0.2s ease;
 }
 
+.difference-card:hover {
+    transition: none;
+}
+
 .single-digit {
     transform: translateY(6%);
 }
@@ -200,8 +204,30 @@ body {
     box-shadow: 4px 4px rgba(255, 215, 0, 0.9);
 }
 
-.folded {
+/* is .myhand needed? */
+.myhand .folded.card {
     background-color: #ccc;
+}
+
+.folded.card-back {
+    animation: flip 0.3s cubic-bezier(0,2,1,2);
+    animation-delay: var(--delay);
+}
+
+@keyframes flip {
+    to {
+        transform: rotateY(180deg);
+    }
+  }
+
+@keyframes bounce {
+    to {
+      transform: translateY(-40px);
+    }
+  }
+
+.folded {
+    /* background-color: #ccc; */
     filter: grayscale(100%);
 }
 
@@ -249,7 +275,6 @@ body {
 }
 
 #betSlider {
-    -webkit-appearance: none;
     width: 24%;
     height: 11px;
     border-radius: 5px;  
@@ -337,7 +362,7 @@ body {
 
 #progressBarWrapper {
     width: 100%;
-    height: 30px;
+    height: 20px;
     background-color: rgba(0,0,0,0.4);;
 }
 
@@ -356,7 +381,7 @@ body {
     width: 100%;
     z-index: 9998;
     position: relative;
-    transform: translateY(-82%);
+    transform: translateY(-90%);
     text-shadow: rgba(0,0,0,0.3);
 }
 

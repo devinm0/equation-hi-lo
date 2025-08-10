@@ -229,7 +229,9 @@ wss.on("connection", (ws) => {
 
         if (data.folded) { 
             justPlayedPlayer.foldedThisTurn = data.folded; // can we pass nothing in the case of placing a bet?
-            
+            justPlayedPlayer.hand.forEach(card => {
+                card.hidden = true;
+            });
             wss.clients.forEach((client) => {
                 let handToSend = getHandToSendFromHand(players.get(data.userId).hand, client.userId === data.userId);
 
@@ -260,9 +262,13 @@ wss.on("connection", (ws) => {
             });
         }
 
-        const nonFoldedPlayers = Array.from(players).filter(([id, player]) => player.foldedThisTurn !== true)
+        const nonFoldedPlayers = [...players.values()].filter(player => player.foldedThisTurn !== true);
+
         if (nonFoldedPlayers.length === 1){
+            // setTimeout(() => { // delay so that client can draw the animation first. probably a bad idea since setTImeout and each side might not be synced.
             distributePotToOnlyRemainingPlayer(nonFoldedPlayers[0]);
+            // }, 50 * nonFoldedPlayers[0].hand.length + 300 );
+
             return;
         }
 
@@ -350,7 +356,10 @@ wss.on("connection", (ws) => {
 
     if (data.type === "folded") {
         players.get(data.userId).foldedThisTurn = true; // can we pass nothing in the case of placing a bet?
-            
+        players.get(data.userId).hand.forEach(card => {
+            card.hidden = true;
+        });
+
         wss.clients.forEach((client) => {
             let handToSend = getHandToSendFromHand(players.get(data.userId).hand, client.userId === data.userId);
             

@@ -212,7 +212,23 @@
         showNotification("1 or more players are all in. Second round betting skipped.");
       } else if (msg.type === "player-folded") {
         showNotification(msg.username + " folded.");
+
+        // const hand = handDivs.get(myId).querySelectorAll('.card');
+        // console.log(hand);
+
+        // for (const card of hand) {
+        //     card.classList.add("folded");
+        // };
+
+        // console.log(Date.now());
+
+        // setTimeout(() => {
+        //     console.log("timeout complete");
+
+        //     console.log(Date.now());
+
             drawHand(msg.id, msg.username, msg.hand, false, true);
+        // }, 50 * hand.length + 300 );
       } else if (msg.type === "player-formed-equation") {
         // no new cards are dealt, so we need this special message to make everyone redraw the reordered hands 
             drawHand(msg.id, msg.username, msg.hand, false, false); 
@@ -304,7 +320,7 @@
             }
             });
       } else if (msg.type === "round-result") {
-        showNotification(msg.message);
+        showNotification(msg.message, "orange", 10000);
         updatePot(0);
 
         showResultsLayout();
@@ -477,44 +493,7 @@
             let cardDivParagraph;
 
             if (card.value === OperatorCards.ROOT){
-                // for roots, need to draw it by hand since font is bad
-                const canvas = document.createElement('canvas');
-                let scaleFactor;
-                if (window.matchMedia("(max-width: 600px)").matches) {
-                    // Mobile device canvas
-                    scaleFactor = 3 / 10;
-                } else {
-                    // Larger device canvas
-                    scaleFactor = 0.75;
-                }
-                
-                canvas.id = `sqrt-canvas-${id}-${index}`;
-                const ctx = canvas.getContext('2d');
-
-                const width = scaleFactor * 120;
-                const height = scaleFactor * 180;
-                const ratio = window.devicePixelRatio || 1;
-                canvas.width = width * ratio;
-                canvas.height = height * ratio;
-
-                canvas.style.width = width + 'px'
-                canvas.style.height = height + 'px'
-
-                ctx.scale(ratio, ratio);
-
-                // draw root
-                ctx.fillStyle = folded ? 'lightgrey' : 'white';
-                ctx.fillRect(0, 0, scaleFactor * 120, scaleFactor * 180);
-                ctx.strokeStyle = 'rgb(40,40,40)';
-                ctx.lineWidth = scaleFactor * 10;
-                ctx.lineCap = 'butt'; 
-                ctx.beginPath();
-                ctx.moveTo(scaleFactor * 20, scaleFactor * 98);
-                ctx.lineTo(scaleFactor * 40, scaleFactor * 128);
-                ctx.lineTo(scaleFactor * 70, scaleFactor * 48);
-                ctx.lineTo(scaleFactor * 100, scaleFactor * 48);
-                ctx.stroke();
-
+                const canvas = drawRootSymbol(id, index, folded);
                 cardDiv.appendChild(canvas);
             } else {
                 cardDivParagraph = document.createElement("p");
@@ -528,39 +507,47 @@
             cardDiv.dataset.value = card.value; // for applyOps later
             cardDiv.className = card.value !== null ? "card" : "card-back"; // without null check, 0 becomes card-back since equivalent to false
 
-            if (card.suit === 4) {
-                cardDiv.classList.add("operator-card");
-            } else {
-                cardDiv.classList.add("number-card");
-            }
-
-            // careful with card and cardDiv naming like this
-            if (card.value === NumberCards.TEN){
-                cardDivParagraph.classList.add('ten');
-            } else if (card.suit !== Suits.OPERATOR) {
-                cardDivParagraph.classList.add('single-digit');
-            }
-
-            // is one of the three discardable operators
-            if (
-                card.value === OperatorCards.SUBTRACT ||
-                card.value === OperatorCards.ADD ||
-                card.value === OperatorCards.MULTIPLY
-            ) {
-                cardDivParagraph.dataset.value = card.value;
-
-                if (multiplicationCardDealt) { // TODO this is also a mess. We should have a separate drawHighlights function
-                    // learned: be careful with capitalization
-                    cardDiv.classList.add("card-highlighted");
-                }
-            }
-            cardDiv.style.color = getColorFromSuit(card.suit);
-            
-            if (folded) { // do after card or card back. still want to show back even if greyed out
+            if (folded && myId !== id) {
+                // other player's folded cards should be grey and card-back (hidden)
+                cardDiv.className = "card-back";
                 cardDiv.classList.add("folded");
-            }
+                cardDiv.style.setProperty('--delay', `${index*50}ms`); // so that folding bounce happens in a wave
+            } else {
+                if (folded) { // do after card or card back. still want to show back even if greyed out
+                    cardDiv.classList.add("folded");
+                }
 
-            cardDiv.dataset.id = index;
+                if (card.suit === 4) {
+                    cardDiv.classList.add("operator-card");
+                } else {
+                    cardDiv.classList.add("number-card");
+                }
+
+                // careful with card and cardDiv naming like this
+                if (card.value === NumberCards.TEN){
+                    cardDivParagraph.classList.add('ten');
+                } else if (card.suit !== Suits.OPERATOR) {
+                    cardDivParagraph.classList.add('single-digit');
+                }
+
+                // is one of the three discardable operators
+                if (
+                    card.value === OperatorCards.SUBTRACT ||
+                    card.value === OperatorCards.ADD ||
+                    card.value === OperatorCards.MULTIPLY
+                ) {
+                    cardDivParagraph.dataset.value = card.value;
+
+                    if (multiplicationCardDealt) { // TODO this is also a mess. We should have a separate drawHighlights function
+                        // learned: be careful with capitalization
+                        cardDiv.classList.add("card-highlighted");
+                    }
+                }
+                cardDiv.style.color = getColorFromSuit(card.suit);
+
+                // for sorting later
+                cardDiv.dataset.id = index;
+            }
 
             if (card.hidden) {
                 cardDiv.style.boxShadow = 'rgba(0, 0, 0, 1) 0px 0px inset, 4px 4px rgba(0, 0, 0, 0.3)';
@@ -953,6 +940,48 @@
         setTimeout(() => {
             note.remove();
         }, duration + 300);
+    }
+
+    function drawRootSymbol(id, index, folded) {
+        // for roots, need to draw it by hand since font is bad
+        const canvas = document.createElement('canvas');
+        let scaleFactor;
+        if (window.matchMedia("(max-width: 600px)").matches) {
+            // Mobile device canvas
+            scaleFactor = 3 / 10;
+        } else {
+            // Larger device canvas
+            scaleFactor = 0.75;
+        }
+        
+        canvas.id = `sqrt-canvas-${id}-${index}`;
+        const ctx = canvas.getContext('2d');
+
+        const width = scaleFactor * 120;
+        const height = scaleFactor * 180;
+        const ratio = window.devicePixelRatio || 1;
+        canvas.width = width * ratio;
+        canvas.height = height * ratio;
+
+        canvas.style.width = width + 'px'
+        canvas.style.height = height + 'px'
+
+        ctx.scale(ratio, ratio);
+
+        // draw root
+        ctx.fillStyle = folded ? 'lightgrey' : 'white';
+        ctx.fillRect(0, 0, scaleFactor * 120, scaleFactor * 180);
+        ctx.strokeStyle = 'rgb(40,40,40)';
+        ctx.lineWidth = scaleFactor * 10;
+        ctx.lineCap = 'butt'; 
+        ctx.beginPath();
+        ctx.moveTo(scaleFactor * 20, scaleFactor * 98);
+        ctx.lineTo(scaleFactor * 40, scaleFactor * 128);
+        ctx.lineTo(scaleFactor * 70, scaleFactor * 48);
+        ctx.lineTo(scaleFactor * 100, scaleFactor * 48);
+        ctx.stroke();
+
+        return canvas;
     }
 </script>
 </body>
