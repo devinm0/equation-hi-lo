@@ -411,7 +411,7 @@ server.listen(3000, "0.0.0.0", () => {
   console.log("Server running on http://localhost:3000");
 });
 
-function clearHandsAndDealOperatorCards() {    // don't need ws
+function clearHandsAndDealOperatorCards() {
     players.forEach((player, id) => { // why does value come before key. so annoying
         player.hand = [];
 
@@ -705,8 +705,12 @@ function commenceSecondRoundBetting() {
 
 function advanceToNextPlayersTurn(betAmount) { // should take a parameter here
     console.log("Advancing to next player's turn, with id:", currentTurnPlayerId);
-    const playerChipCounts = players.values().map(player => player.chipCount);
-    const maxBet = Math.min(...playerChipCounts);
+    // Player A bets 10 and then has 20 chips. Player B has 30 chips. Max bet is still 30, not 20. 
+    // So add the 10 and 20 to get 30. (Add chips PLUS the chips they have in this round)
+    const nonFoldedPlayerChipCounts = players.values().filter(player => player.foldedThisTurn !== true).map(player => player.chipCount + player.betAmount);
+    const maxBet = Math.min(...nonFoldedPlayerChipCounts); // bug. should only be players who have not played this turn
+    // but needs to stack. let's say 3 people. 2 people call, third person raises 20 out of 25 chips.
+    // maxBet is 25 for each of them, but when it comes to third player again the max is 5
     
     // modify this so that we don't trust the client?
     // but technically we do because only currentTurnPlayer can send a betting message.

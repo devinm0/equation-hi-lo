@@ -17,7 +17,7 @@
                     <p>Low</p>
                 </div>
                 <div class="option" data-choice="high">
-                    <div class="high-symbol"><span id="high-symbol-span">20</span></div>
+                    <div class="high-symbol"><span class="high-symbol-span">20</span></div>
                     <p>High</p>
                 </div>
             </div>
@@ -324,7 +324,7 @@
         showNotification(msg.message, "orange", 10000);
         updatePot(0);
 
-        showResultsLayout();
+        showResultsLayout(msg.loWinner.id, msg.hiWinner.id);
         if (! msg.becauseAllButOneFolded) {
             displayHandResults(msg); // in the case of everyone but one folding, we don't need to show results
             // a message saying the whole pot went to the last person by default is sufficient.
@@ -405,7 +405,31 @@
                     animation: 150,
                     draggable: ".card",
                     disabled: true,
-                    forceFallback: true
+                    forceFallback: true,
+                    onEnd: function () {
+                        const cards = Array.from(div.querySelectorAll('.card'));
+                        
+                        // Remove old blink class
+                        cards.forEach(card => card.classList.remove('blink-red'));
+
+                        for (let i = 0; i < cards.length - 1; i++) {
+                            const current = cards[i].dataset.value;
+                            const next = cards[i + 1].dataset.value;
+
+                            if (current === '÷' && next === '0') {
+                                cards[i].classList.add('blink-red');
+                                cards[i + 1].classList.add('blink-red');
+
+                                // need to remove the class, or else it blinks again once we drag it
+                                setTimeout(() => {
+                                    cards[i].classList.remove('blink-red');
+                                    cards[i + 1].classList.remove('blink-red');
+                                }, 1200)
+
+                                showNotification("Cannot divided by zero", "red");
+                            }
+                        }
+                    }
                 });
                 sortable = sortableTemp;
             }
@@ -475,7 +499,13 @@
         hiOptionDiv.className = "high-symbol";
         hiOptionDiv.classList.add("hidden");
         hiOptionDiv.classList.add("high-symbol-mini");
-        hiOptionDiv.textContent = 20;
+
+        // necessary so that "20" can appear straight instead of rotated with the high symbol
+        const hiOptionSpan = document.createElement("span");
+        hiOptionSpan.classList.add("high-symbol-span");
+        hiOptionSpan.textContent = 20;
+        hiOptionDiv.appendChild(hiOptionSpan);
+
         nameDiv.appendChild(hiOptionDiv); // TODO will need to put it at the beginning not the end
 
         const nameSpan = document.createElement("span");
@@ -654,6 +684,15 @@
         slider.max = maxBet;
         slider.value = toCall;
 
+        console.log('before' + maxBet);
+        
+        if (slider.min === slider.max) {
+            console.log('hit');
+            slider.style.display = "none";
+            sliderMin.style.display = "none";
+            sliderMax.style.display = "none";
+        }
+
         // Initial label
         betLabel.textContent = toCall + " to call";
         sliderMin.textContent = toCall;
@@ -695,6 +734,11 @@
     }
 
     function hideBettingControls() {
+        // we may have previously hidden the slider if max bet was equal to min bet
+        document.getElementById("betSlider").style.display = "inline-block";
+        document.getElementById("sliderMin").style.display = "inline-block";
+        document.getElementById("sliderMax").style.display = "inline-block";
+
         document.getElementById("bettingControls").style.display = "none";
     }
 
@@ -915,9 +959,14 @@
         myHand.forEach(hand => {
             hand.classList.remove('small-hand')
         })
+
+        // const winningHands = document.querySelectorAll('.winning-hand');
+        // winningHands.forEach(hand => {
+        //     hand.classList.remove('winning-hand')
+        // })
     }
 
-    function showResultsLayout() {
+    function showResultsLayout(loWinner, hiWinner) {
         const rightHands = document.querySelectorAll('.righthand');
         rightHands.forEach(hand => {
             hand.classList.remove('righthand')
@@ -933,6 +982,22 @@
         hands.forEach(hand => {
             hand.classList.add('full-width-hand')
         })
+
+        if (loWinner != null) {
+            console.log("loWinner: " + loWinner);
+            handDivs.get(loWinner).querySelectorAll(".card").forEach((card, index) => {
+                card.classList.add('card-bounce');
+                card.style.setProperty('--delay', `${index * 50}ms`);
+            });
+        }
+
+        if (hiWinner != null) {
+            console.log("hiWinner: " + loWinner);
+            handDivs.get(hiWinner).querySelectorAll(".card").forEach((card, index) => {
+                card.classList.add('card-bounce');
+                card.style.setProperty('--delay', `${index * 50}ms`);
+            });
+        }
     }
 
     function showNotification(message, color = "white", duration = 3000) {

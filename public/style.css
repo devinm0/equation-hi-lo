@@ -54,6 +54,7 @@ body {
 .full-width-hand {
     width: 100%;
     justify-content: center;
+    margin-bottom: 1em;
 }
 
 .myhand {
@@ -111,7 +112,7 @@ body {
 
 .righthand {
     margin-left: auto;
-    flex-direction: row-reverse;
+    /* flex-direction: row-reverse; */
 }
 
 .handLabel {
@@ -127,7 +128,7 @@ body {
 .handLabel p {
     margin-block: 0;
     text-align: center;
-    background-color: rgba(0,0,0,0.5);
+    background-color: rgba(0,0,0,0.4);
     padding: 10px;
     border-radius: 16px;
     width: 100px;
@@ -156,8 +157,9 @@ body {
     transition: transform 0.2s ease;
 }
 
+/* the equation result should not respond to mouse hover like regular cards */
 .difference-card:hover {
-    transition: none;
+    transform: none;
 }
 
 .single-digit {
@@ -218,15 +220,29 @@ body {
     animation: slideLeft 3s ease;
 }
 
+.blink-red {
+    animation: blink 0.3s ease 2;
+}
+
+@keyframes blink {
+    50% { background-color: rgb(235, 75, 75); }
+    0%, 100% { background-color: white; }
+}
+
 @keyframes flip {
     to {
         transform: rotateY(180deg);
     }
   }
 
+.card-bounce {
+    animation: bounce 0.3s cubic-bezier(0,2,1,2);
+    animation-delay: var(--delay);
+}
+
 @keyframes bounce {
     to {
-      transform: translateY(-40px);
+      transform: translateY(-0.5em);
     }
   }
 
@@ -378,45 +394,19 @@ body {
 }
 
 @keyframes progressBar {
-    0% {
-        background-color: rgb(50, 205, 102);
-    }
-    55% {
-        background-color: #ebc605;
-    }
-    75% {
-        background-color: orange;    
-    }
-    90% {
-        background-color: red;
-    }
-    91% {
-        background-color: orange;    
-    }
-    92% {
-        background-color: red;
-    }
-    93% {
-        background-color: orange;    
-    }
-    94% {
-        background-color: red;
-    }
-    95% {
-        background-color: orange;    
-    }
-    96% {
-        background-color: red;
-    }
-    97% {
-        background-color: orange;    
-    }
-    98% {
-        background-color: red;
-    }
-    99% {
-        background-color: red;
-    }
+    0% { background-color: rgb(50, 205, 102); }
+    55% { background-color: #ebc605; }
+    75% { background-color: orange; }
+    90% { background-color: red; }
+    91% { background-color: orange; }
+    92% { background-color: red; }
+    93% { background-color: orange; }
+    94% { background-color: red; }
+    95% { background-color: orange; }
+    96% { background-color: red; }
+    97% { background-color: orange; }
+    98% { background-color: red; }
+    99% { background-color: red; }
 }
 
 #progressBarOverlay {
@@ -697,7 +687,7 @@ body {
   box-shadow: 5px 0px rgba(0,0,0,0.3);
 }
 
-#high-symbol-span {
+.high-symbol-span {
   transform: rotate(-45deg);
 }
 
