@@ -83,7 +83,8 @@
         const remaining = Math.max(0, Math.floor(remainingUnrounded));
         progressBarOverlay.textContent = remaining;
 
-        progressBar.style.width = remainingUnrounded * 100 / 90 + "%";
+        const width = remainingUnrounded * 100 / 90;
+        progressBar.style.width = width + "%";
 
         if (remaining > 0) {
             requestAnimationFrame(updateTimer); // More accurate and smoother
@@ -431,6 +432,7 @@
             showNotification("Multiplication card received. Please discard either addition, subtraction, or multiplication card.", "yellow", 10000);
         }        
 
+        const handLengthBeforeThisDeal = handDivs.get(id).querySelectorAll(".card, .card-back").length;
         // clear the hand, so we can redraw all cards on every deal
         handDivs.get(id).innerHTML = ``; // injection
         
@@ -553,6 +555,15 @@
                 cardDiv.style.boxShadow = 'rgba(0, 0, 0, 1) 0px 0px inset, 4px 4px rgba(0, 0, 0, 0.3)';
                 // cardDiv.style.backgroundColor = 'lightgrey';
             }
+
+            if (index >= handLengthBeforeThisDeal) {
+                cardDiv.classList.add("new-card");
+
+                setTimeout(() => {
+                    cardDiv.classList.remove("new-card");
+                }, 3000)
+            }
+
             handDivs.get(id).appendChild(cardDiv);
         });
     }

@@ -214,6 +214,10 @@ body {
     animation-delay: var(--delay);
 }
 
+.new-card {
+    animation: slideLeft 3s ease;
+}
+
 @keyframes flip {
     to {
         transform: rotateY(180deg);
@@ -369,6 +373,50 @@ body {
 #progressBar {
     height: 100%;
     background-color: #ebc605;
+    transition: background-color 1s ease;
+    animation: progressBar 90s ease;
+}
+
+@keyframes progressBar {
+    0% {
+        background-color: rgb(50, 205, 102);
+    }
+    55% {
+        background-color: #ebc605;
+    }
+    75% {
+        background-color: orange;    
+    }
+    90% {
+        background-color: red;
+    }
+    91% {
+        background-color: orange;    
+    }
+    92% {
+        background-color: red;
+    }
+    93% {
+        background-color: orange;    
+    }
+    94% {
+        background-color: red;
+    }
+    95% {
+        background-color: orange;    
+    }
+    96% {
+        background-color: red;
+    }
+    97% {
+        background-color: orange;    
+    }
+    98% {
+        background-color: red;
+    }
+    99% {
+        background-color: red;
+    }
 }
 
 #progressBarOverlay {
@@ -410,6 +458,21 @@ body {
     max-width: 300px;
     animation: slideIn 0.3s ease, fadeOut 0.3s ease forwards;
     animation-delay: 0s, var(--duration);
+}
+
+@keyframes slideLeft {
+    0% {
+        transform: translateX(300%);
+        opacity: 0;
+        filter: sepia() saturate(500%);
+    }
+    30% {
+        transform: translateX(0);
+        opacity: 1;
+    }
+    100% {
+        filter: none;
+    }
 }
 
 @keyframes slideIn {
