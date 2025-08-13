@@ -11,14 +11,14 @@ const wss = new WebSocket.Server({ server });
 app.use(express.static("public"));
 
 class Player {
-    constructor(id, username, hand, chipCount, foldedThisTurn = false, betAmount = 0, turnTakenThisRound = false, equationResult = null, choices = [], color = null) {
+    constructor(id, username, hand, chipCount, foldedThisTurn = false, stake = 0, turnTakenThisRound = false, equationResult = null, choices = [], color = null) {
         this.id = id;
         this.username = username;
         this.hand = hand;
         this.chipCount = chipCount;
         this.foldedThisTurn = foldedThisTurn;
-        this.betAmount = betAmount;
-        this.turnTakenThisRound = turnTakenThisRound;
+        this.stake = stake;
+        this.turnTakenThisRound = turnTakenThisRound;   
         this.equationResult = equationResult;
         this.choices = choices;
         this.out = false;
@@ -50,8 +50,9 @@ let hostId = null;
 // rather than global variables how can we make this functional
 let numPlayersThatHaveDiscarded = 0;
 let numPlayersThatNeedToDiscard = 0; 
-let firstRoundBettingCompleted = false; // TODO reset to false when a whole game round is done
-let betForThisRoundEqualsSmallestPlayersChips = false;
+let isNotFirstBettingRound = false; // TODO reset to false when a whole game round is done
+let maxRaiseReached = false;
+let toCall = 0;
 
 wss.on("connection", (ws) => {
   const userId = uuidv4();
@@ -122,7 +123,7 @@ wss.on("connection", (ws) => {
         // TODO need to change this to allow for second round of betting
         console.log(numPlayersThatHaveDiscarded, numPlayersThatNeedToDiscard)
         if (numPlayersThatHaveDiscarded === numPlayersThatNeedToDiscard) {
-            if (firstRoundBettingCompleted) {
+            if (isNotFirstBettingRound) {
                 commenceEquationForming();
             } else {
                 commenceFirstRoundBetting(); 
@@ -204,6 +205,9 @@ wss.on("connection", (ws) => {
             console.log(client.userId);
         });
     }
+    // tests
+    // two players call and third player folds
+    // one player calls and two players fold = distribute pot to first player and end round
     if (data.type === "bet-placed"){
         if (data.userId !== currentTurnPlayerId) return; // invalid message
 
@@ -211,70 +215,23 @@ wss.on("connection", (ws) => {
         justPlayedPlayer.turnTakenThisRound = true;
         // TODO this logic is unreadable. Come back and refactor after it's been a while
         // It's actually good to refactor when I don't understand it. Forces me to make it understandable.
-        justPlayedPlayer.betAmount += data.betAmount // even if folded. (just passing on last players bet amount) 
-        // refactor to use a global server-side currentBetAmount variable
-        // when I do, need to reset it in endBettingRound function
-
+        justPlayedPlayer.stake += data.betAmount // even if folded. (just passing on last players bet amount) 
         //TODO need to skip following logic if player folded
         //TODO rename betAmount to total bet this round
 
-        if (data.folded) { 
-            justPlayedPlayer.foldedThisTurn = data.folded; // can we pass nothing in the case of placing a bet?
-            justPlayedPlayer.hand.forEach(card => {
-                card.hidden = true;
-            });
+        justPlayedPlayer.chipCount -= data.betAmount // should only be the diff
+        toCall += data.betAmount;
+        pot += data.betAmount;
 
-            // named parameters not possible in JS. switch to TS
-            sendSocketMessageThatPlayerFolded(data.userId);
-        } else {
-            justPlayedPlayer.chipCount -= data.betAmount // should only be the diff
-            pot += data.betAmount;
-
-            sendSocketMessageToEveryClient({
-                type: "bet-placed",
-                id: data.userId,
-                username: players.get(data.userId).username,
-                betAmount: data.betAmount, // so users can see "so and so bet x chips"
-                chipCount: players.get(data.userId).chipCount, // to update the chip stack visual of player x for each player
-                pot: pot // otherwise, pot won't get updated on last player of the round
-            });
-        }
-
-        const nonFoldedPlayers = [...players.values()].filter(player => player.foldedThisTurn !== true);
-
-        if (nonFoldedPlayers.length === 1){
-            // setTimeout(() => { // delay so that client can draw the animation first. probably a bad idea since setTImeout and each side might not be synced.
-            distributePotToOnlyRemainingPlayer(nonFoldedPlayers[0]);
-            // }, 50 * nonFoldedPlayers[0].hand.length + 300 );
-
-            return;
-        }
-
-        if (bettingRoundIsComplete()) {
-            // need a check on game state here if firstRoundBetting, dealLastOpenCard. if lastroundBetting, go to equation making mode
-            if (firstRoundBettingCompleted) { // confusing, sounds like we end second round at the end of first. rename to in secondroundbetting
-                endBettingRound("second");
-                commenceHiLoSelection();
-            } else {
-                endBettingRound("first");
-                firstRoundBettingCompleted = true;
-                dealLastOpenCardToEachPlayer();
-                console.log(numPlayersThatNeedToDiscard);
-                if (numPlayersThatHaveDiscarded === numPlayersThatNeedToDiscard) {
-                    commenceEquationForming();
-                }
-            }
-        } else { 
-            // using else so that we don't send the "next turn" even when it's over - 
-            // but is this an issue for second betting round? 
-            // who will we start with
-            if (justPlayedPlayer.chipCount === 0) {
-                // if anyone is 0, it means someone is all in and no one can bet anymore
-                betForThisRoundEqualsSmallestPlayersChips = true;
-            }
-            currentTurnPlayerId = findNextPlayerTurn();
-            advanceToNextPlayersTurn(justPlayedPlayer.betAmount); // could just get the max of player betAmounts here. still, unreadable. have runningBetAmount
-        }
+        sendSocketMessageToEveryClient({
+            type: "bet-placed",
+            id: data.userId,
+            username: players.get(data.userId).username,
+            betAmount: data.betAmount, // so users can see "so and so bet x chips"
+            chipCount: players.get(data.userId).chipCount, // to update the chip stack visual of player x for each player
+            pot: pot // otherwise, pot won't get updated on last player of the round
+        });
+        endRoundOrProceedToNextPlayer(justPlayedPlayer);
     }
 
     // TODO more tests - have a folded player submit an equation anyway and confirm it's discarded by server.
@@ -304,15 +261,14 @@ wss.on("connection", (ws) => {
         })
 
         // if we've received equation result socket messages from every player, we can proceed to second round of betting.
-        const nonFoldedPlayers = [...players.values()].filter(player => player.foldedThisTurn !== true);
-        if (nonFoldedPlayers.length === 1){
-            distributePotToOnlyRemainingPlayer(nonFoldedPlayers[0]);
+        if (nonFoldedPlayers().length === 1){
+            distributePotToOnlyRemainingPlayer(nonFoldedPlayers()[0]);
             return;
         }
 
         // check that every player submitted choices
-        if (nonFoldedPlayers.every(player => player.equationResult !== null)) {
-            if (betForThisRoundEqualsSmallestPlayersChips) {
+        if (nonFoldedPlayers().every(player => player.equationResult !== null)) {
+            if (maxRaiseReached) {
                 console.log('Max bet was reached on first round of betting. Skipping second round.');
 
                 sendSocketMessageToNonFoldedPlayers({ type: "second-round-betting-skipped" });
@@ -327,12 +283,22 @@ wss.on("connection", (ws) => {
     }
 
     if (data.type === "folded") {
-        players.get(data.userId).foldedThisTurn = true; // can we pass nothing in the case of placing a bet?
-        players.get(data.userId).hand.forEach(card => {
+        const foldedPlayer = players.get(data.userId)
+        foldedPlayer.foldedThisTurn = true; // can we pass nothing in the case of placing a bet?
+        foldedPlayer.hand.forEach(card => {
             card.hidden = true;
         });
 
         sendSocketMessageThatPlayerFolded(data.userId);
+
+        if (nonFoldedPlayers().length === 1){
+            distributePotToOnlyRemainingPlayer(nonFoldedPlayers()[0]);
+            return;
+        }
+
+        if (data.manual === true) { // TODO unreadable
+            endRoundOrProceedToNextPlayer(foldedPlayer);
+        }
     }
 
     if (data.type === "hi-lo-selected") {
@@ -340,13 +306,11 @@ wss.on("connection", (ws) => {
         const player = players.get(data.userId);
         player.choices = data.choices;
 
-        const nonFoldedPlayers = [...players.values()].filter(player => player.foldedThisTurn !== true);
-        
         // check that every player submitted choices
-        if (nonFoldedPlayers.every(player => player.choices.length > 0)) {
+        if (nonFoldedPlayers().every(player => player.choices.length > 0)) {
             console.log('everyone submitted their hi or lo selections');
 
-            revealHiddenCards(nonFoldedPlayers);
+            revealHiddenCards();
 
             determineWinners();
         }
@@ -357,11 +321,8 @@ wss.on("connection", (ws) => {
         const player = players.get(data.userId);
         player.acknowledgedResults = true;
 
-        const nonFoldedPlayers = [...players.values()].filter(player => player.foldedThisTurn !== true);
         // check that every player submitted choices
-        if (nonFoldedPlayers.every(player => player.acknowledgedResults === true)) {
-            console.log('everyone acknowledged the hand');
-
+        if (nonFoldedPlayers().every(player => player.acknowledgedResults === true)) {
             endHand();
         }
     }
@@ -371,6 +332,39 @@ wss.on("connection", (ws) => {
 server.listen(3000, "0.0.0.0", () => {
   console.log("Server running on http://localhost:3000");
 });
+
+function nonFoldedPlayers(){
+    return [...players.values()].filter(player => player.foldedThisTurn !== true);
+}
+
+function endRoundOrProceedToNextPlayer(justPlayedPlayer) {
+    if (bettingRoundIsComplete()) {
+        if (isNotFirstBettingRound) {
+            endBettingRound("second");
+            commenceHiLoSelection();
+        } else {
+            endBettingRound("first");
+            dealLastOpenCardToEachPlayer();
+
+            // possible that players receive multiply cards on last deal
+            // so don't commence equation forming unless all discards are complete
+            if (numPlayersThatHaveDiscarded === numPlayersThatNeedToDiscard) {
+                commenceEquationForming();
+            }
+        }
+    } else { 
+        if (justPlayedPlayer.chipCount === 0) {
+            // if anyone is 0, it means someone is all in and no one can bet anymore
+            maxRaiseReached = true;
+        }
+        currentTurnPlayerId = findNextPlayerTurn();
+
+        // subtract player's stake.
+        // if someone bets 10, then next raises 4, we can toCall to be 4, NOT 14
+        // it would also allow betting more chips than a player has
+        advanceToNextPlayersTurn(toCall - players.get(currentTurnPlayerId).stake);
+    }
+}
 
 function clearHandsAndDealOperatorCards() {
     players.forEach((player, id) => { // why does value come before key. so annoying
@@ -456,8 +450,7 @@ function dealTwoOpenCardsToEachPlayer() {
 
 function dealLastOpenCardToEachPlayer() {
     // can't wanna deal to folded players
-    const nonFoldedPlayers = [...players.values()].filter(player => player.foldedThisTurn !== true);
-    nonFoldedPlayers.forEach((player, id) => { // why does value come before key. so annoying    
+    nonFoldedPlayers().forEach((player, id) => { // why does value come before key. so annoying    
         // first card can be any card
         const draw = dealAnyCard();
         player.hand.push(draw);
@@ -489,8 +482,8 @@ function endHand() {
         console.log(player.username, "chipCount:", player.chipCount);
     })
 
-    betForThisRoundEqualsSmallestPlayersChips = false;
-    firstRoundBettingCompleted = false;
+    maxRaiseReached = false;
+    isNotFirstBettingRound = false;
     handNumber += 1;
     numPlayersThatHaveDiscarded = 0;
     numPlayersThatNeedToDiscard = 0; 
@@ -540,9 +533,23 @@ function sendSocketMessageToEveryClient(objectToSend) {
     });
 }
 
+// TODO test have one person fold BEFORE equtaion forming and make sure
+// they don't receive an end-equation-result message
+// then have remaining players fold AFTER and make sure it still ends
+
+// TODO test that hi lo selection ends correctly even with one or more folded players
 function sendSocketMessageToNonFoldedPlayers(objectToSend) {
     wss.clients.forEach((client) => {
-        if (client.readyState === WebSocket.OPEN) {
+        if (!players.get(client.userId).foldedThisTurn && client.readyState === WebSocket.OPEN) {
+            const payload = JSON.stringify(objectToSend);
+            client.send(payload);
+        }
+    });
+}
+
+function sendSocketMessageToFoldedPlayers(objectToSend) {
+    wss.clients.forEach((client) => {
+        if (players.get(client.userId).foldedThisTurn && client.readyState === WebSocket.OPEN) {
             const payload = JSON.stringify(objectToSend);
             client.send(payload);
         }
@@ -594,9 +601,12 @@ function initializeHand() { // means start a hand of play
 }
 
 function endBettingRound(round) {
-    for (const [key, value] of players) {
-        value.turnTakenThisRound = false;
-        value.betAmount = 0;
+    isNotFirstBettingRound = true;
+    toCall = 0;
+
+    for (const [id, player] of players) {
+        player.turnTakenThisRound = false;
+        player.stake = 0;
     }
 
     wss.clients.forEach((client) => {
@@ -678,7 +688,7 @@ function advanceToNextPlayersTurn(betAmount) { // should take a parameter here
     console.log("Advancing to next player's turn, with id:", currentTurnPlayerId);
     // Player A bets 10 and then has 20 chips. Player B has 30 chips. Max bet is still 30, not 20. 
     // So add the 10 and 20 to get 30. (Add chips PLUS the chips they have in this round)
-    const nonFoldedPlayerChipCounts = players.values().filter(player => player.foldedThisTurn !== true).map(player => player.chipCount + player.betAmount);
+    const nonFoldedPlayerChipCounts = nonFoldedPlayers().map(player => player.chipCount + player.stake);
     const maxBet = Math.min(...nonFoldedPlayerChipCounts);
     
     // modify this so that we don't trust the client?
@@ -687,7 +697,7 @@ function advanceToNextPlayersTurn(betAmount) { // should take a parameter here
         if (/*client !== ws && */client.readyState === WebSocket.OPEN) {
           client.send(JSON.stringify({
             type: "next-turn",
-            toCall: betAmount - players.get(currentTurnPlayerId).betAmount,
+            toCall: betAmount - players.get(currentTurnPlayerId).stake,
             maxBet: maxBet,
             currentTurnPlayerId: currentTurnPlayerId,
             username: players.get(currentTurnPlayerId).username,
@@ -725,14 +735,10 @@ function findNextPlayerTurn() {
 }
 
 function bettingRoundIsComplete() {
-    const nonFoldedPlayers = Array.from(players).filter(([id, player]) => player.foldedThisTurn !== true)
-
-    const playerBetAmounts = nonFoldedPlayers.map(([id, player]) => player.betAmount);
+    const playerBetAmounts = nonFoldedPlayers().map(player => player.stake);
     const setOfBets = new Set(playerBetAmounts);
     // bets are all equal AND active players have all bet at least once, then betting round is complete
-    if (setOfBets.size === 1 && nonFoldedPlayers.every(([id, player]) => player.turnTakenThisRound === true)){ 
-        // end turn
-        console.log("everyone has called or folded");
+    if (setOfBets.size === 1 && nonFoldedPlayers().every(player => player.turnTakenThisRound === true)){ 
         return true;
     }
 
@@ -740,19 +746,19 @@ function bettingRoundIsComplete() {
 }
          
 function commenceEquationForming() {
-    sendSocketMessageToEveryClient({ 
-        type: "commence-equation-forming", 
-    });
-
     console.log("Waiting 90 seconds for equation forming...");
 
+    sendSocketMessageToNonFoldedPlayers({ type: "commence-equation-forming" });
+    sendSocketMessageToFoldedPlayers({ type: "commence-equation-forming", folded: true });
+
     setTimeout(() => {
-        console.log("Timer expired for equation forming, notifying clients to receive equation results.");
         endEquationForming();
-    }, 10000);
+    }, 90000);
 }
 
 function endEquationForming() {
+    console.log("Timer expired for equation forming, notifying clients to receive equation results.");
+
     sendSocketMessageToNonFoldedPlayers({ 
         type: "end-equation-forming", 
     });
@@ -802,16 +808,16 @@ function distributePotToOnlyRemainingPlayer(onlyRemainingPlayerThisHand){
         console.log(player.username, "chipCount:", player.chipCount);
     })
 
-    firstRoundBettingCompleted ? endBettingRound("second") : endBettingRound("first");
+    isNotFirstBettingRound ? endBettingRound("second") : endBettingRound("first");
     endHand();    
 }
 
-function revealHiddenCards(nonFoldedPlayers) {
+function revealHiddenCards() {
     // Don't reveal folded players' hidden cards
 
     // TODO deal is kind of a misnomer ... we are just rerendering the whole hand, not dealing cards
     // maybe name it "render hand"
-    nonFoldedPlayers.forEach((player) => {
+    nonFoldedPlayers().forEach((player) => {
         wss.clients.forEach((client) => {
             let handToSend = getHandToSendFromHand(player.hand, revealCard = true);
             
@@ -844,9 +850,8 @@ function determineWinners() {
           });
     }
 
-    const nonFoldedPlayers = [...players.values()].filter(player => player.foldedThisTurn !== true);
-    const loBettingPlayers = nonFoldedPlayers.filter(player => player.choices.includes('low'));
-    const hiBettingPlayers = nonFoldedPlayers.filter(player => player.choices.includes('high'));
+    const loBettingPlayers = nonFoldedPlayers().filter(player => player.choices.includes('low'));
+    const hiBettingPlayers = nonFoldedPlayers().filter(player => player.choices.includes('high'));
       
     const loTarget = 1;
     const hiTarget = 20;
@@ -910,7 +915,7 @@ function determineWinners() {
       
     // notify everyone about the winners
     let payload;
-    let results = [...nonFoldedPlayers.values()].map(player => ({
+    let results = [...nonFoldedPlayers().values()].map(player => ({
         id: player.id,
         hand: player.hand,
         result: player.equationResult,
@@ -922,7 +927,6 @@ function determineWinners() {
         currentHighestPlayersHighestCard: currentHighestPlayersHighestCard?.value
         // TODO pass in lo cards and hi cards here.
     }));
-    console.log(hiWinner);
     // there's distinct lo and hi winners
     if (loWinner !== null && hiWinner !== null) {
         payload = {

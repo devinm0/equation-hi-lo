@@ -290,7 +290,7 @@
                 console.log("265 equationResult " + equationResult);
             } catch (e) {
                 showNotification("You were unable to form an equation. You fold automatically.", "red", 5000);
-                socket.send(JSON.stringify({ type: "folded", userId: myId }));
+                socket.send(JSON.stringify({ type: "folded", manual: false }));
             }
             console.log(Array.from(handDivs.get(myId).querySelectorAll('.card')).map(card => card.dataset.id));
             const data = {
@@ -728,7 +728,7 @@
             // send fold message. server will eliminate player and broadcast notification   
             console.log("Player folded, toCall is " + toCall);
             // need to send betAmount so that it doesn't get reset. refactor to track on server side
-            socket.send(JSON.stringify({ type: "bet-placed", userId: myId, betAmount: toCall, folded: true }));
+            socket.send(JSON.stringify({ type: "folded", userId: myId, manual: true }));
             hideBettingControls();
         };
     }
