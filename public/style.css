@@ -128,7 +128,7 @@ body {
 .handLabel p {
     margin-block: 0;
     text-align: center;
-    background-color: rgba(0,0,0,0.4);
+    background-color: rgba(0,0,0,0.3);
     padding: 10px;
     border-radius: 16px;
     width: 100px;
@@ -182,7 +182,7 @@ body {
 .small-hand .difference-card {
     display: block; /* need to display two lines in this card */
     font-size: 30px; /* need to apply calc()*/ 
-    background-color: transparent;
+    background-color: rgba(255,255,255,0.5);
     box-shadow: none;
     overflow: visible;
     width: auto; /* otherwise it's fixed width like the rest of the cards, 

@@ -267,16 +267,16 @@
         } else if (msg.round === 'second') {
             showNotification('Second betting round complete.');
         }
+    // TODO test that a folded player gets the right message once equation forming starts
       } else if (msg.type === "commence-equation-forming") {
         console.log("socket message commence-equation-forming");
             beginCountdownNotification();
+            if (msg.folded) {
+                showNotification('Other players are forming their equations.');
+            } else {
             showNotification('90 seconds! Drag cards to get close to 1 or 20.', "limegreen", 3000);
             sortable.option("disabled", false)
-
-      } else if (msg.type === "players-are-equation-forming") {
-            showNotification('Other players are forming their equations.');
-            beginCountdownNotification();
-
+            }
       } else if (msg.type === "end-equation-forming") {
             console.log("socket message end-equation-forming");
             hideProgressBar(); // do we call this actually? rename to resetAndhideProgressBar?
@@ -324,7 +324,7 @@
         showNotification(msg.message, "orange", 10000);
         updatePot(0);
 
-        showResultsLayout(msg.loWinner.id, msg.hiWinner.id);
+        showResultsLayout(msg.loWinner?.id, msg.hiWinner?.id);
         if (! msg.becauseAllButOneFolded) {
             displayHandResults(msg); // in the case of everyone but one folding, we don't need to show results
             // a message saying the whole pot went to the last person by default is sufficient.
@@ -929,15 +929,15 @@
             cardDiv.className = "card"; // without null check, 0 becomes card-back since equivalent to false
             cardDiv.classList.add("difference-card"); // without null check, 0 becomes card-back since equivalent to false
 
-            if (result.difference >= 10){ // TODO this is different for the refactor
-                cardDivResultParagraph.style.transform = 'translateX(-0.7rem)';
-            }
+            // if (result.difference >= 10){ // TODO this is different for the refactor
+            //     cardDivResultParagraph.style.transform = 'translateX(-0.7rem)';
+            // }
 
             handDivs.get(result.id).appendChild(cardDiv);
         })
         
         document.getElementById('confirmResults').onclick = () => {
-            socket.send(JSON.stringify({ type: "acknowledge-results", userId: myId }));
+            socket.send(JSON.stringify({ type: "acknowledge-hand-results", userId: myId }));
             confirmResults.classList.add('hidden');
         };
     }

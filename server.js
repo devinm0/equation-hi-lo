@@ -156,11 +156,8 @@ wss.on("connection", (ws) => {
         if (data.id === hostId) {
             // set a new host. if last player, end the game
         }
-        wss.clients.forEach((client) => {
-          if (client.readyState === WebSocket.OPEN) {
-            client.send(JSON.stringify({ type: "player-left" }));
-          }
-        });
+
+        sendSocketMessageToEveryClient({ type: "player-left" });
 
         players.get(data.id).out = true; //ws.userId or userId??
         // console.log(`User disconnected: ${ws.userId}`);
@@ -193,18 +190,12 @@ wss.on("connection", (ws) => {
         players.set(data.userId, new Player(data.userId, data.username, [], 25));
         players.get(data.userId).color = data.color;
 
-        wss.clients.forEach((client) => {
-            if (client.readyState === WebSocket.OPEN) {
-                const payload = JSON.stringify({
-                    type: "player-joined",
-                    id: data.userId,
-                    hostId: hostId,// client.userId === hostId, // this is wrong because it means the host will show everyone joining as host
-                    color: data.color, // what happens if we put user color here?
-                    username: data.username,
-                });
-
-                client.send(payload);
-            }
+        sendSocketMessageToEveryClient({
+            type: "player-joined",
+            id: data.userId,
+            hostId: hostId,// client.userId === hostId, // this is wrong because it means the host will show everyone joining as host
+            color: data.color, // what happens if we put user color here?
+            username: data.username,
         });
 
         console.log(players);
@@ -232,33 +223,20 @@ wss.on("connection", (ws) => {
             justPlayedPlayer.hand.forEach(card => {
                 card.hidden = true;
             });
-            wss.clients.forEach((client) => {
-                let handToSend = getHandToSendFromHand(players.get(data.userId).hand, client.userId === data.userId);
 
-                if (/*client !== ws && */client.readyState === WebSocket.OPEN) {
-                    client.send(JSON.stringify({
-                        type: "player-folded",
-                        id: data.userId,
-                        username: players.get(data.userId).username,
-                        hand: handToSend
-                    }));
-                }
-            });
+            // named parameters not possible in JS. switch to TS
+            sendSocketMessageThatPlayerFolded(data.userId);
         } else {
             justPlayedPlayer.chipCount -= data.betAmount // should only be the diff
             pot += data.betAmount;
 
-            wss.clients.forEach((client) => {
-                if (/*client !== ws && */client.readyState === WebSocket.OPEN) {
-                client.send(JSON.stringify({
-                    type: "bet-placed",
-                    id: data.userId,
-                    username: players.get(data.userId).username,
-                    betAmount: data.betAmount, // so users can see "so and so bet x chips"
-                    chipCount: players.get(data.userId).chipCount, // to update the chip stack visual of player x for each player
-                    pot: pot // otherwise, pot won't get updated on last player of the round
-                }));
-                }
+            sendSocketMessageToEveryClient({
+                type: "bet-placed",
+                id: data.userId,
+                username: players.get(data.userId).username,
+                betAmount: data.betAmount, // so users can see "so and so bet x chips"
+                chipCount: players.get(data.userId).chipCount, // to update the chip stack visual of player x for each player
+                pot: pot // otherwise, pot won't get updated on last player of the round
             });
         }
 
@@ -295,13 +273,16 @@ wss.on("connection", (ws) => {
                 betForThisRoundEqualsSmallestPlayersChips = true;
             }
             currentTurnPlayerId = findNextPlayerTurn();
-            advanceToNextPlayersTurn(justPlayedPlayer.betAmount);
+            advanceToNextPlayersTurn(justPlayedPlayer.betAmount); // could just get the max of player betAmounts here. still, unreadable. have runningBetAmount
         }
     }
 
+    // TODO more tests - have a folded player submit an equation anyway and confirm it's discarded by server.
     if (data.type === "equation-result") {
         // definitely DON'T want to tell everyone what the results are yet
         const player = players.get(data.userId);
+        // a folded player may have manually sent a formed equation despite not given the opportunity, just ignore
+        if (player.foldedThisTurn) { return; }
         console.log("299 equation-result received " + data.result);
 
         player.hand = data.order.map(i => player.hand[i]);
@@ -334,16 +315,7 @@ wss.on("connection", (ws) => {
             if (betForThisRoundEqualsSmallestPlayersChips) {
                 console.log('Max bet was reached on first round of betting. Skipping second round.');
 
-                // TODO separate all of these into methods
-                wss.clients.forEach((client) => {
-                    if (players.get(client.userId).foldedThisTurn !== true) {
-                        if (/*client !== ws && */client.readyState === WebSocket.OPEN) {
-                        client.send(JSON.stringify({
-                            type: "second-round-betting-skipped",
-                        }));
-                        }
-                    }
-                });
+                sendSocketMessageToNonFoldedPlayers({ type: "second-round-betting-skipped" });
 
                 commenceHiLoSelection();
             } else {
@@ -360,18 +332,7 @@ wss.on("connection", (ws) => {
             card.hidden = true;
         });
 
-        wss.clients.forEach((client) => {
-            let handToSend = getHandToSendFromHand(players.get(data.userId).hand, client.userId === data.userId);
-            
-            if (/*client !== ws && */client.readyState === WebSocket.OPEN) {
-                client.send(JSON.stringify({
-                    type: "player-folded",
-                    id: data.userId,
-                    username: players.get(data.userId).username,
-                    hand: handToSend
-                }));
-            }
-        })
+        sendSocketMessageThatPlayerFolded(data.userId);
     }
 
     if (data.type === "hi-lo-selected") {
@@ -392,7 +353,7 @@ wss.on("connection", (ws) => {
     }
 
     // need this so that players have time to view results
-    if (data.type === "acknowledge-results") {
+    if (data.type === "acknowledge-hand-results") {
         const player = players.get(data.userId);
         player.acknowledgedResults = true;
 
@@ -535,15 +496,10 @@ function endHand() {
     numPlayersThatNeedToDiscard = 0; 
     players.values().forEach(player => {
         if (player.chipCount === 0) {
-            wss.clients.forEach((client) => {
-                if (client.readyState === WebSocket.OPEN) {
-                    const payload = JSON.stringify({ 
-                        type: "kicked",
-                        userId: player.id,
-                        username: player.username
-                    });
-                    client.send(payload);
-                }
+            sendSocketMessageToEveryClient({ 
+                type: "kicked",
+                userId: player.id,
+                username: player.username
             });
 
             // or, just set their status to "out" so they can still view the game
@@ -560,6 +516,39 @@ function endHand() {
     initializeHand();
 }
 
+function sendSocketMessageThatPlayerFolded(foldedUserId) {
+    wss.clients.forEach((client) => {
+        let handToSend = getHandToSendFromHand(players.get(foldedUserId).hand, client.userId === foldedUserId);
+        
+        if (/*client !== ws && */client.readyState === WebSocket.OPEN) {
+            client.send(JSON.stringify({
+                type: "player-folded",
+                id: foldedUserId,
+                username: players.get(foldedUserId).username,
+                hand: handToSend
+            }));
+        }
+    })
+}
+
+function sendSocketMessageToEveryClient(objectToSend) {
+    wss.clients.forEach((client) => {
+        if (client.readyState === WebSocket.OPEN) {
+            const payload = JSON.stringify(objectToSend);
+            client.send(payload);
+        }
+    });
+}
+
+function sendSocketMessageToNonFoldedPlayers(objectToSend) {
+    wss.clients.forEach((client) => {
+        if (client.readyState === WebSocket.OPEN) {
+            const payload = JSON.stringify(objectToSend);
+            client.send(payload);
+        }
+    });
+}
+
 function initializeHand() { // means start a hand of play
     console.log("initializedHand");
     players.values().forEach(player => {
@@ -573,14 +562,9 @@ function initializeHand() { // means start a hand of play
     printDeck(deck, 10);    
     
     // so client can say "beginning hand number n!"
-    wss.clients.forEach((client) => {
-        if (client.readyState === WebSocket.OPEN) {
-            const payload = JSON.stringify({ 
-                type: "begin-hand", 
-                handNumber: handNumber 
-            });
-            client.send(payload);
-        }
+    sendSocketMessageToEveryClient({ 
+        type: "begin-hand", 
+        handNumber: handNumber 
     });
     
     clearHandsAndDealOperatorCards(); // this should actually be initializeHand
@@ -612,7 +596,6 @@ function initializeHand() { // means start a hand of play
 function endBettingRound(round) {
     for (const [key, value] of players) {
         value.turnTakenThisRound = false;
-        // value.foldedThisTurn = false; // actually wrong, folding is for whole game round
         value.betAmount = 0;
     }
 
@@ -664,27 +647,15 @@ function notifyAllPlayersOfNewlyDealtCards(player, multiplicationCardDealt = fal
 
 function commenceFirstRoundBetting() {
     console.log("Commencing first round of betting")
-    wss.clients.forEach((client) => {
-        if (/*client !== ws && */client.readyState === WebSocket.OPEN) {
-          client.send(JSON.stringify({
-            type: "first-round-betting-commenced",
-          }));
-        }
+    sendSocketMessageToEveryClient({
+        type: "first-round-betting-commenced",
     });
 
     advanceToNextPlayersTurn(1); // TODO change to anteAmount (and then modify as game goes on)
 }
 
 function commenceSecondRoundBetting() {
-    wss.clients.forEach((client) => {
-        if (players.get(client.userId).foldedThisTurn !== true) { // can't allow folded players to participate in betting
-            if (/*client !== ws && */client.readyState === WebSocket.OPEN) {
-            client.send(JSON.stringify({
-                type: "second-round-betting-commenced",
-            }));
-            }
-        }
-    });
+    sendSocketMessageToNonFoldedPlayers({ type: "second-round-betting-commenced" });
 
     /* TODO
         What I SHOULD have is a variable on the server side of currentBet.
@@ -708,9 +679,7 @@ function advanceToNextPlayersTurn(betAmount) { // should take a parameter here
     // Player A bets 10 and then has 20 chips. Player B has 30 chips. Max bet is still 30, not 20. 
     // So add the 10 and 20 to get 30. (Add chips PLUS the chips they have in this round)
     const nonFoldedPlayerChipCounts = players.values().filter(player => player.foldedThisTurn !== true).map(player => player.chipCount + player.betAmount);
-    const maxBet = Math.min(...nonFoldedPlayerChipCounts); // bug. should only be players who have not played this turn
-    // but needs to stack. let's say 3 people. 2 people call, third person raises 20 out of 25 chips.
-    // maxBet is 25 for each of them, but when it comes to third player again the max is 5
+    const maxBet = Math.min(...nonFoldedPlayerChipCounts);
     
     // modify this so that we don't trust the client?
     // but technically we do because only currentTurnPlayer can send a betting message.
@@ -730,7 +699,6 @@ function advanceToNextPlayersTurn(betAmount) { // should take a parameter here
 }
 
 function findNextPlayerTurn() {
-    console.log(currentTurnPlayerId);
     return findNextKeyWithWrap(players, currentTurnPlayerId, v => v.foldedThisTurn !== true);
 
     function findNextKeyWithWrap(map, startKey, predicate) {
@@ -772,54 +740,28 @@ function bettingRoundIsComplete() {
 }
          
 function commenceEquationForming() {
-    wss.clients.forEach((client) => {
-        if (players.get(client.userId).foldedThisTurn !== true) { // can't allow folded players to form equations
-            if (client.readyState === WebSocket.OPEN) {
-                const payload = JSON.stringify({ 
-                    type: "commence-equation-forming", 
-                });
-                client.send(payload);
-            }
-        } else {
-            if (client.readyState === WebSocket.OPEN) {
-                const payload = JSON.stringify({ 
-                    type: "players-are-equation-forming", 
-                });
-                client.send(payload);
-            }
-        }
-      });
-    
+    sendSocketMessageToEveryClient({ 
+        type: "commence-equation-forming", 
+    });
+
     console.log("Waiting 90 seconds for equation forming...");
 
     setTimeout(() => {
         console.log("Timer expired for equation forming, notifying clients to receive equation results.");
         endEquationForming();
-    }, 90000);
+    }, 10000);
 }
 
 function endEquationForming() {
-    wss.clients.forEach((client) => {
-        if (client.readyState === WebSocket.OPEN && players.get(client.userId).foldedThisTurn !== true) {
-          const payload = JSON.stringify({ 
-            type: "end-equation-forming", 
-        });
-          client.send(payload);
-        }
-      });
+    sendSocketMessageToNonFoldedPlayers({ 
+        type: "end-equation-forming", 
+    });
 }
 
 function commenceHiLoSelection() {
-    wss.clients.forEach((client) => {
-        if (players.get(client.userId).foldedThisTurn !== true) { // can't allow folded players to participate in betting
-            if (client.readyState === WebSocket.OPEN) {
-            const payload = JSON.stringify({ 
-                type: "hi-lo-selection", 
-            });
-            client.send(payload);
-            }
-        }
-      });
+    sendSocketMessageToNonFoldedPlayers({ 
+        type: "hi-lo-selection", 
+    });
 }
 
 function distributePotToOnlyRemainingPlayer(onlyRemainingPlayerThisHand){
@@ -847,15 +789,10 @@ function distributePotToOnlyRemainingPlayer(onlyRemainingPlayerThisHand){
     onlyRemainingPlayerThisHand.chipCount += pot;
     pot = 0;
 
-    wss.clients.forEach((client) => {
-        if (client.readyState === WebSocket.OPEN) {
-            const payload = JSON.stringify({
-                type: "chip-distribution",
-                chipCount: pot,
-                id: onlyRemainingPlayerThisHand.id
-            });
-            client.send(payload);
-        }
+    sendSocketMessageToEveryClient({
+        type: "chip-distribution",
+        chipCount: pot,
+        id: onlyRemainingPlayerThisHand.id
     });
 
     // need to call endBettingRound because we have to reset everyone's bets. Otherwise
@@ -985,38 +922,35 @@ function determineWinners() {
         currentHighestPlayersHighestCard: currentHighestPlayersHighestCard?.value
         // TODO pass in lo cards and hi cards here.
     }));
+    console.log(hiWinner);
     // there's distinct lo and hi winners
     if (loWinner !== null && hiWinner !== null) {
-        payload = JSON.stringify({
+        payload = {
             type: "round-result",
             message: loWinner.username + " won the low bet and " + hiWinner.username + " won the high bet.",
             loWinner: loWinner,
             hiWinner: hiWinner,
             results: results
-        });
+        };
     } else if (loWinner !== null) { // players only bet on lo
-        payload = JSON.stringify({
+        payload = {
             type: "round-result",
             message: loWinner.username + " won the low bet.",
             loWinner: loWinner,
             hiWinner: hiWinner,
             results: results
-        });
+        };
     } else if (hiWinner !== null) { // players only bet on hi
-        payload = JSON.stringify({
+        payload = {
             type: "round-result",
             message: hiWinner.username + " won the high bet.",
             loWinner: loWinner,
             hiWinner: hiWinner,
             results: results
-        });
+        };
     }
 
-    wss.clients.forEach((client) => {
-        if (/*client !== ws && */client.readyState === WebSocket.OPEN) {
-            client.send(payload);
-        }
-    });
+    sendSocketMessageToEveryClient(payload);
 
     // send chips to the winners
     // if there are both lo and hi betters, split the pot among the winner of each
