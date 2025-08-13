@@ -1011,16 +1011,13 @@ function determineWinners() {
     pot = 0; // TODO put this inside of endHand??
 }
   
-function printDeck(deck, n) {
+function printDeck(deck, rows) {
     console.log("Deck size:", deck.length, "cards.");
 
-    const columns = Math.ceil(deck.length / n);
-    const rows = n;
-  
-    const toPrint = Array.from({ length: n }, () => []);
+    const toPrint = Array.from({ length: rows }, () => []);
     // Initialize an array of columns
     deck.forEach((card, index) => {
-        toPrint[index % n].push(card);
+        toPrint[index % rows].push(card);
     });
   
     // Print row by row
@@ -1028,9 +1025,7 @@ function printDeck(deck, n) {
         let rowOutput = '';
         for (let c = 0; c < toPrint[r].length; c++) {
             let card = toPrint[r][c]
-            let cardOutput = getStringFromSuit(card.suit) + ' ' + card.value + ', ';
-            let colorCodedCardOutput = getANSICodeFromSuit(card.suit) + cardOutput.padEnd(12) + '\x1b[0m'
-            rowOutput += colorCodedCardOutput;
+            rowOutput += printCard(card);
         }
         console.log(rowOutput);
     }
@@ -1040,12 +1035,15 @@ function printHand(hand) {
     let output = '';
     for (let c = 0; c < hand.length; c++) {
         let card = hand[c];
-        // this is repeated from printDeck. modularize.
-        let cardOutput = card.value + ', ';
-        let colorCodedCardOutput = getANSICodeFromSuit(card.suit) + cardOutput.padEnd(12) + '\x1b[0m'
-        output += colorCodedCardOutput;
+        output += printCard(card);
     }
     console.log(output);
+}
+
+function printCard(card) {
+    let cardOutput = getStringFromSuit(card.suit) + ' ' + card.value + ', ';
+    let colorCodedCardOutput = getANSICodeFromSuit(card.suit) + cardOutput.padEnd(12) + '\x1b[0m'
+    return colorCodedCardOutput;
 }
 
 function getANSICodeFromSuit(suit) {

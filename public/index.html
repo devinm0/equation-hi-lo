@@ -45,9 +45,11 @@
         <button class="button" id="startButton" style="display:none;" disabled>Start Game</button>
     </div>
 
-    <div id="potDiv" style="text-align: center; font-weight: bold; margin-bottom: 10px;"></div>
+    <div id="potContainer" style="width:100%; min-height: 90px;">
+        <div id="potDiv" style="text-align: center; font-weight: bold; margin-bottom: 10px;"></div>
 
-    <div id="potChipStacksContainer" class="chip-stacks-container" style="width: 100%"></div>
+        <div id="potChipStacksContainer" class="chip-stacks-container" style="width: 100%"></div>
+    </div>
 
     <div id="bettingControls" style="display:none;">
         <div id="chipStagingContainer" style="text-align:center; font-weight: bold; color: white;"><span id="betAmountLabel">0</span></div>
@@ -323,6 +325,7 @@
       } else if (msg.type === "round-result") {
         showNotification(msg.message, "orange", 10000);
         updatePot(0);
+        hidePotDiv();
 
         showResultsLayout(msg.loWinner?.id, msg.hiWinner?.id);
         if (! msg.becauseAllButOneFolded) {
@@ -647,6 +650,11 @@
         div.innerHTML = `<p>👩‍💻 ${username}</p>` + (hostId === id ? ' (Host)' : '') + (id === myId ? ' (You)' : ''); // injection
         div.style.color = color;
         lobbyPlayerListContainer.appendChild(div);
+    }
+
+    function hidePotDiv() {
+        document.getElementById("potDiv").textContent = "";
+        document.getElementById("potChipStacksContainer").innerHTML = "";
     }
 
     function updatePot(chipCount) {
