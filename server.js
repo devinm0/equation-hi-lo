@@ -315,7 +315,7 @@ wss.on("connection", (ws) => {
   });
 });
 
-server.listen(3000, "0.0.0.0", () => {
+server.listen(8080, "0.0.0.0", () => {
   console.log("Server running on http://localhost:3000");
 });
 
