@@ -1,6 +1,5 @@
 const { OperatorCards, Suits, NumberCards } = require('./public/enums.js');
 const { findNextKeyWithWrap } = require('./public/utilities.js');
-
 const express = require("express");
 const http = require("http");
 const WebSocket = require("ws");
@@ -29,11 +28,6 @@ class Player {
     }
 }
 
-let players = new Map();
-let currentTurnPlayerId = 0;
-let pot = 0;
-let handNumber = 0; // hand, as in round of play
-
 const GamePhases = {
     FIRSTDEAL: "firstdeal",
     FIRSTBETTING: "firstbetting",
@@ -50,9 +44,14 @@ class Card {
         this.hidden = hidden
     }
 }
+
+// rather than global variables how can we make this functional
+let players = new Map();
+let currentTurnPlayerId = 0;
+let pot = 0;
+let handNumber = 0; // hand, as in round of play
 let deck;
 let hostId = null;
-// rather than global variables how can we make this functional
 let numPlayersThatHaveDiscarded = 0;
 let numPlayersThatNeedToDiscard = 0; 
 let firstBettingRoundHasPassed = false;
@@ -200,11 +199,14 @@ wss.on("connection", (ws) => {
         justPlayedPlayer.turnTakenThisRound = true;
         // TODO this logic is unreadable. Come back and refactor after it's been a while
         // It's actually good to refactor when I don't understand it. Forces me to make it understandable.
-        justPlayedPlayer.stake += data.betAmount // even if folded. (just passing on last players bet amount) 
+        justPlayedPlayer.stake += data.betAmount; // even if folded. (just passing on last players bet amount) 
         //TODO need to skip following logic if player folded
         //TODO rename betAmount to total bet this round
 
-        justPlayedPlayer.chipCount -= data.betAmount // should only be the diff
+        [...players.values()].forEach(player => {
+            console.log(player.username, player.stake);
+        });
+        justPlayedPlayer.chipCount -= data.betAmount; // should only be the diff
         toCall = justPlayedPlayer.stake > toCall ? justPlayedPlayer.stake : toCall;
         pot += data.betAmount;
 
@@ -315,8 +317,8 @@ wss.on("connection", (ws) => {
   });
 });
 
-server.listen(3000, "0.0.0.0", () => {
-  console.log("Server running on http://localhost:3000");
+server.listen(8080, "0.0.0.0", () => {
+  console.log("Server running on port 8080");
 });
 
 function nonFoldedPlayers(){
@@ -403,7 +405,6 @@ function dealTwoOpenCardsToEachPlayer() {
     players.forEach((player, id) => { // why does value come before key. so annoying    
         // first card can be any card
         const draw = drawFromDeck();
-        draw.value = NumberCards.ONE;
 
         player.hand.push(draw);
     
@@ -415,7 +416,6 @@ function dealTwoOpenCardsToEachPlayer() {
         } else {
             draw2 = drawFromDeck();
         }
-        draw2.value = NumberCards.ZERO;
         player.hand.push(draw2);
 
         if (draw.value === OperatorCards.ROOT || draw2.value === OperatorCards.ROOT) { // push another number
@@ -464,7 +464,7 @@ function dealLastOpenCardToEachPlayer() {
 
 function endHand() {
     console.log("endHand");
-    players.values().forEach(player => { console.log(player.username, "chipCount:", player.chipCount); });
+    [...players.values()].forEach(player => { console.log(player.username, "chipCount:", player.chipCount); });
 
     maxRaiseReached = false;
     firstBettingRoundHasPassed = false;
@@ -472,7 +472,7 @@ function endHand() {
     numPlayersThatHaveDiscarded = 0;
     numPlayersThatNeedToDiscard = 0; 
 
-    players.values().forEach(player => {
+    [...players.values()].forEach(player => {
         if (player.chipCount === 0) {
             sendSocketMessageToEveryClient({ 
                 type: "kicked",
@@ -542,7 +542,7 @@ function sendSocketMessageToFoldedPlayers(objectToSend) {
 function initializeHand() { // means start a hand of play
     console.log("Initializing hand.");
 
-    players.values().forEach(player => {
+    [...players.values()].forEach(player => {
         if (player.out) { // fold automatically if out
             player.foldedThisTurn = true;
         } else {
@@ -551,7 +551,7 @@ function initializeHand() { // means start a hand of play
     })
 
     deck = generateDeck();
-    printDeck(deck, 10);    
+    printDeck(deck);    
     
     sendSocketMessageToEveryClient({ 
         type: "begin-hand", 
@@ -649,7 +649,7 @@ function commenceSecondRoundBetting() {
     advanceToNextPlayersTurn(0); // no ante to match on the second round
 }
 
-function advanceToNextPlayersTurn(betAmount) { // should take a parameter here
+function advanceToNextPlayersTurn(toCall) { // should take a parameter here
     console.log("Advancing to next player's turn, with id:", currentTurnPlayerId);
     // Player A bets 10 and then has 20 chips. Player B has 30 chips. Max bet is still 30, not 20. 
     // So add the 10 and 20 to get 30. (Add chips PLUS the chips they have in this round)
@@ -662,7 +662,7 @@ function advanceToNextPlayersTurn(betAmount) { // should take a parameter here
         if (/*client !== ws && */client.readyState === WebSocket.OPEN) {
           client.send(JSON.stringify({
             type: "next-turn",
-            toCall: betAmount - players.get(currentTurnPlayerId).stake,
+            toCall: toCall,
             maxBet: maxBet,
             currentTurnPlayerId: currentTurnPlayerId,
             username: players.get(currentTurnPlayerId).username,
@@ -749,7 +749,7 @@ function distributePotToOnlyRemainingPlayer(onlyRemainingPlayerThisHand){
     // need to call endBettingRound because we have to reset everyone's bets. Otherwise
     // next hand will begin with toCall equaling the raise from the first hand
     console.log("bet-placed");
-    players.values().forEach(player => {
+    [...players.values()].forEach(player => {
         console.log(player.username, "chipCount:", player.chipCount);
     })
 
@@ -945,7 +945,7 @@ function determineWinners() {
   
 // TODO above code - test that pot splits correctly, and also if there's only one winner
 
-function printDeck(deck, rows) {
+function printDeck(deck, rows = 10) {
     console.log("Deck size:", deck.length, "cards.");
 
     const toPrint = Array.from({ length: rows }, () => []);

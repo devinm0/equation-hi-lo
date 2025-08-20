@@ -95,7 +95,7 @@
 
     // END SECTION Countdown timer code. //
 
-    const socket = new WebSocket(`ws://localhost:3000`);
+    const socket = new WebSocket(`wss://equationhi.lol`);
     const handDivs = new Map(); // map of divs, one for each player
     const handDivsList = []; // ordered list of divs, so that we can draw the user's hand last
     const lobbyPlayerDivs = {}; // list of nametags basically, for game lobby. one per player
@@ -609,11 +609,17 @@
 
     function highlightCurrentBettingPlayerAndDehighlightOthers(currentTurnPlayerId){
         // highlight only the betting person's hand
-        document.querySelectorAll(".handLabel").forEach(el => {
-            el.style.color = "";
+        document.querySelectorAll(".handLabel p").forEach(el => {
+            el.style.backgroundColor = "rgba(0,0,0,0.3)";
         });
-        let handLabel = document.getElementById("handLabel-" + currentTurnPlayerId)
-        handLabel.style.color = "yellow";
+        document.querySelectorAll(".handLabel").forEach(el => {
+            el.classList.remove("card-bounce");
+        });
+        let handLabel = document.getElementById("handLabel-" + currentTurnPlayerId);
+        handLabel.classList.add("card-bounce");
+        let handLabelParagraph = handLabel.querySelectorAll("p").forEach(el => {
+            el.style.backgroundColor = "rgb(230, 208, 15)";
+        });
     }
 
     function beginCountdownNotification() {
