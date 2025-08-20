@@ -154,7 +154,7 @@
         document.getElementById("lobbyPlayerListContainer").remove();
         document.getElementById("lobbyTitleContainer").remove();
         showNotification('The game has started!');
-      } else if (msg.type === "reject") {
+      } else if (msg.type === "reject-start") {
         showNotification("At least 2 players must join before starting the game.");
       } else if (msg.type === "begin-hand") {
         showPlayingLayout();
@@ -205,7 +205,11 @@
             document.getElementById("startButton").disabled = false;            
         }
       } else if (msg.type === "player-discarded") {
-        showNotification(msg.username + " discarded their " + msg.value + " card.");
+        if (msg.id === myId) {
+            showNotification("You discarded your " + msg.value + " card.");
+        } else {
+            showNotification(msg.username + " discarded their " + msg.value + " card.");
+        }
       } else if (msg.type === "first-round-betting-commenced") {
         console.log("First round betting commenced.");
         showNotification("First round betting has commenced.");
@@ -325,19 +329,17 @@
       } else if (msg.type === "round-result") {
         showNotification(msg.message, "orange", 10000);
         updatePot(0);
-        hidePotDiv();
 
         showResultsLayout(msg.loWinner?.id, msg.hiWinner?.id);
         if (! msg.becauseAllButOneFolded) {
+            // message: loWinner.username + " won the low bet and " + hiWinner.username + " won the high bet.",
+            // message: loWinner.username + " won the low bet.",
+            // message: hiWinner.username + " won the high bet.",
+
             displayHandResults(msg); // in the case of everyone but one folding, we don't need to show results
             // a message saying the whole pot went to the last person by default is sufficient.
         }
-    } else if (msg.type === "chip-distribution") {
-        console.log("socket message chip-distribution");
-
-        updateChipStack(msg.chipCount, document.getElementById("chipStacksContainer-" + msg.id));
-        // do I need code here to actually keep track of MY chip count? or server does it
-      } else if (msg.type === "kicked") {
+    } else if (msg.type === "kicked") {
         if (msg.userId === myId) {
             showNotification("No more chips! You're out. Better luck next time!", "red");
         } else {
@@ -753,7 +755,7 @@
     const maxStackSize = 10;
     let chipCount = 0;
 
-    function updateChipStack(newCount, containerToUpdate) {
+    function updateChipStack(newCount, containerToUpdate, differential) {
         chipCount = newCount;
 
         // Clear all previous stacks and any previous overlay
@@ -763,6 +765,13 @@
         const overlay = document.createElement("div");
         overlay.classList.add("chip-count-overlay");
         overlay.textContent = chipCount;
+
+        const differentialSpan = document.createElement("span");
+        differentialSpan.classList.add("differential-span");
+        if (differential != null && differential > 0) {
+            differentialSpan.textContent = " (+" + differential + ")";
+        }
+        overlay.appendChild(differentialSpan);
         containerToUpdate.appendChild(overlay);
 
         const fullStacks = Math.floor(chipCount / maxStackSize);
@@ -898,6 +907,9 @@
         confirmResults.classList.remove('hidden');
 
         msg.results.forEach(result => {
+            console.log(result.chipDifferential);
+            updateChipStack(result.chipCount, document.getElementById("chipStacksContainer-" + result.id), result.chipDifferential);
+
             let nameDiv = document.getElementById("handLabel-" + result.id);
             let loOptionDiv = document.getElementById("low-symbol-" + result.id);
             let hiOptionDiv = document.getElementById("high-symbol-" + result.id);
@@ -911,9 +923,8 @@
             }
             if (result.isHiWinner) {
                 trophyDiv.classList.remove("hidden");
-                // TODO redraw by indexOf currentHighestPlayersHighestCard
+                // TODO redraw by indexOf hiWinnerHighCard
             }
-
             if (result.isLoWinner) {
                 trophyDiv.classList.remove("hidden");
                 let nameDiv = document.getElementById("handLabel-" + result.id);
@@ -941,8 +952,33 @@
             //     cardDivResultParagraph.style.transform = 'translateX(-0.7rem)';
             // }
 
-            handDivs.get(result.id).appendChild(cardDiv);
-        })
+            const handDiv = handDivs.get(result.id);
+            handDiv.appendChild(cardDiv);
+
+            // and finally, highlight the tiebreaker card if there is one
+            // TODO this logic won't work if the tiebreaker card is different value
+            // need to check if equationResult is the same, AND THEN just highlight the lowest card
+            // TODO it also won't work if one player has two cards of lowest value. in that case only
+            //  show the lower suit which was their attempt at winning
+            if (result.isLoContender) {
+                const cards = Array.from(handDiv.querySelectorAll('.card'));
+                for (let i = 0; i < cards.length - 1; i++) {
+                    console.log(cards[i].dataset.value, result.lowCard);
+                    if (Number(cards[i].dataset.value) === result.lowCard) {
+                        cards[i].classList.add('tiebreaker-card');
+                    }
+                }
+            }
+            if (result.isHiContender) {
+                const cards = Array.from(handDiv.querySelectorAll('.card'));
+                for (let i = 0; i < cards.length - 1; i++) {
+                    console.log(cards[i].dataset.value, result.highCard);
+                    if (Number(cards[i].dataset.value) === result.highCard) {
+                        cards[i].classList.add('tiebreaker-card');
+                    }
+                }
+            }
+        });
         
         document.getElementById('confirmResults').onclick = () => {
             socket.send(JSON.stringify({ type: "acknowledge-hand-results", userId: myId }));
@@ -975,6 +1011,8 @@
     }
 
     function showResultsLayout(loWinner, hiWinner) {
+        hidePotDiv();
+
         const rightHands = document.querySelectorAll('.righthand');
         rightHands.forEach(hand => {
             hand.classList.remove('righthand')
@@ -1000,7 +1038,7 @@
         }
 
         if (hiWinner != null) {
-            console.log("hiWinner: " + loWinner);
+            console.log("hiWinner: " + hiWinner);
             handDivs.get(hiWinner).querySelectorAll(".card").forEach((card, index) => {
                 card.classList.add('card-bounce');
                 card.style.setProperty('--delay', `${index * 50}ms`);

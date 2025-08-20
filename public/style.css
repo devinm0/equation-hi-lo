@@ -207,6 +207,11 @@ body {
     box-shadow: 4px 4px rgba(255, 215, 0, 0.9);
 }
 
+.tiebreaker-card {
+    background-color: rgba(226, 252, 170, 0.534);
+    box-shadow: 4px 4px rgba(255, 215, 0, 0.9);
+}
+
 /* is .myhand needed? */
 .myhand .folded.card {
     background-color: #ccc;
@@ -546,6 +551,10 @@ body {
     border-radius: 999px;
     z-index: 10;
     pointer-events: none;
+}
+
+.differential-span {
+    color: yellow;
 }
 
 .chip {
