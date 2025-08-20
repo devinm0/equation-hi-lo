@@ -316,7 +316,7 @@ wss.on("connection", (ws) => {
 });
 
 server.listen(8080, "0.0.0.0", () => {
-  console.log("Server running on http://localhost:3000");
+  console.log("Server running on port 8080");
 });
 
 function nonFoldedPlayers(){
@@ -403,7 +403,6 @@ function dealTwoOpenCardsToEachPlayer() {
     players.forEach((player, id) => { // why does value come before key. so annoying    
         // first card can be any card
         const draw = drawFromDeck();
-        draw.value = NumberCards.ONE;
 
         player.hand.push(draw);
     
@@ -415,7 +414,6 @@ function dealTwoOpenCardsToEachPlayer() {
         } else {
             draw2 = drawFromDeck();
         }
-        draw2.value = NumberCards.ZERO;
         player.hand.push(draw2);
 
         if (draw.value === OperatorCards.ROOT || draw2.value === OperatorCards.ROOT) { // push another number
