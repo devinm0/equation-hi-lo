@@ -540,6 +540,8 @@ function sendSocketMessageToFoldedPlayers(objectToSend) {
 function initializeHand() { // means start a hand of play
     console.log("Initializing hand.");
 
+    console.log(players);
+    console.log(players.values());
     players.values().forEach(player => {
         if (player.out) { // fold automatically if out
             player.foldedThisTurn = true;
