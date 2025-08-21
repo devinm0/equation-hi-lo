@@ -1,6 +1,5 @@
 const { OperatorCards, Suits, NumberCards } = require('./public/enums.js');
 const { findNextKeyWithWrap } = require('./public/utilities.js');
-
 const express = require("express");
 const http = require("http");
 const WebSocket = require("ws");
@@ -29,11 +28,6 @@ class Player {
     }
 }
 
-let players = new Map();
-let currentTurnPlayerId = 0;
-let pot = 0;
-let handNumber = 0; // hand, as in round of play
-
 const GamePhases = {
     FIRSTDEAL: "firstdeal",
     FIRSTBETTING: "firstbetting",
@@ -50,9 +44,14 @@ class Card {
         this.hidden = hidden
     }
 }
+
+// rather than global variables how can we make this functional
+let players = new Map();
+let currentTurnPlayerId = 0;
+let pot = 0;
+let handNumber = 0; // hand, as in round of play
 let deck;
 let hostId = null;
-// rather than global variables how can we make this functional
 let numPlayersThatHaveDiscarded = 0;
 let numPlayersThatNeedToDiscard = 0; 
 let firstBettingRoundHasPassed = false;
@@ -462,7 +461,7 @@ function dealLastOpenCardToEachPlayer() {
 
 function endHand() {
     console.log("endHand");
-    players.values().forEach(player => { console.log(player.username, "chipCount:", player.chipCount); });
+    [...players.values()].forEach(player => { console.log(player.username, "chipCount:", player.chipCount); });
 
     maxRaiseReached = false;
     firstBettingRoundHasPassed = false;
@@ -470,7 +469,7 @@ function endHand() {
     numPlayersThatHaveDiscarded = 0;
     numPlayersThatNeedToDiscard = 0; 
 
-    players.values().forEach(player => {
+    [...players.values()].forEach(player => {
         if (player.chipCount === 0) {
             sendSocketMessageToEveryClient({ 
                 type: "kicked",
@@ -540,8 +539,6 @@ function sendSocketMessageToFoldedPlayers(objectToSend) {
 function initializeHand() { // means start a hand of play
     console.log("Initializing hand.");
 
-    console.log(players);
-    console.log(players.values());
     [...players.values()].forEach(player => {
         if (player.out) { // fold automatically if out
             player.foldedThisTurn = true;
@@ -551,7 +548,7 @@ function initializeHand() { // means start a hand of play
     })
 
     deck = generateDeck();
-    printDeck(deck, 10);    
+    printDeck(deck);    
     
     sendSocketMessageToEveryClient({ 
         type: "begin-hand", 
@@ -945,7 +942,7 @@ function determineWinners() {
   
 // TODO above code - test that pot splits correctly, and also if there's only one winner
 
-function printDeck(deck, rows) {
+function printDeck(deck, rows = 10) {
     console.log("Deck size:", deck.length, "cards.");
 
     const toPrint = Array.from({ length: rows }, () => []);
