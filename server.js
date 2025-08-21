@@ -542,7 +542,7 @@ function initializeHand() { // means start a hand of play
 
     console.log(players);
     console.log(players.values());
-    players.values().forEach(player => {
+    [...players.values()].forEach(player => {
         if (player.out) { // fold automatically if out
             player.foldedThisTurn = true;
         } else {
@@ -749,7 +749,7 @@ function distributePotToOnlyRemainingPlayer(onlyRemainingPlayerThisHand){
     // need to call endBettingRound because we have to reset everyone's bets. Otherwise
     // next hand will begin with toCall equaling the raise from the first hand
     console.log("bet-placed");
-    players.values().forEach(player => {
+    [...players.values()].forEach(player => {
         console.log(player.username, "chipCount:", player.chipCount);
     })
 
