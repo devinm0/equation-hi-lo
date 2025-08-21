@@ -199,11 +199,14 @@ wss.on("connection", (ws) => {
         justPlayedPlayer.turnTakenThisRound = true;
         // TODO this logic is unreadable. Come back and refactor after it's been a while
         // It's actually good to refactor when I don't understand it. Forces me to make it understandable.
-        justPlayedPlayer.stake += data.betAmount // even if folded. (just passing on last players bet amount) 
+        justPlayedPlayer.stake += data.betAmount; // even if folded. (just passing on last players bet amount) 
         //TODO need to skip following logic if player folded
         //TODO rename betAmount to total bet this round
 
-        justPlayedPlayer.chipCount -= data.betAmount // should only be the diff
+        [...players.values()].forEach(player => {
+            console.log(player.username, player.stake);
+        });
+        justPlayedPlayer.chipCount -= data.betAmount; // should only be the diff
         toCall = justPlayedPlayer.stake > toCall ? justPlayedPlayer.stake : toCall;
         pot += data.betAmount;
 
@@ -646,7 +649,7 @@ function commenceSecondRoundBetting() {
     advanceToNextPlayersTurn(0); // no ante to match on the second round
 }
 
-function advanceToNextPlayersTurn(betAmount) { // should take a parameter here
+function advanceToNextPlayersTurn(toCall) { // should take a parameter here
     console.log("Advancing to next player's turn, with id:", currentTurnPlayerId);
     // Player A bets 10 and then has 20 chips. Player B has 30 chips. Max bet is still 30, not 20. 
     // So add the 10 and 20 to get 30. (Add chips PLUS the chips they have in this round)
@@ -659,7 +662,7 @@ function advanceToNextPlayersTurn(betAmount) { // should take a parameter here
         if (/*client !== ws && */client.readyState === WebSocket.OPEN) {
           client.send(JSON.stringify({
             type: "next-turn",
-            toCall: betAmount - players.get(currentTurnPlayerId).stake,
+            toCall: toCall,
             maxBet: maxBet,
             currentTurnPlayerId: currentTurnPlayerId,
             username: players.get(currentTurnPlayerId).username,
