@@ -677,8 +677,8 @@ body {
     gap: 20px;
     cursor: pointer;
     user-select: none;
-    padding: 12px;
-    border-radius: 8px;
+    padding: 18px;
+    border-radius: 14px;
     transition: background 0.2s ease;
 }
 

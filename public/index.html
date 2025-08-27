@@ -82,6 +82,9 @@
     <script type="module">
     
     import { NumberCards, OperatorCards, Suits } from './enums.js';
+    import { SoundManager } from './sounds.js';
+
+    const sounds = new SoundManager();
 
     // SECTION Countdown timer code. //
     const totalDuration = 90 * 1000; // 60 seconds
@@ -167,6 +170,8 @@
         showPlayingLayout();
         showNotification("Beginning hand " + (msg.handNumber + 1));
       } else if (msg.type === "deal") {
+        sounds.play("deal");
+
         console.log(msg);
         if (msg.id === myId) {
             myHand = msg.hand;
@@ -214,6 +219,8 @@
             document.getElementById("startButton").disabled = false;            
         }
       } else if (msg.type === "player-discarded") {
+        sounds.play("discard");
+
         if (msg.id === myId) {
             showNotification("You discarded your " + msg.value + " card.");
         } else {
@@ -227,6 +234,8 @@
       } else if (msg.type === "second-round-betting-skipped") {
         showNotification("1 or more players are all in. Second round betting skipped.");
       } else if (msg.type === "player-folded") {
+        sounds.play("fold");
+
         showNotification(msg.username + " folded.");
 
         // const hand = handDivs.get(myId).querySelectorAll('.card');
@@ -250,6 +259,8 @@
             drawHand(msg.id, msg.username, msg.hand, false, false); 
       } else if (msg.type === "bet-placed") {
             console.log("socket message bet-placed");
+            sounds.play(msg.betType);
+
             showNotification(msg.username + " bet " + msg.betAmount);
             updateChipStack(msg.chipCount, document.getElementById("chipStacksContainer-" + msg.id));
 
@@ -284,6 +295,8 @@
         }
     // TODO test that a folded player gets the right message once equation forming starts
       } else if (msg.type === "commence-equation-forming") {
+        sounds.play("start");
+
         console.log("socket message commence-equation-forming");
             beginCountdownNotification();
             if (msg.folded) {
@@ -293,6 +306,8 @@
             sortable.option("disabled", false)
             }
       } else if (msg.type === "end-equation-forming") {
+        sounds.play("end");
+
             console.log("socket message end-equation-forming");
             hideProgressBar(); // do we call this actually? rename to resetAndhideProgressBar?
             showNotification('Time is up!');
@@ -336,6 +351,9 @@
             }
             });
       } else if (msg.type === "round-result") {
+        if (msg.loWinner?.id === myId || msg.hiWinner?.id === myId) {
+            sounds.play("win");
+        }
         showNotification(msg.message, "orange", 10000);
         updatePot(0);
 
@@ -800,6 +818,7 @@
 
         callRaiseButton.onclick = () => {
             const bet = parseInt(slider.value);
+
             console.log("Bet placed:", bet);
             socket.send(JSON.stringify({ type: "bet-placed", userId: myId, betAmount: bet, folded: false }));
 
@@ -945,6 +964,8 @@
 
         options.forEach(opt => {
             opt.onclick = () => {
+                sounds.play("hiloselect");
+
                 const choice = opt.dataset.choice;
                 if (selectedChoices.has(choice)) {
                     selectedChoices.delete(choice);

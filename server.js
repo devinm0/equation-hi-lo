@@ -255,16 +255,24 @@ wss.on("connection", (ws) => {
             justPlayedPlayer.turnTakenThisRound = true;
             justPlayedPlayer.stake += clientMsg.betAmount;
             justPlayedPlayer.chipCount -= clientMsg.betAmount;
-            game.toCall = Math.max(justPlayedPlayer.stake, game.toCall);
+
+            const betType = justPlayedPlayer.betAmount === 0 ? "check" :
+                            game.firstBettingRoundHasPassed === false && justPlayedPlayer.betAmount === 1 ? "ante" : // TODO implement proper ante
+                            game.toCall === justPlayedPlayer.stake ? "check" :
+                            justPlayedPlayer.stake - game.toCall >= 10 ? "raise10" :
+                            "raise";
+
+            game.toCall = Math.max(justPlayedPlayer.stake, game.toCall); // TODO rename game.toCall... it's not really toCall. it's the current stake of the game. toCall is the different between that and player.stake
             game.pot += clientMsg.betAmount;
 
             sendSocketMessageToEveryClientInRoom(game.roomCode, {
                 type: "bet-placed",
                 id: clientMsg.userId,
-                username: players.get(clientMsg.userId).username,
+                username: justPlayedPlayer.username,
                 betAmount: clientMsg.betAmount, // so users can see "so and so bet x chips"
-                chipCount: players.get(clientMsg.userId).chipCount, // to update the chip stack visual of player x for each player
-                pot: game.pot // otherwise, pot won't get updated on last player of the round
+                chipCount: justPlayedPlayer.chipCount, // to update the chip stack visual of player x for each player
+                pot: game.pot, // otherwise, pot won't get updated on last player of the round
+                betType: betType
             });
             endRoundOrProceedToNextPlayer(game, justPlayedPlayer);
         }
@@ -948,6 +956,7 @@ function determineWinners(game) {
     const potWillSplit = loWinner !== null && hiWinner !== null;
     let hiWinnerChipsDelta;
     let loWinnerChipsDelta;
+    let message;
 
     // send chips to the winners. if there are both lo and hi betters, split the pot among the winner of each
     if (potWillSplit) {
@@ -961,12 +970,17 @@ function determineWinners(game) {
         players.get(hiWinner.id).chipCount += splitPot;
         players.get(loWinner.id).chipCount += splitPot;
 
+        message = hiWinner + " won the high bet and " + loWinner + " won the low bet.";
     } else if (loWinner !== null) {
         players.get(loWinner.id).chipCount += game.pot;
         loWinnerChipsDelta = game.pot;
+
+        message = loWinner + " won the low bet.";
     } else if (hiWinner !== null) {
         players.get(hiWinner.id).chipCount += game.pot;
         hiWinnerChipsDelta = game.pot;
+
+        message = hiWinner + " won the high bet.";
     }
 
     game.pot = 0; // TODO put this inside of endHand??
@@ -996,6 +1010,7 @@ function determineWinners(game) {
     console.log(results);
     sendSocketMessageToEveryClientInRoom(game.roomCode, {
         type: "round-result",
+        message: message,
         loWinner: loWinner,
         hiWinner: hiWinner,
         results: results
