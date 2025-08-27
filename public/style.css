@@ -545,14 +545,23 @@ body {
       opacity: 1;
       transform: translateY(0);
     }
-  }
+}
 
-  .chip-stacks-container {
+@keyframes fadeIn {
+    0% {
+      opacity: 0;
+    }
+    100% {
+      opacity: 1;
+    }
+}
+
+.chip-stacks-container {
     display: flex;
     justify-content: center;
     align-items: flex-end;
     gap: 6px;
-    margin: 20px;
+    margin: 10px;
     width: fit-content;
     position: relative;
 }
@@ -636,16 +645,18 @@ body {
   justify-content: center;
   align-items: center;
   z-index: 10000;
+  animation: fadeIn 0.5s ease-out forwards;
 }
 
 .modal {
-    color: white;
+  color: white;
   background: rgba(73, 102, 96, 0.84);
   padding: 24px 32px;
   border-radius: 16px;
   max-width: 400px;
   width: 90%;
   text-align: center;
+  animation: fadeUp 0.5s ease-out forwards;
 }
 
 .modal h2 {
