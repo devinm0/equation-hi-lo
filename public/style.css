@@ -277,7 +277,7 @@ body {
     transform: scale(1.05);
 }
 
-#uiContainer {
+#uiContainer, #homeContainer {
     position: absolute;
     top: 50%;
     left: 50%;
@@ -286,6 +286,10 @@ body {
     flex-direction: column;
     align-items: center;
     gap: 16px;
+}
+
+#uiContainer.hidden, #homeContainer.hidden {
+    display: none;
 }
 
 #bettingControls {
@@ -309,11 +313,16 @@ body {
     transition: opacity .2s;
 }
 
-#nameContainer {
+#nameContainer, #roomCodeInputContainer {
     display: flex;
     justify-content: center;
     align-items: center;
     gap: 12px;
+}
+
+#roomCodeContainer { /* TODO rename to roomCodeParagraph or something*/
+    color: white;
+    font-size: 2em;
 }
 
 #nameInput {
@@ -327,6 +336,18 @@ body {
     width: 200px;
 }
 
+#roomCodeInput {
+    padding: 10px 16px;
+    font-size: 16px;
+    border: none;
+    border-radius: 16px;
+    background-color: white;
+    color: black;
+    outline: none;
+    width: 8em;
+    text-align: center;
+}
+
 #nameInput::placeholder {
     color: #555;
 }
@@ -336,7 +357,9 @@ body {
 #foldButton,
 #allInButton,
 #startButton,
-#confirmChoice {
+#confirmChoice,
+#createButton,
+#submitNameButton {
     padding: 10px 16px;
     font-size: 16px;
     border: none;
@@ -368,7 +391,9 @@ body {
 #allInButton:hover,
 #startButton:hover,
 #confirmResults:hover,
-#confirmChoice:hover {
+#confirmChoice:hover,
+#createButton:hover,
+#submitNameButton:hover {
     background-color: #222;
 }
 
@@ -425,7 +450,7 @@ body {
     width: 100%;
     z-index: 9998;
     position: relative;
-    transform: translateY(-90%);
+    transform: translateY(-95%);
     text-shadow: rgba(0,0,0,0.3);
 }
 
@@ -489,7 +514,7 @@ body {
     }
 }
 
-#lobbyTitleContainer {
+#lobbyTitleContainer, #homeTitleContainer {
     text-align: center;
     font-size: 120px;
     font-weight: bold;
@@ -508,7 +533,7 @@ body {
     background-color: rgb(46, 46, 46);
     transition: background-color 0.2s ease;
     cursor: pointer;
-    animation: fadeUp 1s ease-out forwards;
+    animation: fadeUp 0.5s ease-out forwards;
 }
 
 @keyframes fadeUp {

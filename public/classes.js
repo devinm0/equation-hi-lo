@@ -1,0 +1,45 @@
+import { mintUniqueCode } from "./utilities.js";
+
+export class Game {
+  constructor() {
+    this.roomCode = mintUniqueCode();
+    this.currentTurnPlayerId = 0;
+    this.pot = 0;
+    this.handNumber = 0; // hand, as in round of play
+    this.deck;
+    this.hostId = null;
+    this.numPlayersThatHaveDiscarded = 0;
+    this.numPlayersThatNeedToDiscard = 0; 
+    this.firstBettingRoundHasPassed = false;
+    this.maxRaiseReached = false;
+    this.toCall = 0;
+    this.started = false;
+  }
+}
+
+export class Player {
+  constructor(id, username, hand, chipCount, foldedThisTurn = false, stake = 0, turnTakenThisRound = false, equationResult = null, choices = [], color = null) {
+      this.id = id;
+      this.username = username;
+      this.hand = hand;
+      this.chipCount = chipCount;
+      this.foldedThisTurn = foldedThisTurn;
+      this.stake = stake;
+      this.turnTakenThisRound = turnTakenThisRound;   
+      this.equationResult = equationResult;
+      this.choices = choices;
+      this.out = false;
+      this.color = color;
+      this.isLoContender = false;
+      this.isHiContender = false;
+      this.roomCode = null;
+  }
+}
+
+export class Card {
+    constructor(value, suit, hidden=false) {
+        this.value = value;
+        this.suit = suit;
+        this.hidden = hidden
+    }
+}

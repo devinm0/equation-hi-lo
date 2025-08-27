@@ -7,7 +7,6 @@
   <link rel="stylesheet" href="style.css">
 </head>
 <body>
-    <!-- Choice Modal -->
     <div id="choiceModal" class="modal-overlay hidden">
         <div class="modal">
             <h2>Select Hi, Lo, or Swing Betting</h2>
@@ -34,13 +33,26 @@
 
     <div id="notifications"></div>
 
-    <div id="uiContainer">
+    <div id="homeContainer"> <!--TODO rename to uiContainer-->
+        <div id="homeTitleContainer">Equation Hi Lo</div>
+        <p style="color: white;">Got a room code? Enter here to join an existing game:</p>
+        <div id="roomCodeInputContainer">
+            <input type="text" id="roomCodeInput" placeholder="Room Code" pattern="^[a-zA-Z0-9]{4}$" required title="Room code does not exist. Room code consists of 4 letters or numbers"/>
+            <p id="roomCodeError" style="color: rgb(255, 128, 128);"></p>
+            <button id="joinButton">Join Existing Game</button> <!--TODO change other join button name?-->
+        </div>
+        <p style="color: white;">Otherwise, host a new game here:</p>
+        <button class="button" id="createButton">Create Private Game</button>
+    </div>
+
+    <div id="uiContainer" class="hidden"> <!--TODO rename to lobbyContainer-->
         <div id="lobbyTitleContainer">Equation Hi Lo</div>
+        <div id="roomCodeContainer">Room Code:</div>
         <div id="lobbyPlayerListContainer"></div>
         <div id="nameContainer">
             <input type="text" id="nameInput" placeholder="Enter your name" pattern="^[a-zA-Z0-9]{1,16}$" required title="Username consists of 1-16 letters or numbers"/>
-            <p id="error" style="color: rgb(221, 49, 49);"></p>
-            <button id="joinButton">Join</button>
+            <p id="nameError" style="color: rgb(255, 128, 128);"></p>
+            <button id="submitNameButton">Submit Name</button>
         </div>
         <button class="button" id="startButton" style="display:none;" disabled>Start Game</button>
     </div>
@@ -120,6 +132,7 @@
       if (msg.type === "init") {
         const now = Date.now();
 
+        // TODO just refactor to if (playerDataStoredLocally() )
         console.log("myId is: ", myId, " server message is: ", event.data, " So if the userIds don't match, it means we've rejoined. Discarding the server generated id.");
         if (!myId || !timestamp || now - timestamp > EXPIRATION_TIME) { // nothing in localStorage, means we are new, fill in with server generated user data
             myId = msg.id;
@@ -130,7 +143,7 @@
         } else { // items exist in localStorage = we exist = page refreshed
             // send rejoin socket message
             const data = {
-                type: "rejoin",
+                type: "join", // TODO need to change... refreshing page is no longer a join, take me to home page
                 id: myId,
                 color: myColor,
                 username: myName
@@ -140,12 +153,6 @@
             // if we rejoin after joining, but before the game starts, we are still in the lobby.
             // don't show name input controls in that case. We've already joined.
             document.getElementById("nameContainer").style.display = "none";
-        }
-
-        if (msg.hostId === myId) { 
-            const button = document.getElementById("startButton")
-            button.style.display = "block";
-            button.disabled = true; // only enable it once the host joins
         }
       } else if (msg.type === "game-started") {
         const btn = document.getElementById("startButton");
@@ -160,6 +167,7 @@
         showPlayingLayout();
         showNotification("Beginning hand " + (msg.handNumber + 1));
       } else if (msg.type === "deal") {
+        console.log(msg);
         if (msg.id === myId) {
             myHand = msg.hand;
         }        
@@ -196,6 +204,7 @@
             }
         });
       } else if (msg.type === "player-joined") {
+        console.log("player-joined");
         drawPlayer(msg.id, msg.color, msg.username, msg.hostId);
 
         numPlayersJoined += 1;
@@ -339,6 +348,19 @@
             displayHandResults(msg); // in the case of everyone but one folding, we don't need to show results
             // a message saying the whole pot went to the last person by default is sufficient.
         }
+    } else if (msg.type === "room-join-reject") { // TODO rename to room-enter-reject
+        const error = document.getElementById("roomCodeError");
+        console.log("Room code does not exist.");
+        error.textContent = "Room code does not exist.";
+    } else if (msg.type === "room-entered") {
+        const roomCodeContainer = document.getElementById("roomCodeContainer");
+        roomCodeContainer.textContent = "Room Code: " + msg.roomCode;
+
+        if (msg.hostId === myId) { 
+            const startButton = document.getElementById("startButton")
+            startButton.style.display = "block";
+            startButton.disabled = true; // only enable it once the host joins
+        }
     } else if (msg.type === "kicked") {
         if (msg.userId === myId) {
             showNotification("No more chips! You're out. Better luck next time!", "red");
@@ -349,10 +371,10 @@
       }
     });
 
-    document.getElementById("joinButton").addEventListener("click", () => {
+    document.getElementById("submitNameButton").addEventListener("click", () => {
         if (myName === null || myName === undefined) { // server prevents username being set twice
             const nameInput = document.getElementById("nameInput");
-            const error = document.getElementById("error");
+            const error = document.getElementById("nameError");
 
             console.log(error);
             const regex = /^[a-zA-Z0-9]{1,16}$/;
@@ -380,6 +402,50 @@
             }
         }
 
+    });
+
+    document.getElementById("joinButton").addEventListener("click", () => { // TODO rename to enter room button?
+        // if (myName === null || myName === undefined) { // server prevents username being set twice
+            const roomCodeInput = document.getElementById("roomCodeInput");
+            const error = document.getElementById("roomCodeError");
+
+            console.log(error);
+            const regex = /^[a-zA-Z0-9]{4}$/;
+
+            if (!regex.test(roomCodeInput.value)) {
+                console.log("Room code must be 4 alphanumeric characters.");
+                error.textContent = "Room code must be 4 alphanumeric characters.";
+            } else {
+                console.log("Room code input value succeeds regex validation.");
+
+                error.textContent = "";
+            
+                const data = {
+                    type: "enter", // TODO probably need to change this
+                    color: myColor,
+                    userId: myId,
+                    username: myName,
+                    roomCode: roomCodeInput.value
+                };
+                socket.send(JSON.stringify(data));
+
+                // TODO actually don't do this. need to wait to see if we've actually entered a room.
+                document.getElementById("homeContainer").classList.add("hidden");
+                document.getElementById("uiContainer").classList.remove("hidden");
+            }
+        // }
+
+    });
+
+    document.getElementById("createButton").addEventListener("click", () => {
+        console.log("myId " + myId);
+
+        socket.send(JSON.stringify({ type: "create", userId: myId })); // TODO id...?
+
+        // TODO actually don't do this. need to wait to see if we've actually entered a room.
+        // also rename to showRoomPage();
+        document.getElementById("homeContainer").classList.add("hidden");
+        document.getElementById("uiContainer").classList.remove("hidden");
     });
 
     document.getElementById("startButton").addEventListener("click", () => {
@@ -971,7 +1037,7 @@
                 for (let i = 0; i < cards.length - 1; i++) {
                     console.log(cards[i].dataset.value, result.lowCard);
                     if (Number(cards[i].dataset.value) === result.lowCard) {
-                        cards[i].classList.add('tiebreaker-card');
+                        cards[i].classList.add('card-highlighted');
                     }
                 }
             }
@@ -980,7 +1046,7 @@
                 for (let i = 0; i < cards.length - 1; i++) {
                     console.log(cards[i].dataset.value, result.highCard);
                     if (Number(cards[i].dataset.value) === result.highCard) {
-                        cards[i].classList.add('tiebreaker-card');
+                        cards[i].classList.add('card-highlighted');
                     }
                 }
             }
