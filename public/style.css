@@ -323,7 +323,7 @@ body {
 #roomCodeContainer { /* TODO rename to roomCodeParagraph or something*/
     color: white;
     font-size: 2em;
-    transition: transform .5s ease;
+    transition: transform .25s ease;
 }
 
 #nameInput {
@@ -353,7 +353,7 @@ body {
     color: #555;
 }
 
-#joinButton,
+#enterRoomButton,
 #callRaiseButton,
 #foldButton,
 #allInButton,
@@ -386,7 +386,7 @@ body {
     transform: translateX(-50%)
 }
 
-#joinButton:hover,
+#enterRoomButton:hover,
 #callRaiseButton:hover,
 #foldButton:hover,
 #allInButton:hover,
@@ -520,6 +520,7 @@ body {
     font-size: 120px;
     font-weight: bold;
     color: white;
+    font-family: "AppleMyungjo";
 }
 
 .lobbyPlayerListItem {
@@ -534,7 +535,7 @@ body {
     background-color: rgb(46, 46, 46);
     transition: background-color 0.2s ease;
     cursor: pointer;
-    animation: fadeUp 0.5s ease-out forwards;
+    animation: fadeUp 0.25s ease-out forwards;
 }
 
 @keyframes fadeUp {

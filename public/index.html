@@ -34,19 +34,19 @@
     <div id="notifications"></div>
 
     <div id="homeContainer"> <!--TODO rename to uiContainer-->
-        <div id="homeTitleContainer">Equation Hi Lo</div>
+        <div id="homeTitleContainer">Equation <span style="white-space: nowrap;">Hi Lo</span></div>
         <p style="color: white;">Got a room code? Enter here to join an existing game:</p>
         <div id="roomCodeInputContainer">
             <input type="text" id="roomCodeInput" placeholder="Room Code" pattern="^[a-zA-Z0-9]{4}$" required title="Room code does not exist. Room code consists of 4 letters or numbers"/>
             <p id="roomCodeError" style="color: rgb(255, 128, 128);"></p>
-            <button id="joinButton">Join Existing Game</button> <!--TODO change other join button name?-->
+            <button id="enterRoomButton">Join Existing Game</button> <!--TODO change other join button name?-->
         </div>
         <p style="color: white;">Otherwise, host a new game here:</p>
         <button class="button" id="createButton">Create Private Game</button>
     </div>
 
     <div id="uiContainer" class="hidden"> <!--TODO rename to lobbyContainer-->
-        <div id="lobbyTitleContainer">Equation Hi Lo</div>
+        <div id="lobbyTitleContainer">Equation <span style="white-space: nowrap;">Hi Lo</span></div>
         <div id="roomCodeContainer">Room Code:</div>
         <div id="lobbyPlayerListContainer"></div>
         <div id="nameContainer">
@@ -437,6 +437,9 @@
         } 
         
         case "room-entered": {
+            document.getElementById("homeContainer").classList.add("hidden");
+            document.getElementById("uiContainer").classList.remove("hidden");
+
             const roomCodeContainer = document.getElementById("roomCodeContainer");
             roomCodeContainer.textContent = "Room Code: " + msg.roomCode;
 
@@ -495,7 +498,7 @@
 
     });
 
-    document.getElementById("joinButton").addEventListener("click", () => { // TODO rename to enter room button?
+    document.getElementById("enterRoomButton").addEventListener("click", () => { // TODO rename to enter room button?
         // if (myName === null || myName === undefined) { // server prevents username being set twice
             const roomCodeInput = document.getElementById("roomCodeInput");
             const error = document.getElementById("roomCodeError");
@@ -519,10 +522,6 @@
                     roomCode: roomCodeInput.value
                 };
                 socket.send(JSON.stringify(data));
-
-                // TODO actually don't do this. need to wait to see if we've actually entered a room.
-                document.getElementById("homeContainer").classList.add("hidden");
-                document.getElementById("uiContainer").classList.remove("hidden");
             }
         // }
 
@@ -531,7 +530,7 @@
     document.getElementById("createButton").addEventListener("click", () => {
         console.log("myId " + myId);
 
-        socket.send(JSON.stringify({ type: "create", userId: myId })); // TODO id...?
+        socket.send(JSON.stringify({ type: "create", userId: myId, color: myColor }));
 
         // TODO actually don't do this. need to wait to see if we've actually entered a room.
         // also rename to showRoomPage();

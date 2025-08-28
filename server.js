@@ -37,13 +37,12 @@ wss.on("connection", (ws) => {
     ws.msgCount = 0;
     setInterval(() => ws.msgCount = 0, INTERVAL);
 
+    const userColor = `hsl(${Math.random() * 360}, 100%, 70%)`; // same here
     const userId = uuidv4();
     ws.userId = userId; // in the case of rejoin or room code, this will be overwritten later
-    const userColor = `hsl(${Math.random() * 360}, 100%, 70%)`; // same here
-
-    console.log(`Socket connected, generating userId ${userId} but it may not be used in the case that someone is rejoining, in which case the existing client userId will overwrite this.`);
-
     ws.send(JSON.stringify({ type: "init", id: userId, color: userColor/*, hostId: hostId */ }));
+    
+    console.log(`Socket connected, generating userId ${userId} but it may not be used in the case that someone is rejoining, in which case the existing client userId will overwrite this.`);
 
     ws.on("message", (message) => {
         if (++ws.msgCount > RATE_LIMIT) {
@@ -74,8 +73,8 @@ wss.on("connection", (ws) => {
         //      rejoin a game I didn't create and make sure I'm not host
         //          make sure others can still join AFTER someone rejoins
         //      join a game I haven't created
-        //      be in lobby and see others joining
-        //      start a game where no one rejoined
+        //*      be in lobby and see others joining
+        //*      start a game where no one rejoined
         //      start a game where someone rejoined
         //      rejoin a game in progress
         //      rejoin a game in progress as host ( what does host really matter!?)
@@ -84,14 +83,26 @@ wss.on("connection", (ws) => {
 
             case "create": {
                 let game = new Game();
-                game.hostId = clientMsg.userId; // no, right? TODO remove concept of hostId?? or add host promotion
-                game.currentTurnPlayerId = clientMsg.userId;
                 games.set(game.roomCode, game);
-            
-                clientMsg.roomCode = game.roomCode; // TODO this is such a bad flow
 
-                enterRoom(clientMsg);
+                game.currentTurnPlayerId = game.hostId = ws.userId; // no, right? TODO remove concept of hostId?? or add host promotion
+
+                enterRoom(game, clientMsg);
                 console.log(game);
+                break;
+            }
+            
+            case "enter": { // TODO change to enter, and then just check if game is in lobby phase and if player already exists
+                if (!games.has(clientMsg.roomCode)) {
+                    // send room code does not exist message
+                    ws.send(JSON.stringify({ type: "room-join-reject" }));
+
+                    return;
+                }
+
+                const game = games.get(clientMsg.roomCode);
+
+                enterRoom(game, clientMsg);
                 break;
             }
 
@@ -116,9 +127,9 @@ wss.on("connection", (ws) => {
                 player.hand.push(draw);
 
                 notifyAllPlayersOfNewlyDealtCards(game.roomCode, player);
-                game.numPlayersThatHaveDiscarded += 1;
+                game.numPlayersThatNeedToDiscard -= 1;
 
-                if (game.numPlayersThatHaveDiscarded === game.numPlayersThatNeedToDiscard) {
+                if (game.numPlayersThatNeedToDiscard === 0) {
                     if (game.firstBettingRoundHasPassed) {
                         commenceEquationForming(game);
                     } else {
@@ -162,11 +173,6 @@ wss.on("connection", (ws) => {
                 break;
             }
 
-            case "enter": { // TODO change to enter, and then just check if game is in lobby phase and if player already exists
-                enterRoom(clientMsg);
-                break;
-            }
-
             case "join": { // TODO change to set Name
                 console.log("join");
                 // if (ws.isHost) { // without this, later players joining become the host
@@ -188,27 +194,17 @@ wss.on("connection", (ws) => {
                     username: clientMsg.username,
                 });
 
-                console.log(players);
-
                 logRoomsAndPlayers(); // this will be outside game class
                 break;
             }
 
-            function enterRoom(clientMsg) {
-                console.log('enterRoom');
-                if (!games.has(clientMsg.roomCode)) {
-                    // send room code does not exist message
-                    ws.send(JSON.stringify({ type: "room-join-reject" }));
-
-                    return;
-                }
-
-                const game = games.get(clientMsg.roomCode);
-                ws.send(JSON.stringify({ type: "room-entered", roomCode: clientMsg.roomCode, hostId: game.hostId })); // again misleading to use clientMsg roomCode, bc we set it AFTER receiving the client message
+            function enterRoom(game, clientMsg) {
+                ws.send(JSON.stringify({ type: "room-entered", roomCode: game.roomCode, hostId: game.hostId }));
 
                 if (game.started === false) {
                     // send a newly connected player the list of all players that have joined thus far
-                    [...players.values()].filter(player => player.roomCode === game.roomCode).forEach(player => {
+                    // player.username != null is because we don't want to share players that have entered but not submitted name
+                    [...players.values()].filter(player => player.roomCode === game.roomCode && player.username != null).forEach(player => {
                         ws.send(JSON.stringify({
                             type: "player-joined",
                             id: player.id,
@@ -235,11 +231,11 @@ wss.on("connection", (ws) => {
 
                         console.log(`***** 👩‍💻 ${game.hostId === clientMsg.userId ? 'Host' : 'Player'} joined: ${clientMsg.userId} *****`);
 
+                        // TODO THIS for rejoining active rooms
                         // have to reassign userId because what if someone refreshes? have to ignore the init message // TODO rethink this in the context of join/ enter
                         // need to assign ws.userId because it's used to check clientId === id on server
                         ws.userId = clientMsg.userId;
-                        // TODO instead of placeholderusername, just have no username, and filter player join messages by those that have username
-                        players.set(clientMsg.userId, new Player(clientMsg.userId, "placeholderUsername", [], 25)); // TODO sanitize clientMsg.username to standards
+                        players.set(clientMsg.userId, new Player(clientMsg.userId, null, [], 25)); // TODO sanitize clientMsg.username to standards
                         players.get(clientMsg.userId).color = clientMsg.color;
                         players.get(clientMsg.userId).roomCode = game.roomCode;
 
@@ -360,7 +356,7 @@ wss.on("connection", (ws) => {
             // TODO (putting this in random place so I see it later) - test every number of automatically folded players during equation forming
             case "hi-lo-selected": {
                 console.log(clientMsg.userId, clientMsg.username, clientMsg.choices);
-                const player = players.get(clientMsg.userId);
+                const player = players.get(ws.userId);
                 player.choices = clientMsg.choices;
 
                 const game = games.get(player.roomCode);
@@ -375,7 +371,7 @@ wss.on("connection", (ws) => {
 
             // need this so that players have time to view results
             case "acknowledge-hand-results": {
-                const player = players.get(clientMsg.userId);
+                const player = players.get(ws.userId);
                 player.acknowledgedResults = true;
 
                 const game = games.get(player.roomCode);
@@ -413,7 +409,7 @@ function endRoundOrProceedToNextPlayer(game, justPlayedPlayer) {
 
             // possible that players receive multiply cards on last deal
             // so don't commence equation forming unless all discards are complete
-            if (game.numPlayersThatHaveDiscarded === game.numPlayersThatNeedToDiscard) {
+            if (game.numPlayersThatNeedToDiscard === 0) {
                 commenceEquationForming(game);
             }
         }
@@ -546,7 +542,6 @@ function endHand(game) {
     game.maxRaiseReached = false;
     game.firstBettingRoundHasPassed = false;
     game.handNumber += 1;
-    game.numPlayersThatHaveDiscarded = 0;
     game.numPlayersThatNeedToDiscard = 0; 
 
     playersInRoom(game.roomCode).forEach(player => { // refactor to this.players() which is a function
@@ -659,7 +654,7 @@ function initializeHand(game) { // means start a hand of play
 
     dealTwoOpenCardsToEachPlayer(game, playersInRoom(game.roomCode));
 
-    console.log("toDiscard, haveDiscarded:", game.numPlayersThatNeedToDiscard, game.numPlayersThatHaveDiscarded) // refactor to one variable
+    console.log("toDiscard: ", game.numPlayersThatNeedToDiscard) // refactor to one variable
 
     // upon reading, thought this should be numPlayersThatNeedToDiscard === numPlayersThatHaveDiscarded
     // it could be
@@ -1154,14 +1149,14 @@ function logRoomsAndPlayers() {
         if (!grouped.has(roomCode)) {
             grouped.set(roomCode, []);
         }
-        grouped.get(roomCode).push(userId);
+        grouped.get(roomCode).push(player);
     }
 
     // pretty print
-    for (const [roomCode, userIds] of grouped.entries()) {
+    for (const [roomCode, players] of grouped.entries()) {
         console.log(`Room ${roomCode}:`);
-        for (const id of userIds) {
-            console.log(`  - ${id}`);
+        for (const player of players) {
+            console.log(`  - ${player.id} - ${player.username} `);
         }
     }
 
