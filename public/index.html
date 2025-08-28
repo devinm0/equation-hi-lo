@@ -415,14 +415,10 @@
             showNotification(msg.message, "orange", 10000);
             updatePot(0);
 
-            showResultsLayout(msg.loWinner?.id, msg.hiWinner?.id);
-            if (! msg.becauseAllButOneFolded) {
-                // message: loWinner.username + " won the low bet and " + hiWinner.username + " won the high bet.",
-                // message: loWinner.username + " won the low bet.",
-                // message: hiWinner.username + " won the high bet.",
-
-                displayHandResults(msg); // in the case of everyone but one folding, we don't need to show results
-                // a message saying the whole pot went to the last person by default is sufficient.
+            // in the case of everyone but one folding, we don't need to show results. Same for everyone failing to form equation
+            if (! msg.becauseAllButOneFolded && ! msg.becauseNoOneFormedEquation) {
+                showResultsLayout(msg.loWinner?.id, msg.hiWinner?.id);
+                displayHandResults(msg); 
             }
   
             break;

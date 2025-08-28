@@ -1,4 +1,5 @@
 import { mintUniqueCode } from "./utilities.js";
+import { GamePhases } from "./enums.js"
 
 export class Game {
   constructor() {
@@ -13,7 +14,7 @@ export class Game {
     this.firstBettingRoundHasPassed = false;
     this.maxRaiseReached = false;
     this.toCall = 0;
-    this.started = false;
+    this.phase = GamePhases.LOBBY;
   }
 }
 
@@ -24,7 +25,7 @@ export class Player {
       this.hand = hand;
       this.chipCount = chipCount;
       this.foldedThisTurn = foldedThisTurn;
-      this.stake = stake;
+      this.stake = stake; // the total chips a player has added to the pot for a given betting round
       this.turnTakenThisRound = turnTakenThisRound;   
       this.equationResult = equationResult;
       this.choices = choices;
@@ -33,6 +34,7 @@ export class Player {
       this.isLoContender = false;
       this.isHiContender = false;
       this.roomCode = null;
+      this.contribution = 0; // the total chips a player has added to the pot for a given hand
   }
 }
 

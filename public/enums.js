@@ -27,3 +27,14 @@ export const Suits = {
   GOLD: 3,
   OPERATOR: 4
 }
+
+export const GamePhases = {
+  LOBBY: "lobby",
+  FIRSTDEAL: "first-deal",
+  FIRSTBETTING: "first-betting",
+  SECONDDEAL: "second-deal",
+  EQUATIONFORMING: "equation-forming",
+  SECONDBETTING: "second-betting",
+  HILOSELECTION: "hi-lo-selection",
+  RESULTVIEWING: "result-viewing"
+}
