@@ -60,17 +60,6 @@ wss.on("connection", (ws) => {
         // TODO include apple myungjo font
         if (!clientMsg.type) return;
 
-        if (clientMsg.type === "create") {
-            let game = new Game();
-            game.hostId = clientMsg.userId; // no, right? TODO remove concept of hostId?? or add host promotion
-            game.currentTurnPlayerId = clientMsg.userId;
-            games.set(game.roomCode, game);
-        
-            clientMsg.roomCode = game.roomCode; // TODO this is such a bad flow
-
-            enterRoom(clientMsg);
-            console.log(game);
-        }
 
                 // if game still in lobby
                 //     show Lobby list
@@ -91,285 +80,315 @@ wss.on("connection", (ws) => {
         //      rejoin a game in progress
         //      rejoin a game in progress as host ( what does host really matter!?)
 
-        // TODO switch statement
-        if (clientMsg.type === "discard") {
-            const player = players.get(clientMsg.id);
-            const game = games.get(player.roomCode);
+        switch (clientMsg.type) {
 
-            sendSocketMessageToEveryClientInRoom(game.roomCode, {
-                type: "player-discarded",
-                id: clientMsg.id,
-                username: clientMsg.username,
-                value: clientMsg.value
-            });
+            case "create": {
+                let game = new Game();
+                game.hostId = clientMsg.userId; // no, right? TODO remove concept of hostId?? or add host promotion
+                game.currentTurnPlayerId = clientMsg.userId;
+                games.set(game.roomCode, game);
+            
+                clientMsg.roomCode = game.roomCode; // TODO this is such a bad flow
 
-            // rename to discard(player, data.value);
-            const index = player.hand.findIndex(card => card.value === clientMsg.value); // TODO rename to data.cardValue
-            if (index !== -1) {
-                player.hand.splice(index, 1);
+                enterRoom(clientMsg);
+                console.log(game);
+                break;
             }
 
-            const draw = drawNumberCardFromDeck(game.deck);
-            player.hand.push(draw);
+            case "discard": {
+                const player = players.get(clientMsg.id);
+                const game = games.get(player.roomCode);
 
-            notifyAllPlayersOfNewlyDealtCards(game.roomCode, player);
-            game.numPlayersThatHaveDiscarded += 1;
-
-            if (game.numPlayersThatHaveDiscarded === game.numPlayersThatNeedToDiscard) {
-                if (game.firstBettingRoundHasPassed) {
-                    commenceEquationForming(game);
-                } else {
-                    commenceFirstRoundBetting(game); 
-                }
-                // would break if someone leaves. in that case reduce num players that need to discard by 1?
-            }
-        }
-        
-        if (clientMsg.type === "start") {
-            const game = games.get(players.get(clientMsg.id).roomCode);
-            if (clientMsg.id !== game.hostId || players.size < 2) {
-                ws.send(JSON.stringify({ type: "reject-start" })); // TODO client will say must be players 2 even if the reject reason is client not being host
-                return;
-            }
-
-            game.started = true;
-            sendSocketMessageToEveryClientInRoom(game.roomCode, { 
-                type: "game-started", 
-                // chipCount: players.get(client.userId).chipCount, // TODO have we initialized chip count here
-                // id: client.userId
-            });
-
-            initializeHand(game);
-        }
-
-        if (clientMsg.type === "leave") {
-            const player = players.get(clientMsg.id);
-            const game = games.get(player.roomCode);
-
-            if (clientMsg.id === game.hostId) {
-                // set a new host. if last player, end the game
-            }
-
-            sendSocketMessageToEveryClientInRoom(game.roomCode, { type: "player-left" });
-
-            player.out = true; //ws.userId or userId??
-            // console.log(`User disconnected: ${ws.userId}`);
-        }
-
-        if (clientMsg.type === "enter") { // TODO change to enter, and then just check if game is in lobby phase and if player already exists
-            enterRoom(clientMsg);
-        }
-
-        if (clientMsg.type === "join") { // TODO change to set Name
-            console.log("join");
-            // if (ws.isHost) { // without this, later players joining become the host
-            //     currentTurnPlayerId = clientMsg.userId; // TODO surely we can set this later? as just the first player in players list?
-            //     hostId = clientMsg.userId; // just use ws.userId here?
-            // }
-            const roomCode = players.get(clientMsg.userId).roomCode;
-            const game = games.get(roomCode);
-
-            players.get(clientMsg.userId).username = clientMsg.username;
-            console.log(`***** 👩‍💻 ${game.hostId === clientMsg.userId ? 'Host' : 'Player'} joined: ${clientMsg.username} *****`);
-
-            // TODO can we do game.sendSocketMessage..? or this.notifyAllPlayers
-            sendSocketMessageToEveryClientInRoom(roomCode, {
-                type: "player-joined",
-                id: clientMsg.userId,
-                hostId: game.hostId,// client.userId === hostId, // this is wrong because it means the host will show everyone joining as host
-                color: clientMsg.color, // what happens if we put user color here?
-                username: clientMsg.username,
-            });
-
-            console.log(players);
-
-            logRoomsAndPlayers(); // this will be outside game class
-        }
-
-        function enterRoom(clientMsg) {
-            console.log('enterRoom');
-            if (!games.has(clientMsg.roomCode)) {
-                // send room code does not exist message
-                ws.send(JSON.stringify({ type: "room-join-reject" }));
-
-                return;
-            }
-
-            const game = games.get(clientMsg.roomCode);
-            ws.send(JSON.stringify({ type: "room-entered", roomCode: clientMsg.roomCode, hostId: game.hostId })); // again misleading to use clientMsg roomCode, bc we set it AFTER receiving the client message
-
-            if (game.started === false) {
-                  // send a newly connected player the list of all players that have joined thus far
-                [...players.values()].filter(player => player.roomCode === game.roomCode).forEach(player => {
-                    ws.send(JSON.stringify({
-                        type: "player-joined",
-                        id: player.id,
-                        hostId: game.hostId,// client.userId === hostId, // this is wrong because it means the host will show everyone joining as host
-                        color: player.color, // what happens if we put user color here?
-                        username: player.username,
-                    }));
+                sendSocketMessageToEveryClientInRoom(game.roomCode, {
+                    type: "player-discarded",
+                    id: clientMsg.id,
+                    username: clientMsg.username,
+                    value: clientMsg.value
                 });
 
-                if (players.has(clientMsg.userId)) {
-                    if (players.get(clientMsg.userId).roomCode === game.roomCode){
-                        ws.userId = clientMsg.id;
+                // rename to discard(player, data.value);
+                const index = player.hand.findIndex(card => card.value === clientMsg.value); // TODO rename to data.cardValue
+                if (index !== -1) {
+                    player.hand.splice(index, 1);
+                }
 
-                        logRoomsAndPlayers();
+                const draw = drawNumberCardFromDeck(game.deck);
+                player.hand.push(draw);
+
+                notifyAllPlayersOfNewlyDealtCards(game.roomCode, player);
+                game.numPlayersThatHaveDiscarded += 1;
+
+                if (game.numPlayersThatHaveDiscarded === game.numPlayersThatNeedToDiscard) {
+                    if (game.firstBettingRoundHasPassed) {
+                        commenceEquationForming(game);
                     } else {
-
+                        commenceFirstRoundBetting(game); 
                     }
-                } else {
-                    console.log("creating userId but no username yet");
-                    // if (ws.isHost) { // without this, later players joining become the host
-                    //     currentTurnPlayerId = clientMsg.userId; // TODO surely we can set this later? as just the first player in players list?
-                    //     hostId = clientMsg.userId; // just use ws.userId here?
-                    // }
+                    // would break if someone leaves. in that case reduce num players that need to discard by 1?
+                }
+                break;
+            }
+        
+            case "start": {
+                const game = games.get(players.get(clientMsg.id).roomCode);
+                if (clientMsg.id !== game.hostId || players.size < 2) {
+                    ws.send(JSON.stringify({ type: "reject-start" })); // TODO client will say must be players 2 even if the reject reason is client not being host
+                    return;
+                }
 
-                    console.log(`***** 👩‍💻 ${game.hostId === clientMsg.userId ? 'Host' : 'Player'} joined: ${clientMsg.userId} *****`);
+                game.started = true;
+                sendSocketMessageToEveryClientInRoom(game.roomCode, { 
+                    type: "game-started", 
+                    // chipCount: players.get(client.userId).chipCount, // TODO have we initialized chip count here
+                    // id: client.userId
+                });
 
-                    // have to reassign userId because what if someone refreshes? have to ignore the init message // TODO rethink this in the context of join/ enter
-                    // need to assign ws.userId because it's used to check clientId === id on server
-                    ws.userId = clientMsg.userId;
-                    // TODO instead of placeholderusername, just have no username, and filter player join messages by those that have username
-                    players.set(clientMsg.userId, new Player(clientMsg.userId, "placeholderUsername", [], 25)); // TODO sanitize clientMsg.username to standards
-                    players.get(clientMsg.userId).color = clientMsg.color;
-                    players.get(clientMsg.userId).roomCode = game.roomCode;
+                initializeHand(game);
+                break;
+            }
 
-                    console.log([...players].filter(([id, player]) => player.roomCode === game.roomCode));
+            case "leave": {
+                const player = players.get(clientMsg.id);
+                const game = games.get(player.roomCode);
+
+                if (clientMsg.id === game.hostId) {
+                    // set a new host. if last player, end the game
+                }
+
+                sendSocketMessageToEveryClientInRoom(game.roomCode, { type: "player-left" });
+
+                player.out = true; //ws.userId or userId??
+                // console.log(`User disconnected: ${ws.userId}`);
+                break;
+            }
+
+            case "enter": { // TODO change to enter, and then just check if game is in lobby phase and if player already exists
+                enterRoom(clientMsg);
+                break;
+            }
+
+            case "join": { // TODO change to set Name
+                console.log("join");
+                // if (ws.isHost) { // without this, later players joining become the host
+                //     currentTurnPlayerId = clientMsg.userId; // TODO surely we can set this later? as just the first player in players list?
+                //     hostId = clientMsg.userId; // just use ws.userId here?
+                // }
+                const roomCode = players.get(clientMsg.userId).roomCode;
+                const game = games.get(roomCode);
+
+                players.get(clientMsg.userId).username = clientMsg.username;
+                console.log(`***** 👩‍💻 ${game.hostId === clientMsg.userId ? 'Host' : 'Player'} joined: ${clientMsg.username} *****`);
+
+                // TODO can we do game.sendSocketMessage..? or this.notifyAllPlayers
+                sendSocketMessageToEveryClientInRoom(roomCode, {
+                    type: "player-joined",
+                    id: clientMsg.userId,
+                    hostId: game.hostId,// client.userId === hostId, // this is wrong because it means the host will show everyone joining as host
+                    color: clientMsg.color, // what happens if we put user color here?
+                    username: clientMsg.username,
+                });
+
+                console.log(players);
+
+                logRoomsAndPlayers(); // this will be outside game class
+                break;
+            }
+
+            function enterRoom(clientMsg) {
+                console.log('enterRoom');
+                if (!games.has(clientMsg.roomCode)) {
+                    // send room code does not exist message
+                    ws.send(JSON.stringify({ type: "room-join-reject" }));
+
+                    return;
+                }
+
+                const game = games.get(clientMsg.roomCode);
+                ws.send(JSON.stringify({ type: "room-entered", roomCode: clientMsg.roomCode, hostId: game.hostId })); // again misleading to use clientMsg roomCode, bc we set it AFTER receiving the client message
+
+                if (game.started === false) {
+                    // send a newly connected player the list of all players that have joined thus far
+                    [...players.values()].filter(player => player.roomCode === game.roomCode).forEach(player => {
+                        ws.send(JSON.stringify({
+                            type: "player-joined",
+                            id: player.id,
+                            hostId: game.hostId,// client.userId === hostId, // this is wrong because it means the host will show everyone joining as host
+                            color: player.color, // what happens if we put user color here?
+                            username: player.username,
+                        }));
+                    });
+
+                    if (players.has(clientMsg.userId)) {
+                        if (players.get(clientMsg.userId).roomCode === game.roomCode){
+                            ws.userId = clientMsg.id;
+
+                            logRoomsAndPlayers();
+                        } else {
+
+                        }
+                    } else {
+                        console.log("creating userId but no username yet");
+                        // if (ws.isHost) { // without this, later players joining become the host
+                        //     currentTurnPlayerId = clientMsg.userId; // TODO surely we can set this later? as just the first player in players list?
+                        //     hostId = clientMsg.userId; // just use ws.userId here?
+                        // }
+
+                        console.log(`***** 👩‍💻 ${game.hostId === clientMsg.userId ? 'Host' : 'Player'} joined: ${clientMsg.userId} *****`);
+
+                        // have to reassign userId because what if someone refreshes? have to ignore the init message // TODO rethink this in the context of join/ enter
+                        // need to assign ws.userId because it's used to check clientId === id on server
+                        ws.userId = clientMsg.userId;
+                        // TODO instead of placeholderusername, just have no username, and filter player join messages by those that have username
+                        players.set(clientMsg.userId, new Player(clientMsg.userId, "placeholderUsername", [], 25)); // TODO sanitize clientMsg.username to standards
+                        players.get(clientMsg.userId).color = clientMsg.color;
+                        players.get(clientMsg.userId).roomCode = game.roomCode;
+
+                        console.log([...players].filter(([id, player]) => player.roomCode === game.roomCode));
+                        
+                        logRoomsAndPlayers();
+                    }
+                } else if (game.started) {
+                    // send game state
+                }
+            }
+            // tests
+            // two players call and third player folds
+            // one player calls and two players fold = distribute pot to first player and end round
+            case "bet-placed": {
+                const justPlayedPlayer = players.get(clientMsg.userId);
+                const game = games.get(justPlayedPlayer.roomCode);
+
+                if (clientMsg.userId !== game.currentTurnPlayerId) return;
+
+                justPlayedPlayer.turnTakenThisRound = true;
+                justPlayedPlayer.stake += clientMsg.betAmount;
+                justPlayedPlayer.chipCount -= clientMsg.betAmount;
+
+                const betType = justPlayedPlayer.betAmount === 0 ? "check" :
+                                game.firstBettingRoundHasPassed === false && justPlayedPlayer.betAmount === 1 ? "ante" : // TODO implement proper ante
+                                game.toCall === justPlayedPlayer.stake ? "check" :
+                                justPlayedPlayer.stake - game.toCall >= 10 ? "raise10" :
+                                "raise";
+
+                game.toCall = Math.max(justPlayedPlayer.stake, game.toCall); // TODO rename game.toCall... it's not really toCall. it's the current stake of the game. toCall is the different between that and player.stake
+                game.pot += clientMsg.betAmount;
+
+                sendSocketMessageToEveryClientInRoom(game.roomCode, {
+                    type: "bet-placed",
+                    id: clientMsg.userId,
+                    username: justPlayedPlayer.username,
+                    betAmount: clientMsg.betAmount, // so users can see "so and so bet x chips"
+                    chipCount: justPlayedPlayer.chipCount, // to update the chip stack visual of player x for each player
+                    pot: game.pot, // otherwise, pot won't get updated on last player of the round
+                    betType: betType
+                });
+                endRoundOrProceedToNextPlayer(game, justPlayedPlayer);
+                break;
+            }
+
+            // TODO more tests - have a folded player submit an equation anyway and confirm it's discarded by server.
+            case "equation-result": {
+                // definitely DON'T want to tell everyone what the results are yet
+                const player = players.get(clientMsg.userId);
+                // a folded player may have manually sent a formed equation despite not given the opportunity, just ignore
+                if (player.foldedThisTurn) { return; }
+                console.log("equation-result received " + clientMsg.result);
+
+                player.hand = clientMsg.order.map(i => player.hand[i]);
+                player.equationResult = clientMsg.result;
+
+                // let everyone else know I've moved my cards, so they can see the order.
+                wss.clients.forEach((client) => {
+                    let handToSend = getHandToSendFromHand(player.hand, client.userId === clientMsg.userId);
                     
-                    logRoomsAndPlayers();
+                    if (/*client !== ws && */client.readyState === WebSocket.OPEN && players.get(client.userId).roomCode === player.roomCode) { //some kind of clientsInRoom function
+                        client.send(JSON.stringify({
+                            type: "player-formed-equation",
+                            id: clientMsg.userId,
+                            username: players.get(clientMsg.userId).username,
+                            chipCount: players.get(clientMsg.userId).chipCount,
+                            hand: handToSend
+                        }));
+                    }
+                })
+
+                const game = games.get(player.roomCode);
+                // if we've received equation result socket messages from every player, we can proceed to second round of betting.
+                if (nonFoldedPlayers(game).length === 1){
+                    distributePotToOnlyRemainingPlayer(game, nonFoldedPlayers(game)[0]);
+                    return;
                 }
-            } else if (game.started) {
-                // send game state
-            }
-        }
-        // tests
-        // two players call and third player folds
-        // one player calls and two players fold = distribute pot to first player and end round
-        if (clientMsg.type === "bet-placed"){
-            const justPlayedPlayer = players.get(clientMsg.userId);
-            const game = games.get(justPlayedPlayer.roomCode);
 
-            if (clientMsg.userId !== game.currentTurnPlayerId) return;
+                // check that every player submitted choices
+                if (nonFoldedPlayers(game).every(player => player.equationResult !== null)) {
+                    if (game.maxRaiseReached) {
+                        console.log('Max bet was reached on first round of betting. Skipping second round.');
 
-            justPlayedPlayer.turnTakenThisRound = true;
-            justPlayedPlayer.stake += clientMsg.betAmount;
-            justPlayedPlayer.chipCount -= clientMsg.betAmount;
+                        sendSocketMessageToNonFoldedPlayers(game, { type: "second-round-betting-skipped" });
 
-            const betType = justPlayedPlayer.betAmount === 0 ? "check" :
-                            game.firstBettingRoundHasPassed === false && justPlayedPlayer.betAmount === 1 ? "ante" : // TODO implement proper ante
-                            game.toCall === justPlayedPlayer.stake ? "check" :
-                            justPlayedPlayer.stake - game.toCall >= 10 ? "raise10" :
-                            "raise";
+                        commenceHiLoSelection(game);
+                    } else {
+                        console.log('All equations received. Proceeding to second round of betting.');
 
-            game.toCall = Math.max(justPlayedPlayer.stake, game.toCall); // TODO rename game.toCall... it's not really toCall. it's the current stake of the game. toCall is the different between that and player.stake
-            game.pot += clientMsg.betAmount;
-
-            sendSocketMessageToEveryClientInRoom(game.roomCode, {
-                type: "bet-placed",
-                id: clientMsg.userId,
-                username: justPlayedPlayer.username,
-                betAmount: clientMsg.betAmount, // so users can see "so and so bet x chips"
-                chipCount: justPlayedPlayer.chipCount, // to update the chip stack visual of player x for each player
-                pot: game.pot, // otherwise, pot won't get updated on last player of the round
-                betType: betType
-            });
-            endRoundOrProceedToNextPlayer(game, justPlayedPlayer);
-        }
-
-        // TODO more tests - have a folded player submit an equation anyway and confirm it's discarded by server.
-        if (clientMsg.type === "equation-result") {
-            // definitely DON'T want to tell everyone what the results are yet
-            const player = players.get(clientMsg.userId);
-            // a folded player may have manually sent a formed equation despite not given the opportunity, just ignore
-            if (player.foldedThisTurn) { return; }
-            console.log("equation-result received " + clientMsg.result);
-
-            player.hand = clientMsg.order.map(i => player.hand[i]);
-            player.equationResult = clientMsg.result;
-
-            // let everyone else know I've moved my cards, so they can see the order.
-            wss.clients.forEach((client) => {
-                let handToSend = getHandToSendFromHand(player.hand, client.userId === clientMsg.userId);
-                
-                if (/*client !== ws && */client.readyState === WebSocket.OPEN && players.get(client.userId).roomCode === player.roomCode) { //some kind of clientsInRoom function
-                    client.send(JSON.stringify({
-                        type: "player-formed-equation",
-                        id: clientMsg.userId,
-                        username: players.get(clientMsg.userId).username,
-                        chipCount: players.get(clientMsg.userId).chipCount,
-                        hand: handToSend
-                    }));
+                        commenceSecondRoundBetting(game);
+                    }
                 }
-            })
-
-            const game = games.get(player.roomCode);
-            // if we've received equation result socket messages from every player, we can proceed to second round of betting.
-            if (nonFoldedPlayers(game).length === 1){
-                distributePotToOnlyRemainingPlayer(game, nonFoldedPlayers(game)[0]);
-                return;
+                break;
             }
 
-            // check that every player submitted choices
-            if (nonFoldedPlayers(game).every(player => player.equationResult !== null)) {
-                if (game.maxRaiseReached) {
-                    console.log('Max bet was reached on first round of betting. Skipping second round.');
+            case "fold": {
+                const foldedPlayer = players.get(ws.userId); // use ws.userId because we can't trust client to provide the id
+                foldedPlayer.foldedThisTurn = true; // can we pass nothing in the case of placing a bet?
+                foldedPlayer.hand.forEach(card => {
+                    card.hidden = true;
+                });
 
-                    sendSocketMessageToNonFoldedPlayers(game, { type: "second-round-betting-skipped" });
+                sendSocketMessageThatPlayerFolded(foldedPlayer.roomCode, foldedPlayer.id);
 
-                    commenceHiLoSelection(game);
-                } else {
-                    console.log('All equations received. Proceeding to second round of betting.');
-
-                    commenceSecondRoundBetting(game);
+                const game = games.get(foldedPlayer.roomCode); // remove when going to OOP?
+                if (nonFoldedPlayers(game).length === 1){
+                    distributePotToOnlyRemainingPlayer(game, nonFoldedPlayers(game)[0]);
+                    return;
                 }
-            }
-        }
 
-        if (clientMsg.type === "folded") {
-            const foldedPlayer = players.get(clientMsg.userId)
-            foldedPlayer.foldedThisTurn = true; // can we pass nothing in the case of placing a bet?
-            foldedPlayer.hand.forEach(card => {
-                card.hidden = true;
-            });
-
-            sendSocketMessageThatPlayerFolded(foldedPlayer.roomCode, clientMsg.userId);
-
-            const game = games.get(player.roomCode); // remove when going to OOP?
-            if (nonFoldedPlayers(game).length === 1){
-                distributePotToOnlyRemainingPlayer(game, nonFoldedPlayers(game)[0]);
-                return;
+                if (clientMsg.manual === true) { // TODO unreadable
+                    endRoundOrProceedToNextPlayer(game, foldedPlayer);
+                }
+                break;
             }
 
-            if (clientMsg.manual === true) { // TODO unreadable
-                endRoundOrProceedToNextPlayer(game, foldedPlayer);
+            // TODO (putting this in random place so I see it later) - test every number of automatically folded players during equation forming
+            case "hi-lo-selected": {
+                console.log(clientMsg.userId, clientMsg.username, clientMsg.choices);
+                const player = players.get(clientMsg.userId);
+                player.choices = clientMsg.choices;
+
+                const game = games.get(player.roomCode);
+                // check that every player submitted choices
+                if (nonFoldedPlayers(game).every(player => player.choices.length > 0)) {
+                    console.log('everyone submitted their hi or lo selections');
+                    revealHiddenCards(game);
+                    determineWinners(game);
+                }
+                break;
             }
-        }
 
-        // TODO (putting this in random place so I see it later) - test every number of automatically folded players during equation forming
-        if (clientMsg.type === "hi-lo-selected") {
-            console.log(clientMsg.userId, clientMsg.username, clientMsg.choices);
-            const player = players.get(clientMsg.userId);
-            player.choices = clientMsg.choices;
+            // need this so that players have time to view results
+            case "acknowledge-hand-results": {
+                const player = players.get(clientMsg.userId);
+                player.acknowledgedResults = true;
 
-            const game = games.get(player.roomCode);
-            // check that every player submitted choices
-            if (nonFoldedPlayers(game).every(player => player.choices.length > 0)) {
-                console.log('everyone submitted their hi or lo selections');
-                revealHiddenCards(game);
-                determineWinners(game);
+                const game = games.get(player.roomCode);
+                // check that every player submitted choices
+                if (nonFoldedPlayers(game).every(player => player.acknowledgedResults === true)) {
+                    endHand(game);
+                }
+                break;
             }
-        }
 
-        // need this so that players have time to view results
-        if (clientMsg.type === "acknowledge-hand-results") {
-            const player = players.get(clientMsg.userId);
-            player.acknowledgedResults = true;
-
-            const game = games.get(player.roomCode);
-            // check that every player submitted choices
-            if (nonFoldedPlayers(game).every(player => player.acknowledgedResults === true)) {
-                endHand(game);
+            default: {
+                ws.send(JSON.stringify({ type: "unknown-message" }));
+                break;
             }
         }
     });
@@ -568,7 +587,10 @@ function sendSocketMessageThatPlayerFolded(roomCode, foldedUserId) {
 function sendSocketMessageToEveryClientInRoom(roomCode, objectToSend) {
     wss.clients.forEach((client) => {
         // should we retry if not ready state? one missed message could mean game never continues
-        if (client.readyState === WebSocket.OPEN && players.get(client.userId).roomCode === roomCode /* checking if this player is in the game */) {
+        // ? is required on players.get for the following case:
+        //      if someone has gone to the site (opened the tab) but is still on the homepage,
+        //      there is a client and userId, but no player entry for them yet. so players.get will return undefined and therefore there will be no room code
+        if (client.readyState === WebSocket.OPEN && players.get(client.userId)?.roomCode === roomCode /* checking if this player is in the game */) {
             const payload = JSON.stringify(objectToSend);
             client.send(payload);
         }
@@ -970,17 +992,17 @@ function determineWinners(game) {
         players.get(hiWinner.id).chipCount += splitPot;
         players.get(loWinner.id).chipCount += splitPot;
 
-        message = hiWinner + " won the high bet and " + loWinner + " won the low bet.";
+        message = hiWinner.username + " won the high bet and " + loWinner.username + " won the low bet.";
     } else if (loWinner !== null) {
         players.get(loWinner.id).chipCount += game.pot;
         loWinnerChipsDelta = game.pot;
 
-        message = loWinner + " won the low bet.";
+        message = loWinner.username + " won the low bet.";
     } else if (hiWinner !== null) {
         players.get(hiWinner.id).chipCount += game.pot;
         hiWinnerChipsDelta = game.pot;
 
-        message = hiWinner + " won the high bet.";
+        message = hiWinner.username + " won the high bet.";
     }
 
     game.pot = 0; // TODO put this inside of endHand??
@@ -1128,7 +1150,7 @@ function logRoomsAndPlayers() {
     // build a roomCode → [userId] map
     const grouped = new Map();
     for (const [userId, player] of players.entries()) {
-        const { roomCode } = player.roomCode;
+        const roomCode = player.roomCode;
         if (!grouped.has(roomCode)) {
             grouped.set(roomCode, []);
         }

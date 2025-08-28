@@ -323,6 +323,7 @@ body {
 #roomCodeContainer { /* TODO rename to roomCodeParagraph or something*/
     color: white;
     font-size: 2em;
+    transition: transform .5s ease;
 }
 
 #nameInput {

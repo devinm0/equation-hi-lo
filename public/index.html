@@ -83,34 +83,15 @@
     
     import { NumberCards, OperatorCards, Suits } from './enums.js';
     import { SoundManager } from './sounds.js';
+    import CountdownTimer from "./timer.js";
 
+    const progressBar = document.getElementById("progressBar");
+    const progressBarOverlay = document.getElementById("progressBarOverlay");
+
+    const timer = new CountdownTimer(90 * 1000, progressBar, progressBarOverlay);
     const sounds = new SoundManager();
 
-    // SECTION Countdown timer code. //
-    const totalDuration = 90 * 1000; // 60 seconds
-    const progressBar = document.getElementById('progressBar');
-    const progressBarOverlay = document.getElementById('progressBarOverlay');
-
-    let startTime = Date.now();
-    let endTime = startTime + totalDuration;
-
-    function updateTimer() {
-        const now = Date.now();
-        const remainingUnrounded = (endTime - now) / 1000;
-        const remaining = Math.max(0, Math.floor(remainingUnrounded));
-        progressBarOverlay.textContent = remaining;
-
-        const width = remainingUnrounded * 100 / 90;
-        progressBar.style.width = width + "%";
-
-        if (remaining > 0) {
-            requestAnimationFrame(updateTimer); // More accurate and smoother
-        }
-    }
-
-    // END SECTION Countdown timer code. //
-
-    const socket = new WebSocket(`wss://equationhi.lol`);
+    const socket = new WebSocket(`ws://localhost:8080`);
     const handDivs = new Map(); // map of divs, one for each player
     const handDivsList = []; // ordered list of divs, so that we can draw the user's hand last
     const lobbyPlayerDivs = {}; // list of nametags basically, for game lobby. one per player
@@ -132,132 +113,184 @@
     socket.addEventListener("message", (event) => {
       const msg = JSON.parse(event.data);
 
-      if (msg.type === "init") {
-        const now = Date.now();
+      switch (msg.type) {
+        case "init": {
+            const now = Date.now();
 
-        // TODO just refactor to if (playerDataStoredLocally() )
-        console.log("myId is: ", myId, " server message is: ", event.data, " So if the userIds don't match, it means we've rejoined. Discarding the server generated id.");
-        if (!myId || !timestamp || now - timestamp > EXPIRATION_TIME) { // nothing in localStorage, means we are new, fill in with server generated user data
-            myId = msg.id;
-            myColor = msg.color;
-            localStorage.setItem(USER_ID_KEY, myId);
-            localStorage.setItem(USER_COLOR_KEY, myColor);
-            localStorage.setItem(TIMESTAMP_KEY, now);
-        } else { // items exist in localStorage = we exist = page refreshed
-            // send rejoin socket message
-            const data = {
-                type: "join", // TODO need to change... refreshing page is no longer a join, take me to home page
-                id: myId,
-                color: myColor,
-                username: myName
-            };
-            socket.send(JSON.stringify(data));
+            // TODO just refactor to if (playerDataStoredLocally() )
+            console.log("myId is: ", myId, " server message is: ", event.data, " So if the userIds don't match, it means we've rejoined. Discarding the server generated id.");
+            if (!myId || !timestamp || now - timestamp > EXPIRATION_TIME) { // nothing in localStorage, means we are new, fill in with server generated user data
+                myId = msg.id;
+                myColor = msg.color;
+                localStorage.setItem(USER_ID_KEY, myId);
+                localStorage.setItem(USER_COLOR_KEY, myColor);
+                localStorage.setItem(TIMESTAMP_KEY, now);
+            } else { // items exist in localStorage = we exist = page refreshed
+                // send rejoin socket message
+                const data = {
+                    type: "join", // TODO need to change... refreshing page is no longer a join, take me to home page
+                    id: myId,
+                    color: myColor,
+                    username: myName
+                };
+                socket.send(JSON.stringify(data));
 
-            // if we rejoin after joining, but before the game starts, we are still in the lobby.
-            // don't show name input controls in that case. We've already joined.
-            document.getElementById("nameContainer").style.display = "none";
-        }
-      } else if (msg.type === "game-started") {
-        const btn = document.getElementById("startButton");
-        btn.parentNode.removeChild(btn);
-        // document.getElementById("leaveButton").style.display = "block";
-        document.getElementById("lobbyPlayerListContainer").remove();
-        document.getElementById("lobbyTitleContainer").remove();
-        showNotification('The game has started!');
-      } else if (msg.type === "reject-start") {
-        showNotification("At least 2 players must join before starting the game.");
-      } else if (msg.type === "begin-hand") {
-        showPlayingLayout();
-        showNotification("Beginning hand " + (msg.handNumber + 1));
-      } else if (msg.type === "deal") {
-        sounds.play("deal");
-
-        console.log(msg);
-        if (msg.id === myId) {
-            myHand = msg.hand;
-        }        
-        drawHand(msg.id, msg.username, msg.hand, msg.multiplicationCardDealt);
-    
-        if (msg.chipCount !== undefined) {
-            // this should be msg.id I guess. originally I was only using the deal message for myself
-            updateChipStack(msg.chipCount, document.getElementById("chipStacksContainer-" + msg.id));
-        }
-        // TODO 5/20
-        // need the same bool to only do this with alert.
-        const highlightedCards = document.querySelectorAll('.card-highlighted');
-        highlightedCards.forEach(card => {
-            // have a guard clause here but might be better to KNOW that I'll only call this once
-            if (!card.classList.contains('listener-added')) {
-                card.addEventListener('click', function() {
-                    console.log('sending a discard message ');
-                    console.log(this);
-                    const data = {
-                        type: "discard",
-                        id: myId,
-                        value: this.children[0].dataset.value,
-                        color: myColor,
-                        username: myName
-                    };
-                    socket.send(JSON.stringify(data));
-                    // remove the highlight from ALL cards
-                    document.querySelectorAll('.card-highlighted').forEach(card => {
-                        card.classList.remove("card-highlighted");// only do this once server confirms??
-                    });
-                });
-
-                card.classList.add('listener-added');
+                // if we rejoin after joining, but before the game starts, we are still in the lobby.
+                // don't show name input controls in that case. We've already joined.
+                document.getElementById("nameContainer").style.display = "none";
             }
-        });
-      } else if (msg.type === "player-joined") {
-        console.log("player-joined");
-        drawPlayer(msg.id, msg.color, msg.username, msg.hostId);
 
-        numPlayersJoined += 1;
+            break;
+        } 
+        
+        case "game-started": {
+            const roomCode = document.getElementById("roomCodeContainer");
+            roomCode.style.transform = "translate(calc(50vw - 50% - 60px), calc(-50vh + 50% + 30px))";
 
-        if (numPlayersJoined >= 2 && msg.hostId === myId) {
-            // we are the Host, and there's at least one other player, so game can be started
-            document.getElementById("startButton").disabled = false;            
-        }
-      } else if (msg.type === "player-discarded") {
-        sounds.play("discard");
+            const btn = document.getElementById("startButton");
+            btn.parentNode.removeChild(btn);
+            // document.getElementById("leaveButton").style.display = "block";
+            document.getElementById("lobbyPlayerListContainer").remove();
+            document.getElementById("lobbyTitleContainer").remove();
+            showNotification('The game has started!');
 
-        if (msg.id === myId) {
-            showNotification("You discarded your " + msg.value + " card.");
-        } else {
-            showNotification(msg.username + " discarded their " + msg.value + " card.");
-        }
-      } else if (msg.type === "first-round-betting-commenced") {
-        console.log("First round betting commenced.");
-        showNotification("First round betting has commenced.");
-      } else if (msg.type === "second-round-betting-commenced") {
-        showNotification("Second round betting has commenced.");
-      } else if (msg.type === "second-round-betting-skipped") {
-        showNotification("1 or more players are all in. Second round betting skipped.");
-      } else if (msg.type === "player-folded") {
-        sounds.play("fold");
+            break;
+        } 
+        
+        case "reject-start": {
+            showNotification("At least 2 players must join before starting the game.");
 
-        showNotification(msg.username + " folded.");
+            break;
+        } 
+        
+        case "begin-hand": {
+            showPlayingLayout();
+            showNotification("Beginning hand " + (msg.handNumber + 1));
+ 
+            break;
+       } 
+        
+        case "deal": {
+            sounds.play("deal");
 
-        // const hand = handDivs.get(myId).querySelectorAll('.card');
-        // console.log(hand);
+            console.log(msg);
+            if (msg.id === myId) {
+                myHand = msg.hand;
+            }        
+            drawHand(msg.id, msg.username, msg.hand, msg.multiplicationCardDealt);
+        
+            if (msg.chipCount !== undefined) {
+                // this should be msg.id I guess. originally I was only using the deal message for myself
+                updateChipStack(msg.chipCount, document.getElementById("chipStacksContainer-" + msg.id));
+            }
+            // TODO 5/20
+            // need the same bool to only do this with alert.
+            const highlightedCards = document.querySelectorAll('.card-highlighted');
+            highlightedCards.forEach(card => {
+                // have a guard clause here but might be better to KNOW that I'll only call this once
+                if (!card.classList.contains('listener-added')) {
+                    card.addEventListener('click', function() {
+                        console.log('sending a discard message ');
+                        console.log(this);
+                        const data = {
+                            type: "discard",
+                            id: myId,
+                            value: this.children[0].dataset.value,
+                            color: myColor,
+                            username: myName
+                        };
+                        socket.send(JSON.stringify(data));
+                        // remove the highlight from ALL cards
+                        document.querySelectorAll('.card-highlighted').forEach(card => {
+                            card.classList.remove("card-highlighted");// only do this once server confirms??
+                        });
+                    });
 
-        // for (const card of hand) {
-        //     card.classList.add("folded");
-        // };
+                    card.classList.add('listener-added');
+                }
+            });
+  
+            break;
+        } 
+        
+        case "player-joined": {
+            console.log("player-joined");
+            drawPlayer(msg.id, msg.color, msg.username, msg.hostId);
 
-        // console.log(Date.now());
+            numPlayersJoined += 1;
 
-        // setTimeout(() => {
-        //     console.log("timeout complete");
+            if (numPlayersJoined >= 2 && msg.hostId === myId) {
+                // we are the Host, and there's at least one other player, so game can be started
+                document.getElementById("startButton").disabled = false;            
+            }
+  
+            break;
+        } 
+        
+        case "player-discarded": {
+            sounds.play("discard");
 
-        //     console.log(Date.now());
+            if (msg.id === myId) {
+                showNotification("You discarded your " + msg.value + " card.");
+            } else {
+                showNotification(msg.username + " discarded their " + msg.value + " card.");
+            }
+              
+            break;
+        } 
+        
+        case "first-round-betting-commenced": {
+            console.log("First round betting commenced.");
+            showNotification("First round betting has commenced.");  
 
-            drawHand(msg.id, msg.username, msg.hand, false, true);
-        // }, 50 * hand.length + 300 );
-      } else if (msg.type === "player-formed-equation") {
-        // no new cards are dealt, so we need this special message to make everyone redraw the reordered hands 
+            break;
+        } 
+        
+        case "second-round-betting-commenced": {
+            showNotification("Second round betting has commenced.");
+          
+            break;
+        } 
+        
+        case "second-round-betting-skipped": {
+            showNotification("1 or more players are all in. Second round betting skipped.");
+  
+            break;
+        } 
+        
+        case "player-folded": {
+            sounds.play("fold");
+
+            showNotification(msg.username + " folded.");
+
+            // const hand = handDivs.get(myId).querySelectorAll('.card');
+            // console.log(hand);
+
+            // for (const card of hand) {
+            //     card.classList.add("folded");
+            // };
+
+            // console.log(Date.now());
+
+            // setTimeout(() => {
+            //     console.log("timeout complete");
+
+            //     console.log(Date.now());
+
+                drawHand(msg.id, msg.username, msg.hand, false, true);
+            // }, 50 * hand.length + 300 );
+  
+            break;
+        } 
+        
+        case "player-formed-equation": {
+            // no new cards are dealt, so we need this special message to make everyone redraw the reordered hands 
             drawHand(msg.id, msg.username, msg.hand, false, false); 
-      } else if (msg.type === "bet-placed") {
+
+            break;
+        } 
+        
+        case "bet-placed": {
             console.log("socket message bet-placed");
             sounds.play(msg.betType);
 
@@ -265,39 +298,51 @@
             updateChipStack(msg.chipCount, document.getElementById("chipStacksContainer-" + msg.id));
 
             updatePot(msg.pot);
-      } else if (msg.type === "next-turn") {
-        console.log("socket message next-turn");
-        // document.getElementById("potDiv").textContent = "Pot: " + msg.pot;
-        // updateChipStack(msg.pot, document.getElementById("chipStacksContainer"));
-        // console.log(msg.currentTurnPlayerId, myId, msg.toCall);
 
-        if (msg.currentTurnPlayerId === myId) { // bad practice. trusting the client to do this.
-            setupBettingControls(msg.toCall, msg.maxBet, msg.playerChipCount);
-            console.log("calling hideProgressBar from here");
-            hideProgressBar();
-        } else {
-            notifyThatAnotherPlayerIsBetting(msg.username);
-        }
+            break;
+        } 
+        
+        case "next-turn": {
+            console.log("socket message next-turn");
+            // document.getElementById("potDiv").textContent = "Pot: " + msg.pot;
+            // updateChipStack(msg.pot, document.getElementById("chipStacksContainer"));
+            // console.log(msg.currentTurnPlayerId, myId, msg.toCall);
 
-        highlightCurrentBettingPlayerAndDehighlightOthers(msg.currentTurnPlayerId);
-        // chips move from your stack to a staging stack
-      } else if (msg.type === "end-betting-round") {
-        // remove highlights from who is betting
-        document.querySelectorAll(".handLabel").forEach(el => {
-            el.style.backgroundColor = "";
-        });
+            if (msg.currentTurnPlayerId === myId) { // bad practice. trusting the client to do this.
+                setupBettingControls(msg.toCall, msg.maxBet, msg.playerChipCount);
+                console.log("calling hideProgressBar from here");
+                hideProgressBar();
+            } else {
+                notifyThatAnotherPlayerIsBetting(msg.username);
+            }
 
-        console.log("socket message end-betting-round");
-        if (msg.round === 'first'){
-            showNotification('First betting round complete. Dealing last open card');
-        } else if (msg.round === 'second') {
-            showNotification('Second betting round complete.');
-        }
-    // TODO test that a folded player gets the right message once equation forming starts
-      } else if (msg.type === "commence-equation-forming") {
-        sounds.play("start");
+            highlightCurrentBettingPlayerAndDehighlightOthers(msg.currentTurnPlayerId);
+            // chips move from your stack to a staging stack
+  
+            break;
+        } 
+        
+        case "end-betting-round": {
+            // remove highlights from who is betting
+            document.querySelectorAll(".handLabel").forEach(el => {
+                el.style.backgroundColor = "";
+            });
 
-        console.log("socket message commence-equation-forming");
+            console.log("socket message end-betting-round");
+            if (msg.round === 'first'){
+                showNotification('First betting round complete. Dealing last open card');
+            } else if (msg.round === 'second') {
+                showNotification('Second betting round complete.');
+            }
+            // TODO test that a folded player gets the right message once equation forming starts
+  
+            break;
+        } 
+        
+        case "commence-equation-forming": {
+            sounds.play("start");
+
+            console.log("socket message commence-equation-forming");
             beginCountdownNotification();
             if (msg.folded) {
                 showNotification('Other players are forming their equations.');
@@ -305,8 +350,12 @@
             showNotification('90 seconds! Drag cards to get close to 1 or 20.', "limegreen", 3000);
             sortable.option("disabled", false)
             }
-      } else if (msg.type === "end-equation-forming") {
-        sounds.play("end");
+
+            break;
+        } 
+        
+        case "end-equation-forming": {
+            sounds.play("end");
 
             console.log("socket message end-equation-forming");
             hideProgressBar(); // do we call this actually? rename to resetAndhideProgressBar?
@@ -320,7 +369,8 @@
                 console.log("265 equationResult " + equationResult);
             } catch (e) {
                 showNotification("You were unable to form an equation. You fold automatically.", "red", 5000);
-                socket.send(JSON.stringify({ type: "folded", manual: false }));
+                // actually don't even need to send anything here. server can just handle it
+                socket.send(JSON.stringify({ type: "fold", manual: false }));
             }
             console.log(Array.from(handDivs.get(myId).querySelectorAll('.card')).map(card => card.dataset.id));
             const data = {
@@ -331,63 +381,86 @@
                 order: Array.from(handDivs.get(myId).querySelectorAll('.card')).map(card => card.dataset.id)
             };
             socket.send(JSON.stringify(data));
-      } else if (msg.type === "hi-lo-selection") {
-        showNotification("Select Hi, Lo, or Swing betting.");
 
-        openChoiceModal(choices => {
-            if (choices) {
-                const data = {
-                    type: "hi-lo-selected",
-                    userId: myId,
-                    username: myName,
-                    choices: choices
-                };
-                console.log(data);
-                socket.send(JSON.stringify(data));
+            break;
+        } 
+        
+        case "hi-lo-selection": {
+            showNotification("Select Hi, Lo, or Swing betting.");
 
-                console.log('Player chose:', choices); // e.g., ["low", "high"]
-            } else {
-                console.log('Player canceled');
-            }
+            openChoiceModal(choices => {
+                if (choices) {
+                    const data = {
+                        type: "hi-lo-selected",
+                        userId: myId,
+                        username: myName,
+                        choices: choices
+                    };
+                    console.log(data);
+                    socket.send(JSON.stringify(data));
+
+                    console.log('Player chose:', choices); // e.g., ["low", "high"]
+                } else {
+                    console.log('Player canceled');
+                }
             });
-      } else if (msg.type === "round-result") {
-        if (msg.loWinner?.id === myId || msg.hiWinner?.id === myId) {
-            sounds.play("win");
-        }
-        showNotification(msg.message, "orange", 10000);
-        updatePot(0);
+  
+            break;
+        } 
+        
+       case "round-result": {
+            if (msg.loWinner?.id === myId || msg.hiWinner?.id === myId) {
+                sounds.play("win");
+            }
+            showNotification(msg.message, "orange", 10000);
+            updatePot(0);
 
-        showResultsLayout(msg.loWinner?.id, msg.hiWinner?.id);
-        if (! msg.becauseAllButOneFolded) {
-            // message: loWinner.username + " won the low bet and " + hiWinner.username + " won the high bet.",
-            // message: loWinner.username + " won the low bet.",
-            // message: hiWinner.username + " won the high bet.",
+            showResultsLayout(msg.loWinner?.id, msg.hiWinner?.id);
+            if (! msg.becauseAllButOneFolded) {
+                // message: loWinner.username + " won the low bet and " + hiWinner.username + " won the high bet.",
+                // message: loWinner.username + " won the low bet.",
+                // message: hiWinner.username + " won the high bet.",
 
-            displayHandResults(msg); // in the case of everyone but one folding, we don't need to show results
-            // a message saying the whole pot went to the last person by default is sufficient.
-        }
-    } else if (msg.type === "room-join-reject") { // TODO rename to room-enter-reject
-        const error = document.getElementById("roomCodeError");
-        console.log("Room code does not exist.");
-        error.textContent = "Room code does not exist.";
-    } else if (msg.type === "room-entered") {
-        const roomCodeContainer = document.getElementById("roomCodeContainer");
-        roomCodeContainer.textContent = "Room Code: " + msg.roomCode;
+                displayHandResults(msg); // in the case of everyone but one folding, we don't need to show results
+                // a message saying the whole pot went to the last person by default is sufficient.
+            }
+  
+            break;
+        } 
+        
+        case "room-join-reject": { // TODO rename to room-enter-reject
+            const error = document.getElementById("roomCodeError");
+            console.log("Room code does not exist.");
+            error.textContent = "Room code does not exist.";
+  
+            break;
+        } 
+        
+        case "room-entered": {
+            const roomCodeContainer = document.getElementById("roomCodeContainer");
+            roomCodeContainer.textContent = "Room Code: " + msg.roomCode;
 
-        if (msg.hostId === myId) { 
-            const startButton = document.getElementById("startButton")
-            startButton.style.display = "block";
-            startButton.disabled = true; // only enable it once the host joins
+            if (msg.hostId === myId) { 
+                const startButton = document.getElementById("startButton")
+                startButton.style.display = "block";
+                startButton.disabled = true; // only enable it once the host joins
+            }
+  
+            break;
+        } 
+        
+        case "kicked": {
+            if (msg.userId === myId) {
+                showNotification("No more chips! You're out. Better luck next time!", "red");
+            } else {
+                //TODO redraw hand to be out (red and strikethrough)
+                showNotification(msg.username + " has no more chips and is out of the game.", "red");
+            }
+  
+            break;
         }
-    } else if (msg.type === "kicked") {
-        if (msg.userId === myId) {
-            showNotification("No more chips! You're out. Better luck next time!", "red");
-        } else {
-            //TODO redraw hand to be out (red and strikethrough)
-            showNotification(msg.username + " has no more chips and is out of the game.", "red");
-        }
-      }
-    });
+    }
+});
 
     document.getElementById("submitNameButton").addEventListener("click", () => {
         if (myName === null || myName === undefined) { // server prevents username being set twice
@@ -717,10 +790,7 @@
         progressBar.style.display = "block";
         progressBar.style.width = "100%";
 
-        // begin countdown
-        startTime = Date.now();
-        endTime = startTime + totalDuration;
-        updateTimer(); // only call once because it call requestAnimationFrame recursively
+        timer.start(); // only call once because it call requestAnimationFrame recursively
     }
 
     function hideProgressBar(){
@@ -829,7 +899,7 @@
             // send fold message. server will eliminate player and broadcast notification   
             console.log("Player folded, toCall is " + toCall);
             // need to send betAmount so that it doesn't get reset. refactor to track on server side
-            socket.send(JSON.stringify({ type: "folded", userId: myId, manual: true }));
+            socket.send(JSON.stringify({ type: "fold", userId: myId, manual: true }));
             hideBettingControls();
         };
     }
