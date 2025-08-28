@@ -81,17 +81,17 @@
     <script src="./sortable.js"></script>
     <script type="module">
     
-    import { NumberCards, OperatorCards, Suits } from './enums.js';
+    import { NumberCards, OperatorCards, Suits, GamePhases } from './enums.js';
     import { SoundManager } from './sounds.js';
     import CountdownTimer from "./timer.js";
-
+        
     const progressBar = document.getElementById("progressBar");
     const progressBarOverlay = document.getElementById("progressBarOverlay");
 
     const timer = new CountdownTimer(90 * 1000, progressBar, progressBarOverlay);
     const sounds = new SoundManager();
 
-    const socket = new WebSocket(`ws://localhost:8080`);
+    const socket = new WebSocket(`wss://equationhi.lol`);
     const handDivs = new Map(); // map of divs, one for each player
     const handDivsList = []; // ordered list of divs, so that we can draw the user's hand last
     const lobbyPlayerDivs = {}; // list of nametags basically, for game lobby. one per player
@@ -329,9 +329,9 @@
             });
 
             console.log("socket message end-betting-round");
-            if (msg.round === 'first'){
+            if (msg.round === GamePhases.FIRSTBETTING){
                 showNotification('First betting round complete. Dealing last open card');
-            } else if (msg.round === 'second') {
+            } else if (msg.round === GamePhases.SECONDBETTING) {
                 showNotification('Second betting round complete.');
             }
             // TODO test that a folded player gets the right message once equation forming starts
@@ -412,7 +412,7 @@
             if (msg.loWinner?.id === myId || msg.hiWinner?.id === myId) {
                 sounds.play("win");
             }
-            showNotification(msg.message, "orange", 10000);
+            showNotification(msg.message, "limegreen", 10000);
             updatePot(0);
 
             // in the case of everyone but one folding, we don't need to show results. Same for everyone failing to form equation

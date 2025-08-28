@@ -121,9 +121,9 @@ wss.on("connection", (ws) => {
                 game.numPlayersThatNeedToDiscard -= 1;
 
                 if (game.numPlayersThatNeedToDiscard === 0) {
-                    if (game.firstBettingRoundHasPassed) {
+                    if (game.phase === GamePhases.SECONDDEAL) {
                         commenceEquationForming(game);
-                    } else {
+                    } else if (game.phase === GamePhases.FIRSTDEAL) {
                         commenceFirstRoundBetting(game); 
                     }
                     // would break if someone leaves. in that case reduce num players that need to discard by 1?
@@ -252,7 +252,7 @@ wss.on("connection", (ws) => {
                 justPlayedPlayer.chipCount -= clientMsg.betAmount;
 
                 const betType = justPlayedPlayer.betAmount === 0 ? "check" :
-                                game.firstBettingRoundHasPassed === false && justPlayedPlayer.betAmount === 1 ? "ante" : // TODO implement proper ante
+                                game.phase === GamePhases.FIRSTBETTING && justPlayedPlayer.betAmount === 1 ? "ante" : // TODO implement proper ante
                                 game.toCall === justPlayedPlayer.stake ? "check" :
                                 justPlayedPlayer.stake - game.toCall >= 10 ? "raise10" :
                                 "raise";
@@ -415,11 +415,11 @@ function nonFoldedPlayers(game){
 
 function endRoundOrProceedToNextPlayer(game, justPlayedPlayer) {
     if (bettingRoundIsComplete(game)) {
-        if (game.firstBettingRoundHasPassed) {
-            endBettingRound(game, "second");
+        endBettingRound(game);
+
+        if (game.phase === GamePhases.SECONDBETTING) {
             commenceHiLoSelection(game);
-        } else {
-            endBettingRound(game, "first");
+        } else if (game.phase === GamePhases.FIRSTBETTING) {
             dealLastOpenCardToEachPlayer(game);
 
             // possible that players receive multiply cards on last deal
@@ -527,6 +527,8 @@ function dealTwoOpenCardsToEachPlayer(game, players) {
 }
 
 function dealLastOpenCardToEachPlayer(game) {
+    game.phase = GamePhases.SECONDDEAL;
+
     // can't wanna deal to folded players
     nonFoldedPlayers(game).forEach(player => {    
         const draw = drawFromDeck(game.deck);
@@ -555,7 +557,6 @@ function endHand(game) {
     playersInRoom(game.roomCode).forEach(player => { console.log(player.username, "chipCount:", player.chipCount); });
 
     game.maxRaiseReached = false;
-    game.firstBettingRoundHasPassed = false;
     game.handNumber += 1;
     game.numPlayersThatNeedToDiscard = 0; 
 
@@ -688,8 +689,9 @@ function playersInRoom(roomCode) { return [...players.values()].filter(player =>
 
 function playersInRoomEntries(roomCode) { return [...players].filter(([id, player]) => player.roomCode === roomCode) }; 
 
-function endBettingRound(game, round) {
-    game.firstBettingRoundHasPassed = true; // redundant if called with round = "second". // TODO replace with GamePhase
+function endBettingRound(game) {
+    sendSocketMessageToEveryClientInRoom(game.roomCode, { type: "end-betting-round", round: game.phase });
+
     game.toCall = 0;
 
     for (const player of playersInRoom(game.roomCode)) {
@@ -697,7 +699,6 @@ function endBettingRound(game, round) {
         player.stake = 0;
     }
 
-    sendSocketMessageToEveryClientInRoom(game.roomCode, { type: "end-betting-round", round: round });
 }
 
 // TODO test that only the player who is dealt a multiplication card gets prompted to discard
@@ -732,6 +733,8 @@ function notifyAllPlayersOfNewlyDealtCards(roomCode, player, multiplicationCardD
 function commenceFirstRoundBetting(game) {
     console.log("Commencing first round of betting");
 
+    game.phase = GamePhases.FIRSTBETTING;
+
     sendSocketMessageToEveryClientInRoom(game.roomCode, {
         type: "first-round-betting-commenced",
     });
@@ -740,6 +743,8 @@ function commenceFirstRoundBetting(game) {
 }
 
 function commenceSecondRoundBetting(game) {
+    game.phase = GamePhases.SECONDBETTING;
+
     sendSocketMessageToNonFoldedPlayers(game, { type: "second-round-betting-commenced" });
 
     // put findNextPlayerTurn inside advanceToNextPlayersTurn
@@ -800,7 +805,7 @@ function commenceEquationForming(game) {
 
     setTimeout(() => {
         endEquationForming(game);
-    }, 10 * 1000);
+    }, 90 * 1000);
 }
 
 function endEquationForming(game) {
@@ -848,7 +853,7 @@ function returnChipsToAllPlayers(game){
 
     // need to call endBettingRound because we have to reset everyone's bets. Otherwise
     // next hand will begin with toCall equaling the raise from the first hand
-    game.firstBettingRoundHasPassed ? endBettingRound(game, "second") : endBettingRound(game, "first");
+    endBettingRound(game);
     endHand(game);
 }
 
@@ -890,7 +895,7 @@ function distributePotToOnlyRemainingPlayer(game, onlyRemainingPlayerThisHand){
         console.log(player.username, "chipCount:", player.chipCount);
     })
 
-    game.firstBettingRoundHasPassed ? endBettingRound(game, "second") : endBettingRound(game, "first");
+    endBettingRound(game);
     endHand(game);
 }
 
@@ -901,7 +906,7 @@ function revealHiddenCards(game) {
     // maybe name it "render hand"
     nonFoldedPlayers(game).forEach((player) => {
         wss.clients.forEach((client) => {
-            let handToSend = getHandToSendFromHand(player.hand, revealCard = true);
+            let handToSend = getHandToSendFromHand(player.hand, true);
             
             if (/*client !== ws && */client.readyState === WebSocket.OPEN && players.get(client.userId).roomCode === game.roomCode) {
                 client.send(JSON.stringify({
@@ -964,7 +969,7 @@ function findHiWinner(hiBettingPlayers) {
     const hiTarget = 20;
     let hiWinner = null;
     let hiWinnerHighCard = null;
-    winningDiff = Infinity;
+    let winningDiff = Infinity;
     for (const player of hiBettingPlayers) {
         const diff = Math.abs(player.equationResult - hiTarget);
         if (diff < winningDiff) {

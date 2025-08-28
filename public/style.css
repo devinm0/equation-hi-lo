@@ -647,7 +647,7 @@ body {
   justify-content: center;
   align-items: center;
   z-index: 10000;
-  animation: fadeIn 0.2s ease-out forwards;
+  animation: fadeIn 0.1s ease-out forwards;
 }
 
 .modal {
@@ -658,7 +658,7 @@ body {
   max-width: 400px;
   width: 90%;
   text-align: center;
-  animation: fadeUp 0.3s ease-out forwards;
+  animation: fadeUp 0.15s ease-out forwards;
 }
 
 .modal h2 {
