@@ -72,6 +72,11 @@ body {
 }
 
 .small-hand .ten {
+    transform: translate(-10%,-4%);
+    letter-spacing: -.6rem;
+}
+
+.small-hand .ten-apple-myungjo {
     transform: translate(-20%,6%);
     letter-spacing: -1rem;
 }
@@ -79,9 +84,13 @@ body {
 .small-hand .card { /* scale didn't work because doesn't affect layout :( moreover, transforms don't compose. so highlighting a smaller card doubles the size*/
     width: 55px;
     height: 83px;
-    font-size: 60px;
+    font-size: 56px;
     border-radius: 11px;
     /* box-shadow: 2px 2px rgba(0,0,0,0.3); */
+}
+
+.small-hand .card-apple-myungjo {
+    font-size: 60px;
 }
 
 .small-hand canvas { /* root symbol */
@@ -137,7 +146,7 @@ body {
 .card {
     width: 90px;
     height: 135px;
-    font-size: 100px;
+    font-size: 96px;
     border-radius: 16px;
     background-color: rgb(251, 251, 250);
     box-shadow: 4px 4px rgba(0, 0, 0, 0.3);
@@ -145,12 +154,16 @@ body {
     align-items: center;
     justify-content: center;
     font-weight: bold;
-    font-family: 'AppleMyungjo', serif;
+    font-family: /*"AppleMyungjo", */"Zen Old Mincho", serif;
     color: black;
     margin: 8px;
     user-select: none;
     touch-action: manipulation;
     overflow: hidden;
+}
+
+.card-apple-myungjo {
+    font-size: 100px;
 }
 
 .card:hover {
@@ -160,10 +173,6 @@ body {
 /* the equation result should not respond to mouse hover like regular cards */
 .difference-card:hover {
     transform: none;
-}
-
-.single-digit {
-    transform: translateY(6%);
 }
 
 .operator-card {
@@ -191,12 +200,23 @@ body {
 }
 
 .result-paragraph {
+    margin-block-start: 0em;
+    margin-block-end: 0em;
+    color: black;
+}
+
+.result-paragraph-apple-myungjo {
     margin-block-start: 0.2em;
     margin-block-end: 0.2em;
     color: black;
 }
 
 .difference-paragraph {
+    margin-block-start: 0em;
+    color: rgb(240, 67, 67);
+}
+
+.difference-paragraph-apple-myungjo {
     letter-spacing: -.1rem;
     margin-block-start: 0em;
     color: rgb(240, 67, 67);
@@ -324,6 +344,10 @@ body {
     color: white;
     font-size: 2em;
     transition: transform .25s ease;
+}
+
+#roomCodeContainer.moved {
+    transform: translate(calc(-50% - 60px + 50vw), calc(50% + 30px - 50vh));
 }
 
 #nameInput {
@@ -520,7 +544,7 @@ body {
     font-size: 120px;
     font-weight: bold;
     color: white;
-    font-family: "AppleMyungjo";
+    font-family: "Zen Old Mincho", serif;
 }
 
 .lobbyPlayerListItem {
@@ -755,8 +779,26 @@ body {
   display: none;
 }
 
+.single-digit {
+    transform: translateY(-4%);
+}
+
+.single-digit-apple-myungjo {
+    transform: translateY(6%);
+}
+
+.ten {
+    transform: translate(-.6rem, -4%);
+    letter-spacing: -1rem;
+}
+
+.ten-apple-myungjo {
+    transform: translate(-0.2rem, -0.7rem);
+    letter-spacing: -.1rem;
+}
+
 @media (max-width: 500px) {
-    #lobbyTitleContainer {
+    #lobbyTitleContainer, #homeTitleContainer {
         font-size: 80px;
     }
 
@@ -790,8 +832,34 @@ body {
         letter-spacing: -.1rem;
     }
 
+    .single-digit {
+        transform: translateY(-4%);
+    }
+
+    .single-digit-apple-myungjo {
+        transform: translateY(6%);
+    }
+
     .ten {
+        transform: translate(-.6rem, -3%);
+        letter-spacing: -1rem;
+    }
+
+    .ten-apple-myungjo {
         transform: translate(-0.2rem, -0.7rem);
         letter-spacing: -.1rem;
+    }
+
+    .player-info {
+        width: 100%;
+        display: inline-flex;
+    }
+
+    #roomCodeContainer {
+        font-size: 1.2em;
+    }
+
+    #roomCodeContainer.moved {
+        transform: translate(calc(-50% - 20px + 50vw), calc(50% + 30px - 50vh));
     }
 }
