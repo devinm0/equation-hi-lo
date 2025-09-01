@@ -26,7 +26,8 @@ export class SoundManager {
           this.unlocked = true;
           // "prime" the sounds
           for (const sound of this.sounds.values()) {
-              sound.load().then(() => sound.pause()).catch(() => {});
+            sound.load();
+            sound.pause();
           }
           window.removeEventListener("click", unlockHandler);
           window.removeEventListener("keydown", unlockHandler);

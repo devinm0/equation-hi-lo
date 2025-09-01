@@ -293,7 +293,7 @@ wss.on("connection", (ws) => {
                 wss.clients.forEach((client) => {
                     let handToSend = getHandToSendFromHand(player.hand, client.userId === clientMsg.userId);
                     
-                    if (/*client !== ws && */client.readyState === WebSocket.OPEN && players.get(client.userId).roomCode === player.roomCode) { //some kind of clientsInRoom function
+                    if (/*client !== ws && */client.readyState === WebSocket.OPEN && players.get(client.userId)?.roomCode === player.roomCode) { //some kind of clientsInRoom function
                         client.send(JSON.stringify({
                             type: "player-formed-equation",
                             id: clientMsg.userId,
@@ -585,7 +585,7 @@ function sendSocketMessageThatPlayerFolded(roomCode, foldedUserId) {
     wss.clients.forEach((client) => { // TODO have clientsInRoom function
         let handToSend = getHandToSendFromHand(players.get(foldedUserId).hand, client.userId === foldedUserId);
         
-        if (/*client !== ws && */client.readyState === WebSocket.OPEN && players.get(client.userId).roomCode === roomCode) {
+        if (/*client !== ws && */client.readyState === WebSocket.OPEN && players.get(client.userId)?.roomCode === roomCode) {
             client.send(JSON.stringify({
                 type: "player-folded",
                 id: foldedUserId,
@@ -616,7 +616,7 @@ function sendSocketMessageToEveryClientInRoom(roomCode, objectToSend) {
 // TODO test that hi lo selection ends correctly even with one or more folded players
 function sendSocketMessageToNonFoldedPlayers(game, objectToSend) {
     wss.clients.forEach((client) => {
-        if (!players.get(client.userId).foldedThisTurn && client.readyState === WebSocket.OPEN && players.get(client.userId).roomCode === game.roomCode) {
+        if (!players.get(client.userId)?.foldedThisTurn && client.readyState === WebSocket.OPEN && players.get(client.userId)?.roomCode === game.roomCode) {
             const payload = JSON.stringify(objectToSend);
             client.send(payload);
         }
@@ -625,7 +625,7 @@ function sendSocketMessageToNonFoldedPlayers(game, objectToSend) {
 
 function sendSocketMessageToFoldedPlayers(game, objectToSend) {
     wss.clients.forEach((client) => {
-        if (players.get(client.userId).foldedThisTurn && client.readyState === WebSocket.OPEN && players.get(client.userId).roomCode === game.roomCode) {
+        if (players.get(client.userId)?.foldedThisTurn && client.readyState === WebSocket.OPEN && players.get(client.userId)?.roomCode === game.roomCode) {
             const payload = JSON.stringify(objectToSend);
             client.send(payload);
         }
@@ -656,7 +656,7 @@ function initializeHand(game) { // means start a hand of play
 
     //TODO maybe don't need this?
     wss.clients.forEach((client) => {
-        if (client.readyState === WebSocket.OPEN && players.get(client.userId).roomCode === game.roomCode) {
+        if (client.readyState === WebSocket.OPEN && players.get(client.userId)?.roomCode === game.roomCode) {
             const payload = JSON.stringify({ 
                 type: "deal", 
                 // something to do with client.userId not equaling anyone's userId
@@ -706,7 +706,7 @@ function endBettingRound(game) {
 // TODO test that a player knows which one of their cards is hidden
 function notifyAllPlayersOfNewlyDealtCards(roomCode, player, multiplicationCardDealt = false) {
     wss.clients.forEach((client) => {
-        if (players.get(client.userId).roomCode === roomCode) { // just change to client.userId in room map?
+        if (players.get(client.userId)?.roomCode === roomCode) { // just change to client.userId in room map?
             let payload = {
                 type: "deal",
                 id: player.id,
@@ -764,7 +764,7 @@ function advanceToNextPlayersTurn(game, toCall) { // should take a parameter her
     // modify this so that we don't trust the client?
     // but technically we do because only currentTurnPlayer can send a betting message.
     wss.clients.forEach((client) => {
-        if (/*client !== ws && */client.readyState === WebSocket.OPEN && players.get(client.userId).roomCode === game.roomCode) { // TODO refactor to room.clients.forEach
+        if (/*client !== ws && */client.readyState === WebSocket.OPEN && players.get(client.userId)?.roomCode === game.roomCode) { // TODO refactor to room.clients.forEach
             // something like game.player.forEach ({ wss.clients[player.userId]. send whatever}
           client.send(JSON.stringify({
             type: "next-turn",
@@ -828,7 +828,7 @@ function returnChipsToAllPlayers(game){
     console.log("No players formed a valid equation. Returning chips and starting new hand.");
 
     wss.clients.forEach((client) => {
-        if (/*client !== ws && */client.readyState === WebSocket.OPEN && players.get(client.userId).roomCode === game.roomCode) {
+        if (/*client !== ws && */client.readyState === WebSocket.OPEN && players.get(client.userId)?.roomCode === game.roomCode) {
             let payload = JSON.stringify({
                 type: "round-result",
                 message: "No players formed a valid equation. Returning chips and starting new hand.",
@@ -862,7 +862,7 @@ function distributePotToOnlyRemainingPlayer(game, onlyRemainingPlayerThisHand){
     console.log("All but one player folded this hand. Ending hand.");
 
     wss.clients.forEach((client) => {
-        if (/*client !== ws && */client.readyState === WebSocket.OPEN && players.get(client.userId).roomCode === game.roomCode) {
+        if (/*client !== ws && */client.readyState === WebSocket.OPEN && players.get(client.userId)?.roomCode === game.roomCode) {
             let message;
             if (client.userId === onlyRemainingPlayerThisHand.id) {
                 message = "Everyone else folded. You take the pot by default.";
@@ -908,7 +908,7 @@ function revealHiddenCards(game) {
         wss.clients.forEach((client) => {
             let handToSend = getHandToSendFromHand(player.hand, true);
             
-            if (/*client !== ws && */client.readyState === WebSocket.OPEN && players.get(client.userId).roomCode === game.roomCode) {
+            if (/*client !== ws && */client.readyState === WebSocket.OPEN && players.get(client.userId)?.roomCode === game.roomCode) {
                 client.send(JSON.stringify({
                     type: "deal",
                     id: player.id,

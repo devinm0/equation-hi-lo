@@ -151,7 +151,11 @@
         
         case "game-started": {
             const roomCode = document.getElementById("roomCodeContainer");
-            roomCode.style.transform = "translate(calc(50vw - 50% - 60px), calc(-50vh + 50% + 30px))";
+            if (window.matchMedia("(max-width: 800px)").matches) {
+                roomCode.style.transform = "translate(calc(50vw - 50% - 10px), calc(-50vh + 50% + 30px))";
+            } else {
+                roomCode.style.transform = "translate(calc(50vw - 50% - 60px), calc(-50vh + 50% + 30px))";
+            }
 
             const btn = document.getElementById("startButton");
             btn.parentNode.removeChild(btn);
@@ -443,7 +447,8 @@
             document.getElementById("uiContainer").classList.remove("hidden");
 
             const roomCodeContainer = document.getElementById("roomCodeContainer");
-            roomCodeContainer.textContent = "Room Code: " + msg.roomCode;
+            // TODO shouldn't trust client msg here.
+            roomCodeContainer.textContent = "Room " + msg.roomCode;
 
             if (msg.hostId === myId) { 
                 const startButton = document.getElementById("startButton")
@@ -599,8 +604,8 @@
         }
 
         if (id === myId) {
-            handDivs.get(id).classList.add("myhand");
-            // handDivsList.push(id); // myhand doesn't even need to go in the list for now for determining even or odd (left or right margin)
+            handDivs.get(id).classList.add("my-hand");
+            // handDivsList.push(id); // my-hand doesn't even need to go in the list for now for determining even or odd (left or right margin)
         } else {
             handDivs.get(id).classList.add("small-hand");
             // insert into penultimate index
@@ -1163,8 +1168,8 @@
             hand.classList.remove('full-width-hand')
         })
 
-        const myHand = document.querySelectorAll('.small-hand');
-        myHand.forEach(hand => {
+        const smallHands = document.querySelectorAll('.small-hand');
+        smallHands.forEach(hand => {
             hand.classList.remove('small-hand')
         })
 
@@ -1182,9 +1187,9 @@
             hand.classList.remove('righthand')
         })
 
-        const myHand = document.querySelectorAll('.myhand');
+        const myHand = document.querySelectorAll('.my-hand');
         myHand.forEach(hand => {
-            hand.classList.remove('myhand')
+            hand.classList.remove('my-hand')
             hand.classList.add('small-hand')
         })
 
@@ -1232,7 +1237,7 @@
         // for roots, need to draw it by hand since font is bad
         const canvas = document.createElement('canvas');
         let scaleFactor;
-        if (window.matchMedia("(max-width: 600px)").matches) {
+        if (window.matchMedia("(max-width: 800px)").matches) {
             // Mobile device canvas
             scaleFactor = 3 / 10;
         } else {
