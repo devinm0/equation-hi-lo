@@ -526,7 +526,7 @@
                     color: myColor,
                     userId: myId,
                     username: myName,
-                    roomCode: roomCodeInput.value
+                    roomCode: roomCodeInput.value.toUpperCase()
                 };
                 socket.send(JSON.stringify(data));
             }
