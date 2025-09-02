@@ -291,7 +291,7 @@ wss.on("connection", (ws) => {
                     return;
                 }
                 // a folded player may have manually sent a formed equation despite not given the opportunity, just ignore
-                if (player.foldedThisTurn) { return; }
+                // if (player.foldedThisTurn) { return; }
                 console.log("equation-result received " + clientMsg.result);
 
                 player.hand = clientMsg.order.map(i => player.hand[i]);

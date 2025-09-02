@@ -124,7 +124,7 @@
             const now = Date.now();
 
             // TODO just refactor to if (playerDataStoredLocally() )
-            console.log("myId is: ", myId, " server message is: ", event.data, " So if the userIds don't match, it means we've rejoined. Discarding the server generated id.");
+            console.log("myId is: ", myId, timestamp, " server message is: ", event.data, " So if the userIds don't match, it means we've rejoined. Discarding the server generated id.");
             if (!myId || !timestamp || now - timestamp > EXPIRATION_TIME) { // nothing in localStorage, means we are new, fill in with server generated user data
                 myId = msg.id;
                 myColor = msg.color;
@@ -133,12 +133,17 @@
                 localStorage.setItem(TIMESTAMP_KEY, now);
             } else { // items exist in localStorage = we exist = page refreshed
                 // send rejoin socket message
+
+                // if client never joined a game, just show regular page again.
+                // if they did, show option to join that room again
+                // should I implement uri for room code?
                 const data = {
-                    type: "join", // TODO need to change... refreshing page is no longer a join, take me to home page
+                    type: "refresh", // TODO need to change... refreshing page is no longer a join, take me to home page
                     id: myId,
                     color: myColor,
                     username: myName
                 };
+                console.log(data);
                 socket.send(JSON.stringify(data));
 
                 // if we rejoin after joining, but before the game starts, we are still in the lobby.
