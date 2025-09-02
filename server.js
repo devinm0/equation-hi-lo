@@ -16,7 +16,15 @@ let players = new Map();
 const RATE_LIMIT = 20;
 const INTERVAL = 10000;
 
+function heartbeat() {
+    this.isAlive = true;
+}
+
 wss.on("connection", (ws) => {
+    // keep alive, in the case of 90 seconds equation forming
+    ws.isAlive = true;
+    ws.on('pong', heartbeat);
+
     console.log("connection");
     // only our domain can upgrade from http to ws
     // const origin = req.headers.origin;
@@ -1220,3 +1228,19 @@ function logRoomsAndPlayers() {
 
     console.log("================================");
 }
+
+const interval = setInterval(function ping() {
+    wss.clients.forEach(function each(ws) {
+        if (ws.isAlive === false) {
+            // No pong received since last check → terminate
+            return ws.terminate();
+        }
+
+        ws.isAlive = false;
+        ws.ping();  // Browser auto-responds with pong
+    });
+}, 30000);
+
+wss.on('close', function close() {
+    clearInterval(interval);
+});
