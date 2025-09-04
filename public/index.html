@@ -4,6 +4,8 @@
     <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no">
     <meta charset="UTF-8" />
     <title>Equation Hi Lo</title>
+    <link rel="icon" type="image/png" href="favicon.png" >
+    <link rel="shortcut icon" href="favicon.png">
     <link rel="stylesheet" href="style.css">
     <script async src="https://pagead2.googlesyndication.com/pagead/js/adsbygoogle.js?client=ca-pub-8735848760963536"
         crossorigin="anonymous"></script>
@@ -41,13 +43,13 @@
 
     <div id="homeContainer"> <!--TODO rename to uiContainer-->
         <div id="homeTitleContainer">Equation <span style="white-space: nowrap;">Hi Lo</span></div>
-        <p style="color: white;">Got a room code? Enter here to join an existing game:</p>
+        <p id="roomCodeInfo" style="color: white;">Got a room code? Enter here to join an existing game:</p>
         <div id="roomCodeInputContainer">
             <input type="text" id="roomCodeInput" placeholder="Room Code" pattern="^[a-zA-Z0-9]{4}$" required title="Room code does not exist. Room code consists of 4 letters or numbers"/>
             <p id="roomCodeError" style="color: rgb(255, 128, 128);"></p>
             <button id="enterRoomButton">Join Existing Game</button> <!--TODO change other join button name?-->
         </div>
-        <p style="color: white;">Otherwise, host a new game here:</p>
+        <p id="createRoomInfo" style="color: white;">Otherwise, host a new game here:</p>
         <button class="button" id="createButton">Create Private Game</button>
     </div>
 
@@ -56,7 +58,7 @@
         <div id="roomCodeContainer">Room Code:</div>
         <div id="lobbyPlayerListContainer"></div>
         <div id="nameContainer">
-            <input type="text" id="nameInput" placeholder="Enter your name" pattern="^[a-zA-Z0-9]{1,16}$" required title="Username consists of 1-16 letters or numbers"/>
+            <input type="text" id="nameInput" placeholder="Enter your name" pattern="^[a-zA-Z0-9]{1,12}$" required title="Username consists of 1-12 letters or numbers"/>
             <p id="nameError" style="color: rgb(255, 128, 128);"></p>
             <button id="submitNameButton">Submit Name</button>
         </div>
@@ -82,6 +84,7 @@
     </div>
 
     <button id="confirmResults" class="hidden">Next Hand ✅</button>
+    <button id="confirmEquationFormed" class="hidden">Lock in Equation ✅</button>
 
     <button class="button" id="leaveButton" style="display:none;">Leave Game</button>
     <script src="./sortable.js"></script>
@@ -139,16 +142,11 @@
                 // should I implement uri for room code?
                 const data = {
                     type: "refresh", // TODO need to change... refreshing page is no longer a join, take me to home page
-                    id: myId,
+                    userId: myId,
                     color: myColor,
                     username: myName
                 };
-                console.log(data);
                 socket.send(JSON.stringify(data));
-
-                // if we rejoin after joining, but before the game starts, we are still in the lobby.
-                // don't show name input controls in that case. We've already joined.
-                document.getElementById("nameContainer").style.display = "none";
             }
 
             break;
@@ -178,6 +176,16 @@
             break;
         } 
         
+        case "suggest-room": {
+            document.getElementById("roomCodeInfo").textContent = "Rejoin game in progress:";
+            document.getElementById("roomCodeInput").value = msg.roomCode;
+            document.getElementById("enterRoomButton").textContent = "Rejoin Game";
+            document.getElementById("createButton").style.display = "none";
+            document.getElementById("createRoomInfo").style.display = "none";
+
+            break;
+        }
+
         case "begin-hand": {
             showPlayingLayout();
             showNotification("Beginning hand " + (msg.handNumber + 1));
@@ -263,7 +271,6 @@
         
         case "second-round-betting-commenced": {
             showNotification("Second round betting has commenced.");
-          
             break;
         } 
         
@@ -357,6 +364,32 @@
         case "commence-equation-forming": {
             sounds.play("start");
 
+            const confirmEquationFormedButton = document.getElementById("confirmEquationFormed");
+            confirmEquationFormedButton.classList.remove("hidden");
+            confirmEquationFormedButton.onclick = () => {
+                let equationResult;
+                const cards = handDivs.get(myId).querySelectorAll('.card');
+                try {
+                    equationResult = applyOps(cards);
+                    console.log(equationResult);
+                } catch (e) {
+                    cards.forEach(card => {
+                        card.classList.remove('blink-red');
+
+                        card.classList.add('blink-red');
+
+                        setTimeout(() => {
+                            card.classList.remove('blink-red');
+                        }, 1200)
+                    });
+
+                    showNotification("Malformed equation, try again.", "red", 5000);
+                    return;
+                }
+                submitEquation(equationResult);
+                confirmEquationFormedButton.classList.add('hidden');
+            };
+
             console.log("socket message commence-equation-forming");
             beginCountdownNotification();
             if (msg.folded) {
@@ -369,24 +402,37 @@
             break;
         } 
         
-        case "end-equation-forming": {
-            sounds.play("end");
-
-            console.log("socket message end-equation-forming");
-            hideProgressBar(); // do we call this actually? rename to resetAndhideProgressBar?
+        case "request-formed-equation": {
             showNotification('Time is up!');
-
-            sortable.option("disabled", true)
 
             let equationResult;
             try {
                 equationResult = applyOps(handDivs.get(myId).querySelectorAll('.card'));
                 console.log("265 equationResult " + equationResult);
             } catch (e) {
+                // bug here. if we sent a good equation early, but then custom send a client message with bad equation, now we fold. server doesn't check for that
+                // i guess it means we should be doing the applyOps on the server side anyway
                 showNotification("You were unable to form an equation. You fold automatically.", "red", 5000);
                 // actually don't even need to send anything here. server can just handle it
                 socket.send(JSON.stringify({ type: "fold", manual: false }));
             }
+            submitEquation(equationResult);
+        }
+
+        case "end-equation-forming": {
+            sounds.play("end");
+
+            hideProgressBar();
+
+            document.getElementById("confirmEquationFormed").classList.add("hidden");
+
+            console.log("socket message end-equation-forming");
+            break;
+        } 
+        
+        function submitEquation(equationResult) {
+            sortable.option("disabled", true)
+
             console.log(Array.from(handDivs.get(myId).querySelectorAll('.card')).map(card => card.dataset.id));
             const data = {
                 type: "equation-result",
@@ -396,9 +442,7 @@
                 order: Array.from(handDivs.get(myId).querySelectorAll('.card')).map(card => card.dataset.id)
             };
             socket.send(JSON.stringify(data));
-
-            break;
-        } 
+        }
         
         case "hi-lo-selection": {
             showNotification("Select Hi, Lo, or Swing betting.");
@@ -451,6 +495,9 @@
             document.getElementById("homeContainer").classList.add("hidden");
             document.getElementById("uiContainer").classList.remove("hidden");
 
+            if (msg.joined) {
+                document.getElementById("nameContainer").style.display = "none";
+            }
             const roomCodeContainer = document.getElementById("roomCodeContainer");
             // TODO shouldn't trust client msg here.
             roomCodeContainer.textContent = "Room " + msg.roomCode;
@@ -478,36 +525,33 @@
 });
 
     document.getElementById("submitNameButton").addEventListener("click", () => {
-        if (myName === null || myName === undefined) { // server prevents username being set twice
-            const nameInput = document.getElementById("nameInput");
-            const error = document.getElementById("nameError");
+        const nameInput = document.getElementById("nameInput");
+        const error = document.getElementById("nameError");
 
-            console.log(error);
-            const regex = /^[a-zA-Z0-9]{1,16}$/;
+        console.log(error);
+        const regex = /^[a-zA-Z0-9]{1,12}$/;
 
-            if (!regex.test(nameInput.value)) {
-                console.log("Must be 1-16 alphanumeric characters.");
-                error.textContent = "Must be 1-16 alphanumeric characters.";
-            } else {
-                console.log("Name input value succeeds regex validation.");
+        if (!regex.test(nameInput.value)) {
+            console.log("Must be 1-12 alphanumeric characters.");
+            error.textContent = "Must be 1-12 alphanumeric characters.";
+        } else {
+            console.log("Name input value succeeds regex validation.");
 
-                error.textContent = "";
-            
-                myName = nameInput.value; //.trim();
-                localStorage.setItem('userName', myName);
+            error.textContent = "";
+        
+            myName = nameInput.value; //.trim();
+            localStorage.setItem('userName', myName);
 
-                const data = {
-                    type: "join",
-                    color: myColor,
-                    userId: myId,
-                    username: myName
-                };
-                socket.send(JSON.stringify(data));
+            const data = {
+                type: "join",
+                color: myColor,
+                userId: myId,
+                username: myName
+            };
+            socket.send(JSON.stringify(data));
 
-                document.getElementById("nameContainer").style.display = "none";
-            }
+            document.getElementById("nameContainer").style.display = "none";
         }
-
     });
 
     document.getElementById("enterRoomButton").addEventListener("click", () => { // TODO rename to enter room button?
@@ -626,7 +670,9 @@
         }
 
         if (multiplicationCardDealt) {
-            showNotification("Multiplication card received. Please discard either addition, subtraction, or multiplication card.", "yellow", 10000);
+            if (id === myId) {
+                showNotification("Multiplication card received. Please discard either addition, subtraction, or multiplication card.", "yellow", 10000);
+            }
         }        
 
         const handLengthBeforeThisDeal = handDivs.get(id).querySelectorAll(".card, .card-back").length;
@@ -689,6 +735,9 @@
         if (folded) {
             nameSpanContents += ' (folded)'; // injection
         }
+        if (multiplicationCardDealt && id !== myId) {
+            nameSpanContents += ' (discarding...)';
+        }
         nameSpan.innerHTML = '<p>' + nameSpanContents + '</p>';
         nameDiv.appendChild(nameSpan);
 
@@ -743,7 +792,7 @@
                 ) {
                     cardDivParagraph.dataset.value = card.value;
 
-                    if (multiplicationCardDealt) { // TODO this is also a mess. We should have a separate drawHighlights function
+                    if (multiplicationCardDealt && id === myId) { // TODO this is also a mess. We should have a separate drawHighlights function
                         // learned: be careful with capitalization
                         cardDiv.classList.add("card-highlighted");
                     }
@@ -754,8 +803,8 @@
                 cardDiv.dataset.id = index;
             }
 
-            if (card.hidden) {
-                cardDiv.style.boxShadow = 'rgba(0, 0, 0, 1) 0px 0px inset, 4px 4px rgba(0, 0, 0, 0.3)';
+            if (card.hidden && card.value !== null) { // shadow on either my card, or others cards once revealed in resultsview
+                cardDiv.style.boxShadow = 'rgba(0, 0, 0, .4) 0px 0px 4px 4px inset, 4px 4px rgba(0, 0, 0, 0.3)';
                 // cardDiv.style.backgroundColor = 'lightgrey';
             }
 
@@ -817,12 +866,18 @@
     }
 
     function drawPlayer(id, color, username, hostId) {
-        let lobbyPlayerListContainer = document.getElementById("lobbyPlayerListContainer");
-        const div = document.createElement("div");
-        div.className = "lobbyPlayerListItem";
-        div.innerHTML = `<p>👩‍💻 ${username}</p>` + (hostId === id ? ' (Host)' : '') + (id === myId ? ' (You)' : ''); // injection
-        div.style.color = color;
-        lobbyPlayerListContainer.appendChild(div);
+        let lobbyPlayerListItem = document.getElementById("lobbyPlayerListItem-" + id);
+        if (lobbyPlayerListItem !== null) {
+            lobbyPlayerListItem.innerHTML = `<p>👩‍💻 ${username}</p>` + (hostId === id ? ' (Host)' : '') + (id === myId ? ' (You)' : ''); // injection
+        } else {
+            let lobbyPlayerListContainer = document.getElementById("lobbyPlayerListContainer");
+            const div = document.createElement("div");
+            div.id = "lobbyPlayerListItem-" + id;
+            div.className = "lobbyPlayerListItem";
+            div.innerHTML = `<p>👩‍💻 ${username}</p>` + (hostId === id ? ' (Host)' : '') + (id === myId ? ' (You)' : ''); // injection
+            div.style.color = color;
+            lobbyPlayerListContainer.appendChild(div);
+        }
     }
 
     function hidePotDiv() {

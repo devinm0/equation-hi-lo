@@ -47,3 +47,7 @@ export function mintUniqueCode(length = 4) {
 function releaseCode(code) {
     activeCodes.delete(code); // free up when room ends
 }
+
+String.prototype.removeWhitespace = function() {
+    return this.replace(/\s+/g, "");
+};

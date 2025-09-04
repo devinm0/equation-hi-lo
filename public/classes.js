@@ -15,6 +15,7 @@ export class Game {
     this.maxRaiseReached = false;
     this.toCall = 0;
     this.phase = GamePhases.LOBBY;
+    this.createdAt = Date.now();
   }
 }
 

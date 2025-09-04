@@ -15,6 +15,7 @@ let games = new Map();
 let players = new Map();
 const RATE_LIMIT = 20;
 const INTERVAL = 10000;
+let endEquationFormingTimeout;
 
 function heartbeat() {
     this.isAlive = true;
@@ -55,17 +56,8 @@ wss.on("connection", (ws) => {
             clientMsg = JSON.parse(message.toString());
         } catch { return; }
 
-        // TODO include apple myungjo font
         if (!clientMsg.type) return;
 
-
-                // if game still in lobby
-                //     show Lobby list
-                //     if not already in game
-                //         show join game buttons
-                //     if host:
-                //         show Start Game button
-                // else 
 
         // TESTS create new game, have others join
         //      rejoin a game I created and make sure I'm still host
@@ -102,6 +94,19 @@ wss.on("connection", (ws) => {
                 const game = games.get(clientMsg.roomCode);
 
                 enterRoom(game, clientMsg);
+                break;
+            }
+
+            case "refresh": { 
+                ws.userId = clientMsg.userId; // should actually be the same
+                // what about set ws.userId equal to it
+                if (players.has(clientMsg.userId)) {
+                    const player = players.get(clientMsg.userId);
+                    ws.send(JSON.stringify({ type: "suggest-room", roomCode: player.roomCode })); // TODO client will say must be players 2 even if the reject reason is client not being host
+                } else {
+
+                }
+                
                 break;
             }
 
@@ -178,12 +183,16 @@ wss.on("connection", (ws) => {
                 //     hostId = clientMsg.userId; // just use ws.userId here?
                 // }
                 const player = players.get(ws.userId);
+                if (player.username !== null) {
+                    // this player already submitted their username, so this must be a duplicate message
+                    return;
+                }
+
                 const game = games.get(player.roomCode);
 
-                players.get(ws.userId).username = clientMsg.username;
+                players.get(ws.userId).username = clientMsg.username.removeWhitespace();
                 console.log(`***** 👩‍💻 ${game.hostId === ws.userId ? 'Host' : 'Player'} joined: ${clientMsg.username} *****`);
 
-                // TODO can we do game.sendSocketMessage..? or this.notifyAllPlayers
                 sendSocketMessageToEveryClientInRoom(game.roomCode, {
                     type: "player-joined",
                     id: clientMsg.userId,
@@ -197,7 +206,6 @@ wss.on("connection", (ws) => {
             }
 
             function enterRoom(game, clientMsg) {
-                ws.send(JSON.stringify({ type: "room-entered", roomCode: game.roomCode, hostId: game.hostId }));
 
                 if (game.phase === GamePhases.LOBBY) {
                     // send a newly connected player the list of all players that have joined thus far
@@ -213,14 +221,20 @@ wss.on("connection", (ws) => {
                     });
 
                     if (players.has(clientMsg.userId)) {
-                        if (players.get(clientMsg.userId).roomCode === game.roomCode){
-                            ws.userId = clientMsg.id;
+                        // TODO how to change the flow so we don't have to trust this
+                        const player = players.get(clientMsg.userId);
+                        ws.send(JSON.stringify({ type: "room-entered", roomCode: game.roomCode, hostId: game.hostId, joined: player.username !== null }));
+
+                        if (player.roomCode === game.roomCode){
+                            ws.userId = clientMsg.userId;
 
                             logRoomsAndPlayers();
                         } else {
 
                         }
                     } else {
+                        ws.send(JSON.stringify({ type: "room-entered", roomCode: game.roomCode, hostId: game.hostId, joined: false }));
+
                         console.log("creating userId but no username yet");
                         // if (ws.isHost) { // without this, later players joining become the host
                         //     currentTurnPlayerId = clientMsg.userId; // TODO surely we can set this later? as just the first player in players list?
@@ -232,7 +246,7 @@ wss.on("connection", (ws) => {
                         // TODO THIS for rejoining active rooms
                         // have to reassign userId because what if someone refreshes? have to ignore the init message // TODO rethink this in the context of join/ enter
                         // need to assign ws.userId because it's used to check clientId === id on server
-                        ws.userId = clientMsg.userId;
+                        ws.userId = clientMsg.userId; // TODO need this??
                         players.set(clientMsg.userId, new Player(clientMsg.userId, null, [], 25)); // TODO sanitize clientMsg.username to standards
                         players.get(clientMsg.userId).color = clientMsg.color;
                         players.get(clientMsg.userId).roomCode = game.roomCode;
@@ -287,6 +301,9 @@ wss.on("connection", (ws) => {
                 const player = players.get(clientMsg.userId);
                 const game = games.get(player.roomCode);
 
+                if (player.equationResult !== null) { // duplicate message
+                    return;
+                }
                 if (game.phase !== GamePhases.EQUATIONFORMING) {
                     return;
                 }
@@ -313,11 +330,18 @@ wss.on("connection", (ws) => {
                 })
 
                 if (nonFoldedPlayers(game).every(player => player.equationResult !== null)) {
+                    endEquationForming(game);
+                    clearTimeout(endEquationFormingTimeout);
+
                     if (nonFoldedPlayers(game).length === 1){
                         distributePotToOnlyRemainingPlayer(game, nonFoldedPlayers(game)[0]);
                         return;
                     }
-
+                
+                    // I feel like there could be a bug here. Let's say everyone submits there equations early.
+                    // so we are hitting this code, and about to progress to hiloselection
+                    // but if the interval runs out in that time in between, we send end equation socket message
+                    // and everyone will resend equation results.
                     if (game.maxRaiseReached) {
                         console.log('Max bet was reached on first round of betting. Skipping second round.');
 
@@ -399,7 +423,7 @@ wss.on("connection", (ws) => {
 
                 player.acknowledgedResults = true;
 
-                if (nonFoldedPlayers(game).every(player => player.acknowledgedResults === true)) {
+                if (playersInRoom(game.roomCode).every(player => player.acknowledgedResults === true)) { // change to accept just game, and then move to class based game
                     endHand(game);
                 }
                 break;
@@ -572,7 +596,7 @@ function endHand(game) {
         if (player.chipCount === 0) {
             sendSocketMessageToEveryClientInRoom(game.roomCode, { 
                 type: "kicked",
-                userId: escapeHTML(player.id),
+                userId: player.id,
                 username: player.username
             });
 
@@ -719,12 +743,12 @@ function notifyAllPlayersOfNewlyDealtCards(roomCode, player, multiplicationCardD
                 type: "deal",
                 id: player.id,
                 username: player.username,
-                chipCount: player.chipCount
+                chipCount: player.chipCount,
+                multiplicationCardDealt: multiplicationCardDealt
             };
             if (client.userId == player.id) {
                 payload.hand = player.hand;
                 // only the player who is dealt a multiplication card gets prompted to discard 
-                payload.multiplicationCardDealt = multiplicationCardDealt;
             } else {
                 // hide the hidden card. NOTE [...hand] only works if contains primitives
                 let handToSend = getHandToSendFromHand(player.hand, client.userId === player.id);
@@ -801,7 +825,7 @@ function bettingRoundIsComplete(game) {
 
     return false;
 }
-         
+
 function commenceEquationForming(game) {
     console.log("Waiting 90 seconds for equation forming...");
 
@@ -811,16 +835,24 @@ function commenceEquationForming(game) {
     sendSocketMessageToNonFoldedPlayers(game, { type: "commence-equation-forming" });
     sendSocketMessageToFoldedPlayers(game, { type: "commence-equation-forming", folded: true });
 
-    setTimeout(() => {
+    endEquationFormingTimeout = setTimeout(() => {
         endEquationForming(game);
+
+        requestPlayerEquations(game);
     }, 90 * 1000);
 }
 
 function endEquationForming(game) {
+    sendSocketMessageToNonFoldedPlayers(game, { // shouldn't this be ALL players??
+        type: "end-equation-forming", 
+    });
+}
+
+function requestPlayerEquations(game) {
     console.log("Timer expired for equation forming, notifying clients to receive equation results.");
 
     sendSocketMessageToNonFoldedPlayers(game, { 
-        type: "end-equation-forming", 
+        type: "request-formed-equation", 
     });
 }
 
@@ -1229,10 +1261,9 @@ function logRoomsAndPlayers() {
     console.log("================================");
 }
 
-const interval = setInterval(function ping() {
+const heartbeatInterval = setInterval(function ping() {
     wss.clients.forEach(function each(ws) {
         if (ws.isAlive === false) {
-            // No pong received since last check → terminate
             return ws.terminate();
         }
 
@@ -1241,6 +1272,15 @@ const interval = setInterval(function ping() {
     });
 }, 30000);
 
+const roomCleanupInterval = setInterval(function ping() {
+    games.forEach(function each(game) {
+        if (Date.now() - game.createdAt > 24 * 60 * 60 * 1000) {
+            games.delete(game.id);
+        }
+    });
+}, 24 * 60 * 60 * 1000);
+
 wss.on('close', function close() {
-    clearInterval(interval);
+    clearInterval(heartbeatInterval);
+    clearInterval(roomCleanupInterval);
 });
