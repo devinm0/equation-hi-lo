@@ -36,6 +36,8 @@ export class Player {
       this.isHiContender = false;
       this.roomCode = null;
       this.contribution = 0; // the total chips a player has added to the pot for a given hand
+      this.needToDiscard = false;
+      this.otherEquationResult = null;
   }
 }
 

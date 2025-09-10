@@ -131,9 +131,9 @@ wss.on("connection", (ws) => {
                 player.hand.push(draw);
 
                 notifyAllPlayersOfNewlyDealtCards(game.roomCode, player);
-                game.numPlayersThatNeedToDiscard -= 1;
+                player.needToDiscard = false;
 
-                if (game.numPlayersThatNeedToDiscard === 0) {
+                if (playersThatNeedToDiscard(game.roomCode).length === 0) {
                     if (game.phase === GamePhases.SECONDDEAL) {
                         commenceEquationForming(game);
                     } else if (game.phase === GamePhases.FIRSTDEAL) {
@@ -256,9 +256,36 @@ wss.on("connection", (ws) => {
                         logRoomsAndPlayers();
                     }
                 } else if (game.phase !== GamePhases.LOBBY) {
+                    ws.send(JSON.stringify({ type: "room-entered", roomCode: game.roomCode, hostId: game.hostId, joined: true, inProgress: true }));
+
+                    const playerToNotify = players.get(ws.userId); // can use ws if not gamephase bc must be true
                     // send game state
+                    switch (game.phase) {
+                        case GamePhases.FIRSTDEAL:
+                            playersInRoom(game.roomCode).forEach(player => {
+                                notifyPlayerOfNewlyDealtCards(player, playerToNotify, player.needToDiscard);
+                            });
+                            break;
+                        case GamePhases.FIRSTBETTING:
+                            playersInRoom(game.roomCode).forEach(player => {
+                                notifyPlayerOfNewlyDealtCards(player, playerToNotify, false);
+                            });
+                            break;
+                        case GamePhases.SECONDDEAL:
+                            break;
+                        case GamePhases.EQUATIONFORMING:
+                            break;
+                        case GamePhases.SECONDBETTING:
+                            break;
+                        case GamePhases.HILOSELECTION:
+                            break;
+                        case GamePhases.RESULTVIEWING:
+                            break;
+                    }
                 }
+                    console.log("made it to sending game state");
             }
+
             // tests
             // two players call and third player folds
             // one player calls and two players fold = distribute pot to first player and end round
@@ -372,11 +399,17 @@ wss.on("connection", (ws) => {
                 });
 
                 sendSocketMessageThatPlayerFolded(foldedPlayer.roomCode, foldedPlayer.id);
-                
-                if (nonFoldedPlayers(game).every(player => player.equationResult !== null)) {
+                    
+                // two cases to check:
+
+                // player manually folded in first betting round, and there's only one player left, go ahead and distribute pot
+                if (clientMsg.manual === true || 
                     // if we've received equation result socket messages from every player, we can proceed to second round of betting.
                     // this check must be inside the parent if loop, otherwise we may have a case where no one submitted an equation,
                     // so whichever client is last to have its message received actually takes the whole pot
+                    nonFoldedPlayers(game).every(player => player.equationResult !== null)) 
+                {
+                    // TODO I think this if statement only can be moved outside the parent if. No way to race condition to 0
                     if (nonFoldedPlayers(game).length === 0){
                         returnChipsToAllPlayers(game);
                         return;
@@ -396,12 +429,37 @@ wss.on("connection", (ws) => {
 
             // TODO (putting this in random place so I see it later) - test every number of automatically folded players during equation forming
             case "hi-lo-selected": {
-                console.log(clientMsg.userId, clientMsg.username, clientMsg.choices);
+                // TODO need some game phase check here
+                console.log(clientMsg.userId, clientMsg.username, clientMsg.choices, clientMsg.otherEquationResult, clientMsg.order);
                 const player = players.get(ws.userId);
                 player.choices = clientMsg.choices;
 
+                if (player.choices.includes("low") && !player.choices.includes("high")) {
+                    player.lowHand = player.hand;
+                    player.lowEquationResult = player.equationResult;
+                } else if (player.choices.includes("low") && !player.choices.includes("high")) {
+                    player.lowHand = player.hand;
+                    player.lowEquationResult = player.equationResult;
+                } else if (player.choices.includes("low") && player.choices.includes("high")) {
+                    player.otherEquationResult = clientMsg.otherEquationResult;
+                    player.otherHand = clientMsg.order.map(i => player.hand[i]); // is this gonna be reordered? do I need to copy?
+                    
+                    // this shouldn't be true. What if their results are 21, and 23. They might want to choose 21 as high equation, and 23 as low (even though they could have just kept 21 for both)
+                    if (player.otherEquationResult < player.equationResult) {
+                        player.lowEquationResult = player.otherEquationResult;
+                        player.highEquationResult = player.equationResult;
+                        player.lowHand = player.otherHand;
+                        player.highHand = player.hand;
+                    } else {
+                        player.lowEquationResult = player.equationResult;
+                        player.highEquationResult = player.otherEquationResult;
+                        player.highHand = player.otherHand;
+                        player.lowHand = player.hand;
+                    }
+
+                }
                 const game = games.get(player.roomCode);
-                // check that every player submitted choices
+
                 if (nonFoldedPlayers(game).every(player => player.choices.length > 0)) {
                     game.phase = GamePhases.RESULTVIEWING;
 
@@ -456,7 +514,7 @@ function endRoundOrProceedToNextPlayer(game, justPlayedPlayer) {
 
             // possible that players receive multiply cards on last deal
             // so don't commence equation forming unless all discards are complete
-            if (game.numPlayersThatNeedToDiscard === 0) {
+            if (playersThatNeedToDiscard(game.roomCode).length === 0) {
                 commenceEquationForming(game);
             }
         }
@@ -543,19 +601,17 @@ function dealTwoOpenCardsToEachPlayer(game, players) {
             player.hand.push(draw3);
         }
 
-        let multiplicationCardDealt = false;
         if (draw.value === OperatorCards.MULTIPLY || draw2.value === OperatorCards.MULTIPLY) { // expect one more person to discard before advancing game state
-            game.numPlayersThatNeedToDiscard += 1;
-            multiplicationCardDealt = true;
+            player.needToDiscard = true;
         }
 
-        notifyAllPlayersOfNewlyDealtCards(game.roomCode, player, multiplicationCardDealt); // magic bool parameters are bad. just call notifyOfFirstOpenDeal
+        notifyAllPlayersOfNewlyDealtCards(game.roomCode, player, player.needToDiscard); // magic bool parameters are bad. just call notifyOfFirstOpenDeal
 
         console.log("dealt 2 open cards to " + player.username);
         printHand(player.hand);
     });
 
-    return game.numPlayersThatNeedToDiscard;
+    return playersThatNeedToDiscard(game.roomCode).length;
 }
 
 function dealLastOpenCardToEachPlayer(game) {
@@ -571,17 +627,15 @@ function dealLastOpenCardToEachPlayer(game) {
             player.hand.push(draw2);
         }
 
-        let multiplicationCardDealt = false;
 
         if (draw.value === OperatorCards.MULTIPLY) { // expect one more person to discard before advancing game state
-            game.numPlayersThatNeedToDiscard += 1;
-            multiplicationCardDealt = true;
+            player.needToDiscard = true;
         }
 
-        notifyAllPlayersOfNewlyDealtCards(game.roomCode, player, multiplicationCardDealt);
+        notifyAllPlayersOfNewlyDealtCards(game.roomCode, player, player.needToDiscard);
     });
 
-    return game.numPlayersThatNeedToDiscard;    
+    return playersThatNeedToDiscard(game.roomCode).length;
 }
 
 function endHand(game) {
@@ -590,7 +644,6 @@ function endHand(game) {
 
     game.maxRaiseReached = false;
     game.handNumber += 1;
-    game.numPlayersThatNeedToDiscard = 0; 
 
     playersInRoom(game.roomCode).forEach(player => { // refactor to this.players() which is a function
         if (player.chipCount === 0) {
@@ -605,9 +658,13 @@ function endHand(game) {
 
         player.foldedThisTurn = false;
         player.equationResult = null;
+        player.otherEquationResult = null;
+        player.lowEquationResult = null;
+        player.highEquationResult = null;
         player.choices = [];
         player.acknowledgedResults = false;
         player.contribution = 0;
+        player.needToDiscard = false;
     })
 
     initializeHand(game);
@@ -704,7 +761,7 @@ function initializeHand(game) { // means start a hand of play
 
     dealTwoOpenCardsToEachPlayer(game, playersInRoom(game.roomCode));
 
-    console.log("toDiscard: ", game.numPlayersThatNeedToDiscard) // refactor to one variable
+    console.log("toDiscard: ", playersThatNeedToDiscard(game.roomCode).length) // refactor to one variable
 
     // upon reading, thought this should be numPlayersThatNeedToDiscard === numPlayersThatHaveDiscarded
     // it could be
@@ -712,7 +769,7 @@ function initializeHand(game) { // means start a hand of play
     // the other condition is that there WERE people who need to discard, and that is checked elsewhere
     //      so there are two calls to commenceFirstRoundBetting();
 
-    if (game.numPlayersThatNeedToDiscard === 0) { // no multiply cards were dealt
+    if (playersThatNeedToDiscard(game.roomCode).length === 0) { // no multiply cards were dealt
         commenceFirstRoundBetting(game);
     }
 }
@@ -720,6 +777,8 @@ function initializeHand(game) { // means start a hand of play
 function playersInRoom(roomCode) { return [...players.values()].filter(player => player.roomCode === roomCode) };
 
 function playersInRoomEntries(roomCode) { return [...players].filter(([id, player]) => player.roomCode === roomCode) }; 
+
+function playersThatNeedToDiscard(roomCode) { return playersInRoom(roomCode).filter(player => player.needToDiscard === true) };
 
 function endBettingRound(game) {
     sendSocketMessageToEveryClientInRoom(game.roomCode, { type: "end-betting-round", round: game.phase });
@@ -730,7 +789,32 @@ function endBettingRound(game) {
         player.turnTakenThisRound = false;
         player.stake = 0;
     }
+}
 
+function notifyPlayerOfNewlyDealtCards(playerDealtTo, playerNotifying, multiplicationCardDealt = false) {
+    wss.clients.forEach((client) => {
+        if (client.userId === playerNotifying.id) {
+            let payload = {
+                type: "deal",
+                id: playerDealtTo.id,
+                username: playerDealtTo.username,
+                chipCount: playerDealtTo.chipCount,
+                multiplicationCardDealt: multiplicationCardDealt
+            };
+            if (playerNotifying.id == playerDealtTo.id) {
+                payload.hand = playerDealtTo.hand;
+                // only the player who is dealt a multiplication card gets prompted to discard 
+            } else {
+                // hide the hidden card. NOTE [...hand] only works if contains primitives
+                let handToSend = getHandToSendFromHand(playerDealtTo.hand, playerNotifying.id === playerDealtTo.id);
+                payload.hand = handToSend
+            }
+
+            if (client.readyState === WebSocket.OPEN) {
+                client.send(JSON.stringify(payload));
+            }
+        }
+    });
 }
 
 // TODO test that only the player who is dealt a multiplication card gets prompted to discard
@@ -843,8 +927,8 @@ function commenceEquationForming(game) {
 }
 
 function endEquationForming(game) {
-    sendSocketMessageToNonFoldedPlayers(game, { // shouldn't this be ALL players??
-        type: "end-equation-forming", 
+    sendSocketMessageToEveryClientInRoom(game.roomCode, { // NEED to change this to game
+        type: "end-equation-forming"
     });
 }
 
@@ -978,13 +1062,14 @@ function findLoWinner(loBettingPlayers) {
     let loWinnerLowCard = null;
     let winningDiff = Infinity;
     for (const player of loBettingPlayers) {
-        const diff = Math.abs(player.equationResult - loTarget);
+        const diff = Math.abs(player.lowEquationResult - loTarget);
         if (diff < winningDiff) {
             winningDiff = diff;
             loWinner = player;
-        } else if (diff === winningDiff) {
-            // wipe out in case of second place tie
+            // wipe out in case of second place tie. but TODO this doesn't work because what if there's a 3 way tie. this will wipe out the first
+            // TODO need extra if (diff < loContenderDiff)
             loBettingPlayers.forEach(player => player.isLoContender = false);
+        } else if (diff === winningDiff) {
             // make tied players contenders for card highlighting later
             player.isLoContender = true;
             loWinner.isLoContender = true;
@@ -1011,14 +1096,13 @@ function findHiWinner(hiBettingPlayers) {
     let hiWinnerHighCard = null;
     let winningDiff = Infinity;
     for (const player of hiBettingPlayers) {
-        const diff = Math.abs(player.equationResult - hiTarget);
+        const diff = Math.abs(player.highEquationResult - hiTarget);
         if (diff < winningDiff) {
-          winningDiff = diff;
-          hiWinner = player;
-       
-        } else if (diff === winningDiff) {
+            winningDiff = diff;
+            hiWinner = player;
             // wipe out in case of second place tie
             hiBettingPlayers.forEach(player => player.isHiContender = false);
+        } else if (diff === winningDiff) {
             // make tied players contenders for card highlighting later
             player.isHiContender = true;
             hiWinner.isHiContender = true;
@@ -1042,9 +1126,22 @@ function findHiWinner(hiBettingPlayers) {
 }
 
 function determineWinners(game) {
-    const loBettingPlayers = nonFoldedPlayers(game).filter(player => player.choices.includes('low'));
-    const hiBettingPlayers = nonFoldedPlayers(game).filter(player => player.choices.includes('high'));
-      
+    // TESTS
+    // only swing betters
+    // one swing better and all hi betters
+    // one swing better and all lo betters
+    // one swing better and hi and lo betters
+    // swing betters and hi and lo betters (6 total)
+
+    // TODO change to player.choice = "swing"
+    const swingBettingPlayers = nonFoldedPlayers(game).filter(player => player.choices.includes('low') && player.choices.includes('high'));
+    const loBettingPlayers = nonFoldedPlayers(game).filter(player => player.choices.includes('low') && !player.choices.includes('high'));
+    const hiBettingPlayers = nonFoldedPlayers(game).filter(player => player.choices.includes('high') && !player.choices.includes('low'));
+    
+    let [loWinnerIncludingSwingBetters, loWinnerIncludingSwingBettersLowCard] = findLoWinner(swingBettingPlayers.concat(loBettingPlayers));
+    let [hiWinnerIncludingSwingBetters, hiWinnerIncludingSwingBettersHighCard] = findHiWinner(swingBettingPlayers.concat(hiBettingPlayers));
+    let [loWinnerOfSwingBetters, loWinnerOfSwingBettersLowCard] = findLoWinner(swingBettingPlayers);
+    let [hiWinnerOfSwingBetters, hiWinnerOfSwingBettersHighCard] = findHiWinner(swingBettingPlayers);
     let [loWinner, loWinnerLowCard] = findLoWinner(loBettingPlayers);
     let [hiWinner, hiWinnerHighCard] = findHiWinner(hiBettingPlayers);
     
@@ -1068,34 +1165,51 @@ function determineWinners(game) {
     // equationResult > high card > high suit
     // TODO findLowestCard(reversedCards) something like this
 
-    const potWillSplit = loWinner !== null && hiWinner !== null;
     let hiWinnerChipsDelta;
     let loWinnerChipsDelta;
     let message;
 
-    // send chips to the winners. if there are both lo and hi betters, split the pot among the winner of each
-    if (potWillSplit) {
-        if (game.pot % 2 !== 0) {
-            game.pot = game.pot - 1 // discard a chip if pot is uneven
+    // what if there were no swing betters at all
+
+    // TODO what if everyone swing bets but not one wins both... do chips just get returned?
+    // what about just find winnerAmongSwingBetters
+    // what if someone bets swing and others bet only low. then hiWinner is null
+    const swingBetterWon = swingBettingPlayers.length > 0 && loWinnerIncludingSwingBetters.id === loWinnerOfSwingBetters.id && loWinnerOfSwingBetters.id === hiWinnerIncludingSwingBetters.id && hiWinnerIncludingSwingBetters.id === hiWinnerOfSwingBetters.id;
+    if (swingBetterWon) { // TODO rename loSwingWinner...
+        players.get(loWinnerOfSwingBetters.id).chipCount += game.pot;
+        hiWinnerChipsDelta = loWinnerChipsDelta = game.pot;
+        message = loWinnerOfSwingBetters.username + " won the swing bet.";
+    } else {
+        const potWillSplit = loWinner !== null && hiWinner !== null;
+
+        // TODO right now, if everyone bets swing but no one sweeps, the chips are lost. Should they be returned? Or should it default to normal betting?
+        // like ifAllPlayersBetSwing, potWillSplit should be loWinnerIncludingSwingBetters !== null and hiWinnerIncludingSwingBetters !== null
+        
+        // TODO isHiWinner and isLoWinner should be fields on player class I guess
+        // send chips to the winners. if there are both lo and hi betters, split the pot among the winner of each
+        if (potWillSplit) {
+            if (game.pot % 2 !== 0) {
+                game.pot = game.pot - 1 // discard a chip if pot is uneven
+            }
+
+            const splitPot = game.pot / 2;
+            hiWinnerChipsDelta = splitPot;
+            loWinnerChipsDelta = splitPot;
+            players.get(hiWinner.id).chipCount += splitPot;
+            players.get(loWinner.id).chipCount += splitPot;
+
+            message = hiWinner.username + " won the high bet and " + loWinner.username + " won the low bet.";
+        } else if (loWinner !== null) {
+            players.get(loWinner.id).chipCount += game.pot;
+            loWinnerChipsDelta = game.pot;
+
+            message = loWinner.username + " won the low bet.";
+        } else if (hiWinner !== null) {
+            players.get(hiWinner.id).chipCount += game.pot;
+            hiWinnerChipsDelta = game.pot;
+
+            message = hiWinner.username + " won the high bet.";
         }
-
-        const splitPot = game.pot / 2;
-        hiWinnerChipsDelta = splitPot;
-        loWinnerChipsDelta = splitPot;
-        players.get(hiWinner.id).chipCount += splitPot;
-        players.get(loWinner.id).chipCount += splitPot;
-
-        message = hiWinner.username + " won the high bet and " + loWinner.username + " won the low bet.";
-    } else if (loWinner !== null) {
-        players.get(loWinner.id).chipCount += game.pot;
-        loWinnerChipsDelta = game.pot;
-
-        message = loWinner.username + " won the low bet.";
-    } else if (hiWinner !== null) {
-        players.get(hiWinner.id).chipCount += game.pot;
-        hiWinnerChipsDelta = game.pot;
-
-        message = hiWinner.username + " won the high bet.";
     }
 
     game.pot = 0; // TODO put this inside of endHand??
@@ -1104,19 +1218,24 @@ function determineWinners(game) {
     let results = [...nonFoldedPlayers(game).values()].map(player => ({
         id: player.id,
         chipCount: player.chipCount,
-        chipDifferential: player.id === hiWinner?.id ? hiWinnerChipsDelta :
+        chipDifferential: swingBetterWon ? player.id === loWinnerOfSwingBetters.id ? loWinnerChipsDelta : 0 :
+            player.id === hiWinner?.id ? hiWinnerChipsDelta : // todo rename to hiWinnerExcludingSwingBetters
             player.id === loWinner?.id ? loWinnerChipsDelta : 0,
-        hand: player.hand,
+        lowHand: player.lowHand, // TODO adjust for swing
+        highHand: player.highHand,
+        folded: player.foldedThisTurn,
         // TODO debug this
         lowCard : findLowestCard(player.hand).value,
         highCard : findHighestCard(player.hand).value,
-        result: player.equationResult,
-        choice: player.choices[0], // TODO adjust this for swing betting, need to send choices
-        difference: player.choices[0] === "low" ? Math.abs(player.equationResult - 1) : Math.abs(player.equationResult - 20),
-        isHiWinner: player.id === hiWinner?.id,
-        isLoWinner: player.id === loWinner?.id,
-        loWinnerLowCard: loWinnerLowCard?.value,
-        hiWinnerHighCard: hiWinnerHighCard?.value,
+        choices: player.choices, // TODO adjust this for swing betting, need to send choices
+        lowResult: player.choices.includes('low') ? player.lowEquationResult : null, // TODO how to send right result for each
+        highResult: player.choices.includes('high') ? player.highEquationResult : null, // TODO how to send right result for each
+        lowDifference: player.choices.includes('low') ? Math.abs(player.lowEquationResult - 1) : null, // adjust for swing
+        highDifference: player.choices.includes('high')? Math.abs(player.highEquationResult - 20) : null, // adjust for swing
+        isHiWinner: swingBetterWon ? player.id === hiWinnerIncludingSwingBetters?.id : player.id === hiWinner?.id, // what if swing one the hi but not the low
+        isLoWinner: swingBetterWon ? player.id === loWinnerIncludingSwingBetters?.id : player.id === loWinner?.id,
+        loWinnerLowCard: swingBetterWon ? loWinnerIncludingSwingBettersLowCard?.value : loWinnerLowCard?.value,
+        hiWinnerHighCard: swingBetterWon ? hiWinnerIncludingSwingBettersHighCard?.value : hiWinnerHighCard?.value,
         // this doesn't work either, because it will highlight the low or high card EVEN if there is no tie. UGH
         isLoContender: player.isLoContender,
         isHiContender: player.isHiContender

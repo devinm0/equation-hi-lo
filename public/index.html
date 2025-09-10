@@ -85,6 +85,7 @@
 
     <button id="confirmResults" class="hidden">Next Hand ✅</button>
     <button id="confirmEquationFormed" class="hidden">Lock in Equation ✅</button>
+    <button id="confirmOtherEquationFormed" class="hidden">Lock in Second Equation ✅</button>
 
     <button class="button" id="leaveButton" style="display:none;">Leave Game</button>
     <script src="./sortable.js"></script>
@@ -449,16 +450,61 @@
 
             openChoiceModal(choices => {
                 if (choices) {
-                    const data = {
-                        type: "hi-lo-selected",
-                        userId: myId,
-                        username: myName,
-                        choices: choices
-                    };
-                    console.log(data);
-                    socket.send(JSON.stringify(data));
+                    if (choices.includes("high") && choices.includes("low")) {
+                        sortable.option("disabled", false);
+                        const confirmOtherEquationFormedButton = document.getElementById("confirmOtherEquationFormed");
+                        confirmOtherEquationFormedButton.classList.remove("hidden");
 
-                    console.log('Player chose:', choices); // e.g., ["low", "high"]
+                        confirmOtherEquationFormedButton.onclick = () => {
+                            let equationResult;
+                            const cards = handDivs.get(myId).querySelectorAll('.card');
+                            try {
+                                equationResult = applyOps(cards);
+                                console.log(equationResult);
+                            } catch (e) {
+                                cards.forEach(card => {
+                                    card.classList.remove('blink-red');
+
+                                    card.classList.add('blink-red');
+
+                                    setTimeout(() => {
+                                        card.classList.remove('blink-red');
+                                    }, 1200)
+                                });
+
+                                showNotification("Malformed equation, try again.", "red", 5000);
+                                return;
+                            }
+                            
+                            const data = {
+                                type: "hi-lo-selected",
+                                userId: myId,
+                                username: myName,
+                                choices: choices,
+                                otherEquationResult: equationResult,
+                                order: Array.from(handDivs.get(myId).querySelectorAll('.card')).map(card => card.dataset.id)
+                            };
+                            console.log(data);
+                            socket.send(JSON.stringify(data));
+
+                            console.log('Player chose:', choices); // e.g., ["low", "high"]
+
+                            confirmOtherEquationFormedButton.classList.add('hidden');
+                        };
+
+                    } else {
+                    // if both, enable sortable and hide modal, show lock in equation button
+                        const data = {
+                            type: "hi-lo-selected",
+                            userId: myId,
+                            username: myName,
+                            choices: choices
+                        };
+                        console.log(data);
+                        socket.send(JSON.stringify(data));
+
+                        console.log('Player chose:', choices); // e.g., ["low", "high"]
+                    }
                 } else {
                     console.log('Player canceled');
                 }
@@ -498,6 +544,9 @@
             if (msg.joined) {
                 document.getElementById("nameContainer").style.display = "none";
             }
+            if (msg.inProgress) {
+                document.getElementById("uiContainer").style.display = "none";
+            }
             const roomCodeContainer = document.getElementById("roomCodeContainer");
             // TODO shouldn't trust client msg here.
             roomCodeContainer.textContent = "Room " + msg.roomCode;
@@ -511,6 +560,10 @@
             break;
         } 
         
+        case "game-state": {
+
+        }
+
         case "kicked": {
             if (msg.userId === myId) {
                 showNotification("No more chips! You're out. Better luck next time!", "red");
@@ -741,6 +794,10 @@
         nameSpan.innerHTML = '<p>' + nameSpanContents + '</p>';
         nameDiv.appendChild(nameSpan);
 
+        drawCards(handDivs.get(id), id, hand, folded, multiplicationCardDealt, handLengthBeforeThisDeal);
+    }
+
+    function drawCards(divToAppendTo, id, hand, folded, multiplicationCardDealt, handLengthBeforeThisDeal) {
         hand.forEach((card, index) => {
             const cardDiv = document.createElement("div");
             
@@ -816,7 +873,7 @@
                 }, 3000)
             }
 
-            handDivs.get(id).appendChild(cardDiv);
+            divToAppendTo.appendChild(cardDiv);
         });
     }
 
@@ -1136,7 +1193,7 @@
         confirmResults.classList.remove('hidden');
 
         msg.results.forEach(result => {
-            console.log(result.chipDifferential);
+            console.log(result);
             updateChipStack(result.chipCount, document.getElementById("chipStacksContainer-" + result.id), result.chipDifferential);
 
             let nameDiv = document.getElementById("handLabel-" + result.id);
@@ -1144,10 +1201,10 @@
             let hiOptionDiv = document.getElementById("high-symbol-" + result.id);
             let trophyDiv = document.getElementById("trophy-" + result.id);
 
-            if (result.choice === "low") {
+            if (result.choices.includes("low")) {
                 loOptionDiv.classList.remove("hidden");
             }
-            if (result.choice === "high") {
+            if (result.choices.includes("high")) {
                 hiOptionDiv.classList.remove("hidden");
             }
             if (result.isHiWinner) {
@@ -1160,30 +1217,74 @@
                 // TODO redraw by indexOf currentLowestPlayersLowestCard
 
             }
-            const cardDiv = document.createElement("div");
-
-            let cardDivResultParagraph = document.createElement("p");
-            let cardDivDifferenceParagraph = document.createElement("p");
-
-            cardDivResultParagraph.className = "result-paragraph"; // without null check, 0 becomes card-back since equivalent to false
-            cardDivDifferenceParagraph.className = "difference-paragraph"; // without null check, 0 becomes card-back since equivalent to false
-
-            cardDivResultParagraph.innerHTML = "=" + formatNumber(result.result);
-            cardDivDifferenceParagraph.innerHTML = "(" + formatNumber(result.difference) + ")";
-
-            cardDiv.appendChild(cardDivResultParagraph);
-            cardDiv.appendChild(cardDivDifferenceParagraph);
-
-            cardDiv.className = "card"; // without null check, 0 becomes card-back since equivalent to false
-            cardDiv.classList.add("difference-card"); // without null check, 0 becomes card-back since equivalent to false
-
-            // if (result.difference >= 10){ // TODO this is different for the refactor
-            //     cardDivResultParagraph.style.transform = 'translateX(-0.7rem)';
-            // }
 
             const handDiv = handDivs.get(result.id);
-            handDiv.appendChild(cardDiv);
 
+            if (result.choices.includes("low")) {
+                const lowCardDiv = document.createElement("div");
+
+                let lowCardDivResultParagraph = document.createElement("p");
+                let lowCardDivDifferenceParagraph = document.createElement("p");
+
+                lowCardDivResultParagraph.className = "result-paragraph"; // without null check, 0 becomes card-back since equivalent to false
+                lowCardDivDifferenceParagraph.className = "difference-paragraph"; // without null check, 0 becomes card-back since equivalent to false
+
+                lowCardDivResultParagraph.innerHTML = "=" + formatNumber(result.lowResult);
+                lowCardDivDifferenceParagraph.innerHTML = "(" + formatNumber(result.lowDifference) + ")";
+
+                lowCardDiv.appendChild(lowCardDivResultParagraph);
+                lowCardDiv.appendChild(lowCardDivDifferenceParagraph);
+
+                lowCardDiv.className = "card"; // without null check, 0 becomes card-back since equivalent to false
+                lowCardDiv.classList.add("difference-card"); // without null check, 0 becomes card-back since equivalent to false
+
+                // if (result.difference >= 10){ // TODO this is different for the refactor
+                //     cardDivResultParagraph.style.transform = 'translateX(-0.7rem)';
+                // }
+
+                handDiv.appendChild(lowCardDiv);
+            }
+
+            const lineBreakDiv = document.createElement("div");
+            lineBreakDiv.style.width = "100%";
+            handDiv.appendChild(lineBreakDiv);
+
+            const otherEquationDiv = document.createElement("div");
+            otherEquationDiv.style.display = "flex";
+            otherEquationDiv.style.flex = "0 0 auto";
+            handDiv.appendChild(otherEquationDiv);
+
+            if (result.choices.includes("high")) {
+                console.log(result.id, result.highHand, result.highHand.length);
+
+                drawCards(otherEquationDiv, result.id, result.highHand, result.folded, false, result.highHand?.length);
+
+                const hiCardDiv = document.createElement("div");
+
+                let hiCardDivResultParagraph = document.createElement("p");
+                let hiCardDivDifferenceParagraph = document.createElement("p");
+
+                hiCardDivResultParagraph.className = "result-paragraph"; // without null check, 0 becomes card-back since equivalent to false
+                hiCardDivDifferenceParagraph.className = "difference-paragraph"; // without null check, 0 becomes card-back since equivalent to false
+
+                console.log(result.highResult);
+                hiCardDivResultParagraph.innerHTML = "=" + formatNumber(result.highResult);
+                hiCardDivDifferenceParagraph.innerHTML = "(" + formatNumber(result.highDifference) + ")";
+
+                hiCardDiv.appendChild(hiCardDivResultParagraph);
+                hiCardDiv.appendChild(hiCardDivDifferenceParagraph);
+
+                hiCardDiv.className = "card"; // without null check, 0 becomes card-back since equivalent to false
+                hiCardDiv.classList.add("difference-card"); // without null check, 0 becomes card-back since equivalent to false
+
+                // if (result.difference >= 10){ // TODO this is different for the refactor
+                //     cardDivResultParagraph.style.transform = 'translateX(-0.7rem)';
+                // }
+
+                otherEquationDiv.appendChild(hiCardDiv);
+            }
+
+            // TODO add id for lowHand and highHand, cuz don't wanna highlight the low tiebreaker card inside the high hand or vice versa
             // and finally, highlight the tiebreaker card if there is one
             // TODO this logic won't work if the tiebreaker card is different value
             // need to check if equationResult is the same, AND THEN just highlight the lowest card
