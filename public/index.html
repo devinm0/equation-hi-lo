@@ -43,7 +43,7 @@
 
     <div id="homeContainer"> <!--TODO rename to uiContainer-->
         <div id="homeTitleContainer">Equation <span style="white-space: nowrap;">Hi Lo</span></div>
-        <p id="roomCodeInfo" style="color: white;">Got a room code? Enter here to join an existing game:</p>
+        <p id="roomCodeInfo" style="color: white; text-align: center;">Got a room code? Enter here to join an existing game:</p>
         <div id="roomCodeInputContainer">
             <input type="text" id="roomCodeInput" placeholder="Room Code" pattern="^[a-zA-Z0-9]{4}$" required title="Room code does not exist. Room code consists of 4 letters or numbers"/>
             <p id="roomCodeError" style="color: rgb(255, 128, 128);"></p>
@@ -218,7 +218,7 @@
                         console.log(this);
                         const data = {
                             type: "discard",
-                            id: myId,
+                            userId: myId,
                             value: this.children[0].dataset.value,
                             color: myColor,
                             username: myName
@@ -648,7 +648,7 @@
     });
 
     document.getElementById("startButton").addEventListener("click", () => {
-        socket.send(JSON.stringify({ type: "start", id: myId }));
+        socket.send(JSON.stringify({ type: "start", userId: myId }));
     });
 
     document.getElementById('leaveButton').addEventListener('click', () => {
@@ -1013,7 +1013,7 @@
             const bet = parseInt(slider.value);
 
             console.log("Bet placed:", bet);
-            socket.send(JSON.stringify({ type: "bet-placed", userId: myId, betAmount: bet, folded: false }));
+            socket.send(JSON.stringify({ type: "bet-placed", userId: myId, betAmount: bet }));
 
             hideBettingControls();
         };
@@ -1022,7 +1022,7 @@
             // send fold message. server will eliminate player and broadcast notification   
             console.log("Player folded, toCall is " + toCall);
             // need to send betAmount so that it doesn't get reset. refactor to track on server side
-            socket.send(JSON.stringify({ type: "fold", userId: myId, manual: true }));
+            socket.send(JSON.stringify({ type: "fold", manual: true }));
             hideBettingControls();
         };
     }
@@ -1187,6 +1187,11 @@
         // };
     }
 
+    // more test cases
+    // made high hand first, selected lo then high
+    // made high hand first, selected high then low
+    // made low hand first, selected high then low
+    // made low hand first, selected high then low
     function displayHandResults(msg) {
         const confirmResults = document.getElementById('confirmResults');
 
@@ -1219,8 +1224,11 @@
             }
 
             const handDiv = handDivs.get(result.id);
+            handDiv.innerHTML = ``; // injection
 
             if (result.choices.includes("low")) {
+                drawCards(handDiv, result.id, result.lowHand, result.folded, false, result.lowHand?.length);
+
                 const lowCardDiv = document.createElement("div");
 
                 let lowCardDivResultParagraph = document.createElement("p");
@@ -1300,7 +1308,7 @@
                 }
             }
             if (result.isHiContender) {
-                const cards = Array.from(handDiv.querySelectorAll('.card'));
+                const cards = Array.from(otherEquationDiv.querySelectorAll('.card'));
                 for (let i = 0; i < cards.length - 1; i++) {
                     console.log(cards[i].dataset.value, result.highCard);
                     if (Number(cards[i].dataset.value) === result.highCard) {

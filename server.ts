@@ -1,30 +1,254 @@
-import { OperatorCards, Suits, NumberCards, GamePhases } from './public/enums.js';
+import { OperatorCard, Suit, NumberCard, GamePhase } from './public/enums';
 import { Game, Player, Card } from './public/classes.js';
-import { findNextKeyWithWrap } from './public/utilities.js';
+import { findNextKeyWithWrap, removeWhitespace } from './public/utilities.js';
 import express from "express";
 import http from "http";
 import { WebSocketServer, WebSocket } from 'ws';
 import { v4 as uuidv4 } from "uuid";
 
 const app = express();
+
+app.use((req, res, next) => {
+    const start = Date.now();
+
+    res.on("finish", () => {
+        const duration = Date.now() - start;
+        console.log(`${req.method} ${req.originalUrl} took ${duration}ms`);
+    });
+
+    next();
+});
+
 const server = http.createServer(app);
 const wss = new WebSocketServer({ server });
+
 app.use(express.static("public"));
 
-let games = new Map();
-let players = new Map();
+let games = new Map<string, Game>();
+let players = new Map<string, Player>();
 const RATE_LIMIT = 20;
 const INTERVAL = 10000;
-let endEquationFormingTimeout;
+let endEquationFormingTimeout: NodeJS.Timeout;
 
-function heartbeat() {
-    this.isAlive = true;
+interface ExtendedWebSocket extends WebSocket { // LEARN why interface and not class?
+    isAlive: boolean;
+    msgCount: number;
+    userId: string;
 }
 
-wss.on("connection", (ws) => {
+interface CreateMessage {
+    type: "create"; // LEARN so THIS is discriminated union - makes senes
+    userId: string;
+    color: string;
+}
+
+interface StartMessage {
+    type: "start";
+    userId: string;
+}
+
+interface RefreshMessage {
+    type: "refresh";
+    userId: string;
+    color: string;
+    username: string;
+}
+
+interface DiscardMessage {
+    type: "discard";
+    userId: string;
+    value: string;
+    color: string;
+    username: string;
+}
+
+interface FoldMessage {
+    type: "fold";
+    manual: boolean;
+}
+
+interface EquationResultMessage {
+    type: "equation-result";
+    userId: string;
+    username: string;
+    result: number;
+    order: number[];
+}
+
+interface HiLoSelectedMessage {
+    type: "hi-lo-selected";
+    userId: string;
+    username: string;
+    choices: string[];
+    otherEquationResult?: number; // only for swing betters
+    order?: number[]; // only for swing betters
+}
+
+interface JoinMessage {
+    type: "join";
+    color: string;
+    userId: string;
+    username: string;
+}
+
+interface EnterMessage {
+    type: "enter";
+    color: string;
+    userId: string;
+    username: string;
+    roomCode: string;
+}
+
+interface BetMessage {
+    type: "bet-placed";
+    userId: string;
+    betAmount: number;
+    folded: boolean;
+}
+
+interface AcknowledgeHandResultsMessage {
+    type: "acknowledge-hand-results";
+    userId: string;
+}
+
+interface LeaveMessage {
+    type: "leave";
+    userId: string;
+}
+
+type ClientMessage = 
+    CreateMessage 
+    | StartMessage
+    | RefreshMessage 
+    | DiscardMessage 
+    | FoldMessage 
+    | EquationResultMessage 
+    | HiLoSelectedMessage 
+    | JoinMessage 
+    | EnterMessage 
+    | BetMessage 
+    | AcknowledgeHandResultsMessage
+    | LeaveMessage
+
+type ServerMessage = 
+    BeginHandMessage
+    | CommenceEquationFormingMessage
+    | EndBettingRoundMessage
+    | PlayerDiscardedMessage
+    | GameStartedMessage
+    | PlayerLeftMessage
+    | PlayerJoinedMessage
+    | BetPlacedMessage
+    | SecondRoundBettingSkippedMessage
+    | KickedMessage
+    | FirstRoundBettingCommencedMessage
+    | SecondRoundBettingCommencedMessage
+    | EndEquationFormingMessage
+    | RequestFormedEquationMessage
+    | HiLoSelectionMessage
+    | ChipDistributionMessage
+    | RoundResultMessage
+
+interface BeginHandMessage {
+    type: "begin-hand";
+    handNumber: number;
+} 
+
+interface CommenceEquationFormingMessage {
+    type: "commence-equation-forming";
+    folded?: boolean;
+} 
+
+interface SecondRoundBettingCommencedMessage {
+    type: "second-round-betting-commenced";
+} 
+
+interface FirstRoundBettingCommencedMessage {
+    type: "first-round-betting-commenced";
+} 
+
+interface EndBettingRoundMessage {
+    type: "end-betting-round";
+    round: GamePhase;
+}
+
+interface PlayerDiscardedMessage {
+    type: "player-discarded";
+    id: string;
+    username: string;
+    value: string;
+}
+
+interface GameStartedMessage {
+    type: "game-started" 
+}
+
+interface PlayerLeftMessage {
+    type: "player-left" 
+}
+
+interface PlayerJoinedMessage {
+    type: "player-joined";
+    id: string;
+    hostId: string;
+    color: string;
+    username: string;
+}
+
+interface BetPlacedMessage {
+    type: "bet-placed",
+    id: string;
+    username: string;
+    betAmount: number;
+    chipCount: number;
+    pot: number;
+    betType: string;
+}
+
+interface SecondRoundBettingSkippedMessage {
+    type: "second-round-betting-skipped";
+}
+
+interface HiLoSelectionMessage {
+    type: "hi-lo-selection";
+}
+
+interface KickedMessage {
+    type: "kicked",
+    userId: string;
+    username: string;
+}
+
+interface EndEquationFormingMessage {
+    type: "end-equation-forming"
+}
+
+interface RequestFormedEquationMessage {
+    type: "request-formed-equation", 
+}
+
+interface ChipDistributionMessage {
+    type: "chip-distribution";
+    chipCount: number;
+    id: string;
+}
+
+interface RoundResultMessage {
+    type: "round-result";
+    message: string;
+    loWinner: Player;
+    hiWinner: Player;
+    results: Result[];
+}
+
+interface Result {
+
+}
+
+wss.on("connection", (ws: ExtendedWebSocket) => { // LEARN pass in extended
     // keep alive, in the case of 90 seconds equation forming
     ws.isAlive = true;
-    ws.on('pong', heartbeat);
+    ws.on('pong', () => {ws.isAlive = true;});
 
     console.log("connection");
     // only our domain can upgrade from http to ws
@@ -44,20 +268,19 @@ wss.on("connection", (ws) => {
     
     console.log(`Socket connected, generating userId ${userId} but it may not be used in the case that someone is rejoining, in which case the existing client userId will overwrite this.`);
 
-    ws.on("message", (message) => {
+    ws.on("message", (message: unknown) => {
         if (++ws.msgCount > RATE_LIMIT) {
             console.log("went over rate limit");
             ws.close();
             return;
         }
-        let clientMsg;
+        let clientMsg : ClientMessage;
 
         try {
-            clientMsg = JSON.parse(message.toString());
+            clientMsg = JSON.parse(message as string);
         } catch { return; }
 
-        if (!clientMsg.type) return;
-
+        if (!clientMsg || typeof clientMsg !== "object" || !("type" in clientMsg)) return;
 
         // TESTS create new game, have others join
         //      rejoin a game I created and make sure I'm still host
@@ -84,14 +307,14 @@ wss.on("connection", (ws) => {
             }
             
             case "enter": { // TODO change to enter, and then just check if game is in lobby phase and if player already exists
-                if (!games.has(clientMsg.roomCode)) {
+                const game = games.get(clientMsg.roomCode);
+
+                if (!game) {
                     // send room code does not exist message
                     ws.send(JSON.stringify({ type: "room-join-reject" }));
 
                     return;
                 }
-
-                const game = games.get(clientMsg.roomCode);
 
                 enterRoom(game, clientMsg);
                 break;
@@ -100,23 +323,23 @@ wss.on("connection", (ws) => {
             case "refresh": { 
                 ws.userId = clientMsg.userId; // should actually be the same
                 // what about set ws.userId equal to it
-                if (players.has(clientMsg.userId)) {
-                    const player = players.get(clientMsg.userId);
-                    ws.send(JSON.stringify({ type: "suggest-room", roomCode: player.roomCode })); // TODO client will say must be players 2 even if the reject reason is client not being host
-                } else {
-
-                }
+                const player = players.get(clientMsg.userId);
+                if (!player) return;
+                
+                ws.send(JSON.stringify({ type: "suggest-room", roomCode: player.roomCode })); // TODO client will say must be players 2 even if the reject reason is client not being host
                 
                 break;
             }
 
             case "discard": {
-                const player = players.get(clientMsg.id);
+                const player = players.get(clientMsg.userId);
+                if (!player) return;
                 const game = games.get(player.roomCode);
+                if (!game) return;
 
                 sendSocketMessageToEveryClientInRoom(game.roomCode, {
                     type: "player-discarded",
-                    id: clientMsg.id,
+                    id: clientMsg.userId,
                     username: clientMsg.username,
                     value: clientMsg.value
                 });
@@ -134,9 +357,9 @@ wss.on("connection", (ws) => {
                 player.needToDiscard = false;
 
                 if (playersThatNeedToDiscard(game.roomCode).length === 0) {
-                    if (game.phase === GamePhases.SECONDDEAL) {
+                    if (game.phase === GamePhase.SECONDDEAL) {
                         commenceEquationForming(game);
-                    } else if (game.phase === GamePhases.FIRSTDEAL) {
+                    } else if (game.phase === GamePhase.FIRSTDEAL) {
                         commenceFirstRoundBetting(game); 
                     }
                     // would break if someone leaves. in that case reduce num players that need to discard by 1?
@@ -145,8 +368,16 @@ wss.on("connection", (ws) => {
             }
         
             case "start": {
-                const game = games.get(players.get(clientMsg.id).roomCode);
-                if (clientMsg.id !== game.hostId || players.size < 2) {
+                const player = players.get(ws.userId);
+
+                if (player?.roomCode == null) {
+                    ws.send(JSON.stringify({ type: "reject-start" })); // TODO client will say must be players 2 even if the reject reason is client not being host
+                    return;
+                }
+
+                const game = games.get(player.roomCode); // commit message: fixed this
+
+                if (game == null || clientMsg.userId !== game.hostId || players.size < 2) {
                     ws.send(JSON.stringify({ type: "reject-start" })); // TODO client will say must be players 2 even if the reject reason is client not being host
                     return;
                 }
@@ -162,10 +393,12 @@ wss.on("connection", (ws) => {
             }
 
             case "leave": {
-                const player = players.get(clientMsg.id);
+                const player = players.get(clientMsg.userId);
+                if (!player) return;
                 const game = games.get(player.roomCode);
+                if (!game) return;
 
-                if (clientMsg.id === game.hostId) {
+                if (clientMsg.userId === game.hostId) {
                     // set a new host. if last player, end the game
                 }
 
@@ -183,20 +416,29 @@ wss.on("connection", (ws) => {
                 //     hostId = clientMsg.userId; // just use ws.userId here?
                 // }
                 const player = players.get(ws.userId);
+
+                if (player === null || player === undefined) {
+                    return;
+                }
+
                 if (player.username !== null) {
                     // this player already submitted their username, so this must be a duplicate message
                     return;
                 }
 
+                player.username = removeWhitespace(clientMsg.username);
                 const game = games.get(player.roomCode);
+                if (game == null) {
+                    // must be incorrect room code
+                    return;
+                }
 
-                players.get(ws.userId).username = clientMsg.username.removeWhitespace();
                 console.log(`***** 👩‍💻 ${game.hostId === ws.userId ? 'Host' : 'Player'} joined: ${clientMsg.username} *****`);
 
                 sendSocketMessageToEveryClientInRoom(game.roomCode, {
                     type: "player-joined",
                     id: clientMsg.userId,
-                    hostId: game.hostId,// client.userId === hostId, // this is wrong because it means the host will show everyone joining as host
+                    hostId: game.hostId!,// client.userId === hostId, // this is wrong because it means the host will show everyone joining as host
                     color: clientMsg.color, // what happens if we put user color here?
                     username: clientMsg.username,
                 });
@@ -205,9 +447,9 @@ wss.on("connection", (ws) => {
                 break;
             }
 
-            function enterRoom(game, clientMsg) {
+            function enterRoom(game: Game, clientMsg: CreateMessage | EnterMessage) { // TODO  this union is bad
 
-                if (game.phase === GamePhases.LOBBY) {
+                if (game.phase === GamePhase.LOBBY) {
                     // send a newly connected player the list of all players that have joined thus far
                     // player.username != null is because we don't want to share players that have entered but not submitted name
                     [...players.values()].filter(player => player.roomCode === game.roomCode && player.username != null).forEach(player => {
@@ -220,9 +462,10 @@ wss.on("connection", (ws) => {
                         }));
                     });
 
-                    if (players.has(clientMsg.userId)) {
+                    const player = players.get(clientMsg.userId);
+
+                    if (player) {
                         // TODO how to change the flow so we don't have to trust this
-                        const player = players.get(clientMsg.userId);
                         ws.send(JSON.stringify({ type: "room-entered", roomCode: game.roomCode, hostId: game.hostId, joined: player.username !== null }));
 
                         if (player.roomCode === game.roomCode){
@@ -247,39 +490,39 @@ wss.on("connection", (ws) => {
                         // have to reassign userId because what if someone refreshes? have to ignore the init message // TODO rethink this in the context of join/ enter
                         // need to assign ws.userId because it's used to check clientId === id on server
                         ws.userId = clientMsg.userId; // TODO need this??
-                        players.set(clientMsg.userId, new Player(clientMsg.userId, null, [], 25)); // TODO sanitize clientMsg.username to standards
-                        players.get(clientMsg.userId).color = clientMsg.color;
-                        players.get(clientMsg.userId).roomCode = game.roomCode;
+                        players.set(clientMsg.userId, new Player(clientMsg.userId, game.roomCode, clientMsg.color)); // TODO sanitize clientMsg.username to standards
 
                         console.log([...players].filter(([id, player]) => player.roomCode === game.roomCode));
                         
                         logRoomsAndPlayers();
                     }
-                } else if (game.phase !== GamePhases.LOBBY) {
+                } else { // gamephase is not lobby
                     ws.send(JSON.stringify({ type: "room-entered", roomCode: game.roomCode, hostId: game.hostId, joined: true, inProgress: true }));
 
                     const playerToNotify = players.get(ws.userId); // can use ws if not gamephase bc must be true
+                    if (!playerToNotify) return;
+
                     // send game state
                     switch (game.phase) {
-                        case GamePhases.FIRSTDEAL:
+                        case GamePhase.FIRSTDEAL:
                             playersInRoom(game.roomCode).forEach(player => {
                                 notifyPlayerOfNewlyDealtCards(player, playerToNotify, player.needToDiscard);
                             });
                             break;
-                        case GamePhases.FIRSTBETTING:
+                        case GamePhase.FIRSTBETTING:
                             playersInRoom(game.roomCode).forEach(player => {
                                 notifyPlayerOfNewlyDealtCards(player, playerToNotify, false);
                             });
                             break;
-                        case GamePhases.SECONDDEAL:
+                        case GamePhase.SECONDDEAL:
                             break;
-                        case GamePhases.EQUATIONFORMING:
+                        case GamePhase.EQUATIONFORMING:
                             break;
-                        case GamePhases.SECONDBETTING:
+                        case GamePhase.SECONDBETTING:
                             break;
-                        case GamePhases.HILOSELECTION:
+                        case GamePhase.HILOSELECTION:
                             break;
-                        case GamePhases.RESULTVIEWING:
+                        case GamePhase.RESULTVIEWING:
                             break;
                     }
                 }
@@ -291,7 +534,10 @@ wss.on("connection", (ws) => {
             // one player calls and two players fold = distribute pot to first player and end round
             case "bet-placed": {
                 const justPlayedPlayer = players.get(clientMsg.userId);
+                if (!justPlayedPlayer) return;
+
                 const game = games.get(justPlayedPlayer.roomCode);
+                if (!game) return;
 
                 if (clientMsg.userId !== game.currentTurnPlayerId) return;
 
@@ -301,7 +547,7 @@ wss.on("connection", (ws) => {
                 justPlayedPlayer.chipCount -= clientMsg.betAmount;
 
                 const betType = justPlayedPlayer.betAmount === 0 ? "check" :
-                                game.phase === GamePhases.FIRSTBETTING && justPlayedPlayer.betAmount === 1 ? "ante" : // TODO implement proper ante
+                                game.phase === GamePhase.FIRSTBETTING && justPlayedPlayer.betAmount === 1 ? "ante" : // TODO implement proper ante
                                 game.toCall === justPlayedPlayer.stake ? "check" :
                                 justPlayedPlayer.stake - game.toCall >= 10 ? "raise10" :
                                 "raise";
@@ -312,7 +558,7 @@ wss.on("connection", (ws) => {
                 sendSocketMessageToEveryClientInRoom(game.roomCode, {
                     type: "bet-placed",
                     id: clientMsg.userId,
-                    username: justPlayedPlayer.username,
+                    username: justPlayedPlayer.username!,
                     betAmount: clientMsg.betAmount, // so users can see "so and so bet x chips"
                     chipCount: justPlayedPlayer.chipCount, // to update the chip stack visual of player x for each player
                     pot: game.pot, // otherwise, pot won't get updated on last player of the round
@@ -326,31 +572,34 @@ wss.on("connection", (ws) => {
             case "equation-result": {
                 // definitely DON'T want to tell everyone what the results are yet
                 const player = players.get(clientMsg.userId);
+                if (!player) return;
                 const game = games.get(player.roomCode);
+                if (!game) return;
 
                 if (player.equationResult !== null) { // duplicate message
                     return;
                 }
-                if (game.phase !== GamePhases.EQUATIONFORMING) {
+                if (game.phase !== GamePhase.EQUATIONFORMING) {
                     return;
                 }
                 // a folded player may have manually sent a formed equation despite not given the opportunity, just ignore
                 // if (player.foldedThisTurn) { return; }
                 console.log("equation-result received " + clientMsg.result);
 
-                player.hand = clientMsg.order.map(i => player.hand[i]);
+                player.hand = clientMsg.order.map(i => player.hand[i]!); // TODO actually throw if any are undefined
                 player.equationResult = clientMsg.result;
 
                 // let everyone else know I've moved my cards, so they can see the order.
-                wss.clients.forEach((client) => {
+                wss.clients.forEach((c) => {
+                    const client = c as ExtendedWebSocket; // TODO better to have Map then I guess?
                     let handToSend = getHandToSendFromHand(player.hand, client.userId === clientMsg.userId);
                     
-                    if (/*client !== ws && */client.readyState === WebSocket.OPEN && players.get(client.userId)?.roomCode === player.roomCode) { //some kind of clientsInRoom function
+                    if (/*client !== ws && */client.readyState === WebSocket.OPEN && player.roomCode === player.roomCode) { //some kind of clientsInRoom function
                         client.send(JSON.stringify({
                             type: "player-formed-equation",
                             id: clientMsg.userId,
-                            username: players.get(clientMsg.userId).username,
-                            chipCount: players.get(clientMsg.userId).chipCount,
+                            username: player.username,
+                            chipCount: player.chipCount,
                             hand: handToSend
                         }));
                     }
@@ -361,7 +610,10 @@ wss.on("connection", (ws) => {
                     clearTimeout(endEquationFormingTimeout);
 
                     if (nonFoldedPlayers(game).length === 1){
-                        distributePotToOnlyRemainingPlayer(game, nonFoldedPlayers(game)[0]);
+                        const onlyRemainingPlayer = nonFoldedPlayers(game)[0];
+                        if (!onlyRemainingPlayer) return;
+
+                        distributePotToOnlyRemainingPlayer(game, onlyRemainingPlayer);
                         return;
                     }
                 
@@ -386,10 +638,12 @@ wss.on("connection", (ws) => {
 
             case "fold": {
                 const foldedPlayer = players.get(ws.userId); // use ws.userId because we can't trust client to provide the id
+                if (!foldedPlayer) return;
                 const game = games.get(foldedPlayer.roomCode); // remove when going to OOP?
+                if (!game) return;
                 
                 // can only fold in these 3 phases
-                if (game.phase !== GamePhases.FIRSTBETTING && game.phase !== GamePhases.SECONDBETTING && game.phase !== GamePhases.EQUATIONFORMING) {
+                if (game.phase !== GamePhase.FIRSTBETTING && game.phase !== GamePhase.SECONDBETTING && game.phase !== GamePhase.EQUATIONFORMING) {
                     return;
                 }
                 
@@ -416,7 +670,10 @@ wss.on("connection", (ws) => {
                     }
 
                     if (nonFoldedPlayers(game).length === 1){
-                        distributePotToOnlyRemainingPlayer(game, nonFoldedPlayers(game)[0]);
+                        const onlyRemainingPlayer = nonFoldedPlayers(game)[0];
+                        if (!onlyRemainingPlayer) return;
+
+                        distributePotToOnlyRemainingPlayer(game, onlyRemainingPlayer);
                         return;
                     }
                 }
@@ -432,6 +689,8 @@ wss.on("connection", (ws) => {
                 // TODO need some game phase check here
                 console.log(clientMsg.userId, clientMsg.username, clientMsg.choices, clientMsg.otherEquationResult, clientMsg.order);
                 const player = players.get(ws.userId);
+                if (!player || !player.equationResult) return;
+
                 player.choices = clientMsg.choices;
 
                 if (player.choices.includes("low") && !player.choices.includes("high")) {
@@ -441,8 +700,12 @@ wss.on("connection", (ws) => {
                     player.lowHand = player.hand;
                     player.lowEquationResult = player.equationResult;
                 } else if (player.choices.includes("low") && player.choices.includes("high")) {
+                    if (!clientMsg.otherEquationResult || !clientMsg.order) {
+                        console.log("if swing betting chosen, there should be a second equation");
+                        return;
+                    }
                     player.otherEquationResult = clientMsg.otherEquationResult;
-                    player.otherHand = clientMsg.order.map(i => player.hand[i]); // is this gonna be reordered? do I need to copy?
+                    player.otherHand = clientMsg.order.map(i => player.hand[i]!); // is this gonna be reordered? do I need to copy?
                     
                     // this shouldn't be true. What if their results are 21, and 23. They might want to choose 21 as high equation, and 23 as low (even though they could have just kept 21 for both)
                     if (player.otherEquationResult < player.equationResult) {
@@ -459,9 +722,10 @@ wss.on("connection", (ws) => {
 
                 }
                 const game = games.get(player.roomCode);
+                if (!game) { console.log("game should not be null"); return; }
 
                 if (nonFoldedPlayers(game).every(player => player.choices.length > 0)) {
-                    game.phase = GamePhases.RESULTVIEWING;
+                    game.phase = GamePhase.RESULTVIEWING;
 
                     console.log('everyone submitted their hi or lo selections');
                     revealHiddenCards(game);
@@ -473,9 +737,11 @@ wss.on("connection", (ws) => {
             // need this so that players have time to view results
             case "acknowledge-hand-results": {
                 const player = players.get(ws.userId);
+                if (!player) return;
                 const game = games.get(player.roomCode);
+                if (!game) return;
                 
-                if (game.phase !== GamePhases.RESULTVIEWING) {
+                if (game.phase !== GamePhase.RESULTVIEWING) {
                     return;
                 }
 
@@ -499,17 +765,17 @@ server.listen(8080, "0.0.0.0", () => {
   console.log("Server running on port 8080");
 });
 
-function nonFoldedPlayers(game){
+function nonFoldedPlayers(game: Game){
     return [...(playersInRoom(game.roomCode).filter(player => player.foldedThisTurn !== true))];
 }
 
-function endRoundOrProceedToNextPlayer(game, justPlayedPlayer) {
+function endRoundOrProceedToNextPlayer(game: Game, justPlayedPlayer: Player) {
     if (bettingRoundIsComplete(game)) {
         endBettingRound(game);
 
-        if (game.phase === GamePhases.SECONDBETTING) {
+        if (game.phase === GamePhase.SECONDBETTING) {
             commenceHiLoSelection(game);
-        } else if (game.phase === GamePhases.FIRSTBETTING) {
+        } else if (game.phase === GamePhase.FIRSTBETTING) {
             dealLastOpenCardToEachPlayer(game);
 
             // possible that players receive multiply cards on last deal
@@ -524,35 +790,45 @@ function endRoundOrProceedToNextPlayer(game, justPlayedPlayer) {
             game.maxRaiseReached = true;
         }
         game.currentTurnPlayerId = findNextPlayerTurn(game); // TODO make this a method of class game
-        console.log(players.get(game.currentTurnPlayerId).username);
+        if (!game.currentTurnPlayerId) throw new Error;
+
+        const currentTurnPlayer = players.get(game.currentTurnPlayerId);
+        if (!currentTurnPlayer) throw new Error;
+
+        console.log(currentTurnPlayer.username);
         // subtract player's stake.
         // if someone bets 10, then next raises 4, we can toCall to be 4, NOT 14
         // it would also allow betting more chips than a player has
-        advanceToNextPlayersTurn(game, game.toCall - players.get(game.currentTurnPlayerId).stake); // TODO refactor, this is just bad
+        advanceToNextPlayersTurn(game, game.toCall - currentTurnPlayer.stake); // TODO refactor, this is just bad
     }
 }
 
-function clearHandsAndDealOperatorCards(roomCode, players) {
+function clearHandsAndDealOperatorCards(roomCode: string, players: Player[]) {
     players.forEach(player => { // change players in room to be just the values. then modify logic everywhere
         player.hand = [];
 
-        player.hand.push(new Card(OperatorCards.ADD, Suits.OPERATOR));
-        player.hand.push(new Card(OperatorCards.DIVIDE, Suits.OPERATOR));
-        player.hand.push(new Card(OperatorCards.SUBTRACT, Suits.OPERATOR));
+        player.hand.push(new Card(false, OperatorCard.ADD, Suit.OPERATOR));
+        player.hand.push(new Card(false, OperatorCard.DIVIDE, Suit.OPERATOR));
+        player.hand.push(new Card(false, OperatorCard.SUBTRACT, Suit.OPERATOR));
 
         notifyAllPlayersOfNewlyDealtCards(roomCode, player);
     })
 }
 
-function dealFirstHiddenCardToEachPlayer(game, players) {
+function dealFirstHiddenCardToEachPlayer(game: Game, players: Player[]) {
+    if (game.deck.length === 0) {
+        throw Error("Deck has run out of cards.");
+    }
     players.forEach(player => {
         for (let i = 0; i < game.deck.length; i++) {
+            const card = game.deck[i];
+
             // cannot be operator card
-            if (game.deck[i].suit !== Suits.OPERATOR) {
+            if (card!.suit !== Suit.OPERATOR) {
                 // Remove the card and give it to player
-                player.hand.push(game.deck.splice(i, 1)[0]);
+                player.hand.push(game.deck.splice(i, 1)[0]!); // TODO what if we literally run out of cards
                 // set hidden to true, so when message is sent to other players it's obfuscated
-                player.hand[player.hand.length - 1].hidden = true;
+                player.hand[player.hand.length - 1]!.hidden = true;
                 break; // having to index here is so trash omg
             }
         }
@@ -561,25 +837,35 @@ function dealFirstHiddenCardToEachPlayer(game, players) {
     });
 }
 
-function drawNumberCardFromDeck(deck) {
+function drawNumberCardFromDeck(deck: Card[]): Card {
+    if (deck.length === 0) {
+        throw Error("No more cards in deck.");
+    }
     for (let i = 0; i < deck.length; i++) {
+        const peek = deck[i];
+        if (!peek) throw new Error("Card is undefined (Deck malformed)");
         // cannot be operator card
-        if (deck[i].suit !== Suits.OPERATOR) {
+        if (peek.suit !== Suit.OPERATOR) {
             // Remove the card and give it to player
-            return deck.splice(i, 1)[0];
+            return deck.splice(i, 1)[0]!;
         }
     }
+
+    throw new Error("No number cards left in deck.");
 }
 
-function drawFromDeck(deck) {
-    return deck.splice(0, 1)[0];
+function drawFromDeck(deck: Card[]): Card {
+    if (deck.length === 0) throw new Error("deck is empty");
+
+    return deck.splice(0, 1)[0]!;
 }
 
 // TODO write tests for these
 // that two operators cannot be dealt
 // that number count is now 3 if there's a root
 
-function dealTwoOpenCardsToEachPlayer(game, players) {
+function dealTwoOpenCardsToEachPlayer(game: Game, players: Player[]) {
+    if (!game) return;
     players.forEach(player => { 
         // first card can be any card
         const draw = drawFromDeck(game.deck);
@@ -589,19 +875,20 @@ function dealTwoOpenCardsToEachPlayer(game, players) {
         // technically should put returned cards at the bottom, but the math should be the same
         let draw2;
         // can't have both open cards be operators according to game rules.
-        if (draw.suit === Suits.OPERATOR) {
+        if (draw.suit === Suit.OPERATOR) {
             draw2 = drawNumberCardFromDeck(game.deck);
         } else {
             draw2 = drawFromDeck(game.deck);
         }
         player.hand.push(draw2);
 
-        if (draw.value === OperatorCards.ROOT || draw2.value === OperatorCards.ROOT) { // push another number
+        if (draw.value === OperatorCard.ROOT || draw2.value === OperatorCard.ROOT) { // push another number
             const draw3 = drawNumberCardFromDeck(game.deck); // TODO change this to deck.drawNumberCard()
+
             player.hand.push(draw3);
         }
 
-        if (draw.value === OperatorCards.MULTIPLY || draw2.value === OperatorCards.MULTIPLY) { // expect one more person to discard before advancing game state
+        if (draw.value === OperatorCard.MULTIPLY || draw2.value === OperatorCard.MULTIPLY) { // expect one more person to discard before advancing game state
             player.needToDiscard = true;
         }
 
@@ -614,21 +901,23 @@ function dealTwoOpenCardsToEachPlayer(game, players) {
     return playersThatNeedToDiscard(game.roomCode).length;
 }
 
-function dealLastOpenCardToEachPlayer(game) {
-    game.phase = GamePhases.SECONDDEAL;
+function dealLastOpenCardToEachPlayer(game: Game) {
+    game.phase = GamePhase.SECONDDEAL;
 
     // can't wanna deal to folded players
     nonFoldedPlayers(game).forEach(player => {    
         const draw = drawFromDeck(game.deck);
+        if (!draw) return;
         player.hand.push(draw);
     
-        if (draw.value === OperatorCards.ROOT) {
+        if (draw.value === OperatorCard.ROOT) {
             let draw2 = drawNumberCardFromDeck(game.deck);
+            if (!draw2) return;
             player.hand.push(draw2);
         }
 
 
-        if (draw.value === OperatorCards.MULTIPLY) { // expect one more person to discard before advancing game state
+        if (draw.value === OperatorCard.MULTIPLY) { // expect one more person to discard before advancing game state
             player.needToDiscard = true;
         }
 
@@ -638,7 +927,7 @@ function dealLastOpenCardToEachPlayer(game) {
     return playersThatNeedToDiscard(game.roomCode).length;
 }
 
-function endHand(game) {
+function endHand(game: Game) {
     console.log("endHand");
     playersInRoom(game.roomCode).forEach(player => { console.log(player.username, "chipCount:", player.chipCount); });
 
@@ -650,10 +939,10 @@ function endHand(game) {
             sendSocketMessageToEveryClientInRoom(game.roomCode, { 
                 type: "kicked",
                 userId: player.id,
-                username: player.username
+                username: player.username!
             });
 
-            players.get(player.id).out = true;
+            player.out = true;
         }
 
         player.foldedThisTurn = false;
@@ -670,23 +959,28 @@ function endHand(game) {
     initializeHand(game);
 }
 
-function sendSocketMessageThatPlayerFolded(roomCode, foldedUserId) {
-    wss.clients.forEach((client) => { // TODO have clientsInRoom function
-        let handToSend = getHandToSendFromHand(players.get(foldedUserId).hand, client.userId === foldedUserId);
+function sendSocketMessageThatPlayerFolded(roomCode: string, foldedUserId: string) {
+    const foldedPlayer = players.get(foldedUserId);
+    if (!foldedPlayer) return false;
+    
+    wss.clients.forEach((c) => {
+        const client = c as ExtendedWebSocket; // TODO better to have Map then I guess?
+        let handToSend = getHandToSendFromHand(foldedPlayer.hand, client.userId === foldedUserId);
         
         if (/*client !== ws && */client.readyState === WebSocket.OPEN && players.get(client.userId)?.roomCode === roomCode) {
             client.send(JSON.stringify({
                 type: "player-folded",
                 id: foldedUserId,
-                username: players.get(foldedUserId).username,
+                username: foldedPlayer.username,
                 hand: handToSend
             }));
         }
     })
 }
 
-function sendSocketMessageToEveryClientInRoom(roomCode, objectToSend) {
-    wss.clients.forEach((client) => {
+function sendSocketMessageToEveryClientInRoom(roomCode: string, objectToSend: ServerMessage) {
+    wss.clients.forEach((c) => {
+        const client = c as ExtendedWebSocket; // TODO better to have Map then I guess?
         // should we retry if not ready state? one missed message could mean game never continues
         // ? is required on players.get for the following case:
         //      if someone has gone to the site (opened the tab) but is still on the homepage,
@@ -703,8 +997,9 @@ function sendSocketMessageToEveryClientInRoom(roomCode, objectToSend) {
 // then have remaining players fold AFTER and make sure it still ends
 
 // TODO test that hi lo selection ends correctly even with one or more folded players
-function sendSocketMessageToNonFoldedPlayers(game, objectToSend) {
-    wss.clients.forEach((client) => {
+function sendSocketMessageToNonFoldedPlayers(game: Game, objectToSend: ServerMessage) {
+    wss.clients.forEach((c) => {
+        const client = c as ExtendedWebSocket; // TODO better to have Map then I guess?
         if (!players.get(client.userId)?.foldedThisTurn && client.readyState === WebSocket.OPEN && players.get(client.userId)?.roomCode === game.roomCode) {
             const payload = JSON.stringify(objectToSend);
             client.send(payload);
@@ -712,8 +1007,9 @@ function sendSocketMessageToNonFoldedPlayers(game, objectToSend) {
     });
 }
 
-function sendSocketMessageToFoldedPlayers(game, objectToSend) {
-    wss.clients.forEach((client) => {
+function sendSocketMessageToFoldedPlayers(game: Game, objectToSend: ServerMessage) {
+    wss.clients.forEach((c) => {
+        const client = c as ExtendedWebSocket; // TODO better to have Map then I guess?
         if (players.get(client.userId)?.foldedThisTurn && client.readyState === WebSocket.OPEN && players.get(client.userId)?.roomCode === game.roomCode) {
             const payload = JSON.stringify(objectToSend);
             client.send(payload);
@@ -721,7 +1017,7 @@ function sendSocketMessageToFoldedPlayers(game, objectToSend) {
     });
 }
 
-function initializeHand(game) { // means start a hand of play
+function initializeHand(game: Game) { // means start a hand of play
     console.log("Initializing hand.");
 
     playersInRoom(game.roomCode).forEach(player => {
@@ -740,18 +1036,21 @@ function initializeHand(game) { // means start a hand of play
         handNumber: game.handNumber 
     });
     
-    game.phase = GamePhases.FIRSTDEAL;
+    game.phase = GamePhase.FIRSTDEAL;
     clearHandsAndDealOperatorCards(game.roomCode, playersInRoom(game.roomCode));
 
     //TODO maybe don't need this?
-    wss.clients.forEach((client) => {
-        if (client.readyState === WebSocket.OPEN && players.get(client.userId)?.roomCode === game.roomCode) {
+    wss.clients.forEach((c) => {
+        const client = c as ExtendedWebSocket; // TODO better to have Map then I guess?
+        const playerToSendMessage = players.get(client.userId);
+        if (!playerToSendMessage) return;
+        if (client.readyState === WebSocket.OPEN && playerToSendMessage.roomCode === game.roomCode) {
             const payload = JSON.stringify({ 
                 type: "deal", 
                 // something to do with client.userId not equaling anyone's userId
-                chipCount: players.get(client.userId).chipCount, 
+                chipCount: playerToSendMessage.chipCount, 
                 id: client.userId, 
-                hand: players.get(client.userId).hand 
+                hand: playerToSendMessage.hand 
             });
             client.send(payload);
         }
@@ -774,13 +1073,13 @@ function initializeHand(game) { // means start a hand of play
     }
 }
 
-function playersInRoom(roomCode) { return [...players.values()].filter(player => player.roomCode === roomCode) };
+function playersInRoom(roomCode: string) { return [...players.values()].filter(player => player.roomCode === roomCode) };
 
-function playersInRoomEntries(roomCode) { return [...players].filter(([id, player]) => player.roomCode === roomCode) }; 
+function playersInRoomEntries(roomCode: string) { return [...players].filter(([id, player]) => player.roomCode === roomCode) }; 
 
-function playersThatNeedToDiscard(roomCode) { return playersInRoom(roomCode).filter(player => player.needToDiscard === true) };
+function playersThatNeedToDiscard(roomCode: string) { return playersInRoom(roomCode).filter(player => player.needToDiscard === true) };
 
-function endBettingRound(game) {
+function endBettingRound(game: Game) {
     sendSocketMessageToEveryClientInRoom(game.roomCode, { type: "end-betting-round", round: game.phase });
 
     game.toCall = 0;
@@ -791,15 +1090,26 @@ function endBettingRound(game) {
     }
 }
 
-function notifyPlayerOfNewlyDealtCards(playerDealtTo, playerNotifying, multiplicationCardDealt = false) {
-    wss.clients.forEach((client) => {
+interface DealPayload {
+    type: "deal";
+    id: string;
+    username: string;
+    chipCount: number;
+    multiplicationCardDealt: boolean;
+    hand?: Card[];
+}
+
+function notifyPlayerOfNewlyDealtCards(playerDealtTo: Player, playerNotifying: Player, multiplicationCardDealt = false) {
+    wss.clients.forEach((c) => {
+        const client = c as ExtendedWebSocket; // TODO better to have Map then I guess?
+
         if (client.userId === playerNotifying.id) {
-            let payload = {
+            let payload: DealPayload = {
                 type: "deal",
                 id: playerDealtTo.id,
-                username: playerDealtTo.username,
+                username: playerDealtTo.username!,
                 chipCount: playerDealtTo.chipCount,
-                multiplicationCardDealt: multiplicationCardDealt
+                multiplicationCardDealt: multiplicationCardDealt,
             };
             if (playerNotifying.id == playerDealtTo.id) {
                 payload.hand = playerDealtTo.hand;
@@ -820,13 +1130,14 @@ function notifyPlayerOfNewlyDealtCards(playerDealtTo, playerNotifying, multiplic
 // TODO test that only the player who is dealt a multiplication card gets prompted to discard
 // TODO test that card is hidden from each other player
 // TODO test that a player knows which one of their cards is hidden
-function notifyAllPlayersOfNewlyDealtCards(roomCode, player, multiplicationCardDealt = false) {
-    wss.clients.forEach((client) => {
+function notifyAllPlayersOfNewlyDealtCards(roomCode: string, player: Player, multiplicationCardDealt = false) {
+    wss.clients.forEach((c) => {
+        const client = c as ExtendedWebSocket; // TODO better to have Map then I guess?
         if (players.get(client.userId)?.roomCode === roomCode) { // just change to client.userId in room map?
-            let payload = {
+            let payload: DealPayload = {
                 type: "deal",
                 id: player.id,
-                username: player.username,
+                username: player.username!,
                 chipCount: player.chipCount,
                 multiplicationCardDealt: multiplicationCardDealt
             };
@@ -846,10 +1157,10 @@ function notifyAllPlayersOfNewlyDealtCards(roomCode, player, multiplicationCardD
     });
 }
 
-function commenceFirstRoundBetting(game) {
+function commenceFirstRoundBetting(game: Game) {
     console.log("Commencing first round of betting");
 
-    game.phase = GamePhases.FIRSTBETTING;
+    game.phase = GamePhase.FIRSTBETTING;
 
     sendSocketMessageToEveryClientInRoom(game.roomCode, {
         type: "first-round-betting-commenced",
@@ -858,8 +1169,8 @@ function commenceFirstRoundBetting(game) {
     advanceToNextPlayersTurn(game, 1); // TODO change to anteAmount (and then modify as game goes on)
 }
 
-function commenceSecondRoundBetting(game) {
-    game.phase = GamePhases.SECONDBETTING;
+function commenceSecondRoundBetting(game: Game) {
+    game.phase = GamePhase.SECONDBETTING;
 
     sendSocketMessageToNonFoldedPlayers(game, { type: "second-round-betting-commenced" });
 
@@ -870,7 +1181,7 @@ function commenceSecondRoundBetting(game) {
     advanceToNextPlayersTurn(game, 0); // no ante to match on the second round
 }
 
-function advanceToNextPlayersTurn(game, toCall) { // should take a parameter here
+function advanceToNextPlayersTurn(game: Game, toCall: number) { // should take a parameter here
     console.log("Advancing to next player's turn, with id:", game.currentTurnPlayerId);
     // Player A bets 10 and then has 20 chips. Player B has 30 chips. Max bet is still 30, not 20. 
     // So add the 10 and 20 to get 30. (Add chips PLUS the chips they have in this round)
@@ -879,7 +1190,8 @@ function advanceToNextPlayersTurn(game, toCall) { // should take a parameter her
     
     // modify this so that we don't trust the client?
     // but technically we do because only currentTurnPlayer can send a betting message.
-    wss.clients.forEach((client) => {
+    wss.clients.forEach((c) => {
+        const client = c as ExtendedWebSocket; // TODO better to have Map then I guess?
         if (/*client !== ws && */client.readyState === WebSocket.OPEN && players.get(client.userId)?.roomCode === game.roomCode) { // TODO refactor to room.clients.forEach
             // something like game.player.forEach ({ wss.clients[player.userId]. send whatever}
           client.send(JSON.stringify({
@@ -887,19 +1199,19 @@ function advanceToNextPlayersTurn(game, toCall) { // should take a parameter her
             toCall: toCall, // change to game.toCall and remove second parameter to this method
             maxBet: maxBet,
             currentTurnPlayerId: game.currentTurnPlayerId,
-            username: players.get(game.currentTurnPlayerId).username,
-            playerChipCount: players.get(client.userId).chipCount
+            username: players.get(game.currentTurnPlayerId!)!.username,
+            playerChipCount: players.get(client.userId)!.chipCount
             // pot: pot
           }));
         }
     });
 }
 
-function findNextPlayerTurn(game) {
-    return findNextKeyWithWrap(playersInRoomEntries(game.roomCode), game.currentTurnPlayerId, v => v.foldedThisTurn !== true);
+function findNextPlayerTurn(game: Game): string {
+    return findNextKeyWithWrap<Player>(playersInRoomEntries(game.roomCode), game.currentTurnPlayerId!, v => v.foldedThisTurn !== true);
 }
 
-function bettingRoundIsComplete(game) {
+function bettingRoundIsComplete(game: Game) {
     const playerBetAmounts = nonFoldedPlayers(game).map(player => player.stake);
     const setOfBets = new Set(playerBetAmounts);
     // bets are all equal AND active players have all bet at least once, then betting round is complete
@@ -910,10 +1222,10 @@ function bettingRoundIsComplete(game) {
     return false;
 }
 
-function commenceEquationForming(game) {
+function commenceEquationForming(game: Game) {
     console.log("Waiting 90 seconds for equation forming...");
 
-    game.phase = GamePhases.EQUATIONFORMING;
+    game.phase = GamePhase.EQUATIONFORMING;
     // actually this doesn't even matter. the client could still cheat say they aren't folded, so
     // just let the client decide if they are folded or not in the first place.
     sendSocketMessageToNonFoldedPlayers(game, { type: "commence-equation-forming" });
@@ -926,13 +1238,13 @@ function commenceEquationForming(game) {
     }, 90 * 1000);
 }
 
-function endEquationForming(game) {
+function endEquationForming(game: Game) {
     sendSocketMessageToEveryClientInRoom(game.roomCode, { // NEED to change this to game
         type: "end-equation-forming"
     });
 }
 
-function requestPlayerEquations(game) {
+function requestPlayerEquations(game: Game) {
     console.log("Timer expired for equation forming, notifying clients to receive equation results.");
 
     sendSocketMessageToNonFoldedPlayers(game, { 
@@ -940,18 +1252,19 @@ function requestPlayerEquations(game) {
     });
 }
 
-function commenceHiLoSelection(game) {
-    game.phase = GamePhases.HILOSELECTION;
+function commenceHiLoSelection(game: Game) {
+    game.phase = GamePhase.HILOSELECTION;
     
     sendSocketMessageToNonFoldedPlayers(game, { 
         type: "hi-lo-selection", 
     });
 }
 
-function returnChipsToAllPlayers(game){
+function returnChipsToAllPlayers(game: Game){
     console.log("No players formed a valid equation. Returning chips and starting new hand.");
 
-    wss.clients.forEach((client) => {
+    wss.clients.forEach((c) => {
+        const client = c as ExtendedWebSocket; // TODO better to have Map then I guess?
         if (/*client !== ws && */client.readyState === WebSocket.OPEN && players.get(client.userId)?.roomCode === game.roomCode) {
             let payload = JSON.stringify({
                 type: "round-result",
@@ -981,11 +1294,12 @@ function returnChipsToAllPlayers(game){
     endHand(game);
 }
 
-function distributePotToOnlyRemainingPlayer(game, onlyRemainingPlayerThisHand){
+function distributePotToOnlyRemainingPlayer(game: Game, onlyRemainingPlayerThisHand: Player){
     // end turn
     console.log("All but one player folded this hand. Ending hand.");
 
-    wss.clients.forEach((client) => {
+    wss.clients.forEach((c) => {
+        const client = c as ExtendedWebSocket; // TODO better to have Map then I guess?
         if (/*client !== ws && */client.readyState === WebSocket.OPEN && players.get(client.userId)?.roomCode === game.roomCode) {
             let message;
             if (client.userId === onlyRemainingPlayerThisHand.id) {
@@ -1023,13 +1337,14 @@ function distributePotToOnlyRemainingPlayer(game, onlyRemainingPlayerThisHand){
     endHand(game);
 }
 
-function revealHiddenCards(game) {
+function revealHiddenCards(game: Game) {
     // Don't reveal folded players' hidden cards
 
     // TODO deal is kind of a misnomer ... we are just rerendering the whole hand, not dealing cards
     // maybe name it "render hand"
     nonFoldedPlayers(game).forEach((player) => {
-        wss.clients.forEach((client) => {
+        wss.clients.forEach((c) => {
+            const client = c as ExtendedWebSocket; // TODO better to have Map then I guess?
             let handToSend = getHandToSendFromHand(player.hand, true);
             
             if (/*client !== ws && */client.readyState === WebSocket.OPEN && players.get(client.userId)?.roomCode === game.roomCode) {
@@ -1044,25 +1359,25 @@ function revealHiddenCards(game) {
     })
 }
 
-function findLowestCard(hand) {
-    return hand.filter(card => card.suit !== Suits.OPERATOR).reduce((minCard, currentCard) => {
-        return currentCard.value < minCard.value ? currentCard : minCard;
+function findLowestCard(hand: Card[]): Card {
+    return hand.filter(card => card.suit !== Suit.OPERATOR).reduce((minCard, currentCard) => {
+        return currentCard.value! < minCard.value! ? currentCard : minCard;
     });
 }
 
-function findHighestCard(hand) {
-    return hand.filter(card => card.suit !== Suits.OPERATOR).reduce((maxCard, currentCard) => {
-        return currentCard.value > maxCard.value ? currentCard : maxCard;
+function findHighestCard(hand: Card[]): Card {
+    return hand.filter(card => card.suit !== Suit.OPERATOR).reduce((maxCard, currentCard) => {
+        return currentCard.value! > maxCard.value! ? currentCard : maxCard;
     });
 }
 
-function findLoWinner(loBettingPlayers) {
+function findLoWinner(loBettingPlayers: Player[]): [Player, Card] {
     const loTarget = 1;
     let loWinner = null;
     let loWinnerLowCard = null;
     let winningDiff = Infinity;
     for (const player of loBettingPlayers) {
-        const diff = Math.abs(player.lowEquationResult - loTarget);
+        const diff = Math.abs(player.lowEquationResult! - loTarget);
         if (diff < winningDiff) {
             winningDiff = diff;
             loWinner = player;
@@ -1072,31 +1387,33 @@ function findLoWinner(loBettingPlayers) {
         } else if (diff === winningDiff) {
             // make tied players contenders for card highlighting later
             player.isLoContender = true;
-            loWinner.isLoContender = true;
+            loWinner!.isLoContender = true; // loWinner! is because we can never hit this case given the diff is Infinity to start
 
             let playerLowCard = findLowestCard(player.hand);
-            loWinnerLowCard = findLowestCard(loWinner.hand);
+            loWinnerLowCard = findLowestCard(loWinner!.hand);
 
-            if (playerLowCard.value < loWinnerLowCard.value) {
+            if (playerLowCard.value! < loWinnerLowCard.value!) {
                 loWinner = player;
             } else if (playerLowCard.value === loWinnerLowCard.value) {
-                if (playerLowCard.suit < loWinnerLowCard.suit) {
+                if (playerLowCard.suit! < loWinnerLowCard.suit!) {
                     loWinner = player;
                 } // impossible to be equal. suit+number pairs (cards) are unique
             }
         }
     }
 
+    if (!loWinner || !loWinnerLowCard) throw new Error;
+
     return [loWinner, loWinnerLowCard];
 }
 
-function findHiWinner(hiBettingPlayers) {
+function findHiWinner(hiBettingPlayers: Player[]): [Player, Card]  {
     const hiTarget = 20;
     let hiWinner = null;
     let hiWinnerHighCard = null;
     let winningDiff = Infinity;
     for (const player of hiBettingPlayers) {
-        const diff = Math.abs(player.highEquationResult - hiTarget);
+        const diff = Math.abs(player.highEquationResult! - hiTarget);
         if (diff < winningDiff) {
             winningDiff = diff;
             hiWinner = player;
@@ -1105,27 +1422,29 @@ function findHiWinner(hiBettingPlayers) {
         } else if (diff === winningDiff) {
             // make tied players contenders for card highlighting later
             player.isHiContender = true;
-            hiWinner.isHiContender = true;
+            hiWinner!.isHiContender = true;
             
             // right now, let's say two people tie for second place. we compare the highest card of each
             // but we don't really need it because then the first place ends up winning. bit of a waste
             const playerHighCard = findHighestCard(player.hand);
-            hiWinnerHighCard = findHighestCard(hiWinner.hand);
+            hiWinnerHighCard = findHighestCard(hiWinner!.hand);
 
-            if (playerHighCard.value > hiWinnerHighCard.value) {
+            if (playerHighCard.value! > hiWinnerHighCard.value!) {
                 hiWinner = player;
             } else if (playerHighCard.value === hiWinnerHighCard.value) {
-                if (playerHighCard.suit > hiWinnerHighCard.suit) {
+                if (playerHighCard.suit! > hiWinnerHighCard.suit!) {
                     hiWinner = player;
                 } // impossible to be equal. suit+number pairs (cards) are unique
             }
         }
     }
     
+    if (!hiWinner || !hiWinnerHighCard) throw new Error;
+
     return [hiWinner, hiWinnerHighCard];
 }
 
-function determineWinners(game) {
+function determineWinners(game: Game) {
     // TESTS
     // only swing betters
     // one swing better and all hi betters
@@ -1165,8 +1484,8 @@ function determineWinners(game) {
     // equationResult > high card > high suit
     // TODO findLowestCard(reversedCards) something like this
 
-    let hiWinnerChipsDelta;
-    let loWinnerChipsDelta;
+    let hiWinnerChipsDelta: number;
+    let loWinnerChipsDelta: number;
     let message;
 
     // what if there were no swing betters at all
@@ -1176,7 +1495,7 @@ function determineWinners(game) {
     // what if someone bets swing and others bet only low. then hiWinner is null
     const swingBetterWon = swingBettingPlayers.length > 0 && loWinnerIncludingSwingBetters.id === loWinnerOfSwingBetters.id && loWinnerOfSwingBetters.id === hiWinnerIncludingSwingBetters.id && hiWinnerIncludingSwingBetters.id === hiWinnerOfSwingBetters.id;
     if (swingBetterWon) { // TODO rename loSwingWinner...
-        players.get(loWinnerOfSwingBetters.id).chipCount += game.pot;
+        loWinnerOfSwingBetters.chipCount += game.pot;
         hiWinnerChipsDelta = loWinnerChipsDelta = game.pot;
         message = loWinnerOfSwingBetters.username + " won the swing bet.";
     } else {
@@ -1195,17 +1514,17 @@ function determineWinners(game) {
             const splitPot = game.pot / 2;
             hiWinnerChipsDelta = splitPot;
             loWinnerChipsDelta = splitPot;
-            players.get(hiWinner.id).chipCount += splitPot;
-            players.get(loWinner.id).chipCount += splitPot;
+            hiWinner.chipCount += splitPot;
+            loWinner.chipCount += splitPot;
 
             message = hiWinner.username + " won the high bet and " + loWinner.username + " won the low bet.";
         } else if (loWinner !== null) {
-            players.get(loWinner.id).chipCount += game.pot;
+            loWinner.chipCount += game.pot;
             loWinnerChipsDelta = game.pot;
 
             message = loWinner.username + " won the low bet.";
         } else if (hiWinner !== null) {
-            players.get(hiWinner.id).chipCount += game.pot;
+            hiWinner.chipCount += game.pot;
             hiWinnerChipsDelta = game.pot;
 
             message = hiWinner.username + " won the high bet.";
@@ -1230,8 +1549,8 @@ function determineWinners(game) {
         choices: player.choices, // TODO adjust this for swing betting, need to send choices
         lowResult: player.choices.includes('low') ? player.lowEquationResult : null, // TODO how to send right result for each
         highResult: player.choices.includes('high') ? player.highEquationResult : null, // TODO how to send right result for each
-        lowDifference: player.choices.includes('low') ? Math.abs(player.lowEquationResult - 1) : null, // adjust for swing
-        highDifference: player.choices.includes('high')? Math.abs(player.highEquationResult - 20) : null, // adjust for swing
+        lowDifference: player.choices.includes('low') && player.lowEquationResult ? Math.abs(player.lowEquationResult - 1) : null, // adjust for swing
+        highDifference: player.choices.includes('high') && player.highEquationResult ? Math.abs(player.highEquationResult - 20) : null, // adjust for swing
         isHiWinner: swingBetterWon ? player.id === hiWinnerIncludingSwingBetters?.id : player.id === hiWinner?.id, // what if swing one the hi but not the low
         isLoWinner: swingBetterWon ? player.id === loWinnerIncludingSwingBetters?.id : player.id === loWinner?.id,
         loWinnerLowCard: swingBetterWon ? loWinnerIncludingSwingBettersLowCard?.value : loWinnerLowCard?.value,
@@ -1244,7 +1563,7 @@ function determineWinners(game) {
     console.log(results);
     sendSocketMessageToEveryClientInRoom(game.roomCode, {
         type: "round-result",
-        message: message,
+        message: message!,
         loWinner: loWinner,
         hiWinner: hiWinner,
         results: results
@@ -1253,42 +1572,43 @@ function determineWinners(game) {
   
 // TODO above code - test that pot splits correctly, and also if there's only one winner
 
-function printDeck(deck, rows = 10) {
+function printDeck(deck: Card[], rows = 10) {
     console.log("Deck size:", deck.length, "cards.");
 
-    const toPrint = Array.from({ length: rows }, () => []);
-    // Initialize an array of columns
+    const toPrint: Card[][] = Array.from({ length: rows }, () => [] as Card[]);
     deck.forEach((card, index) => {
-        toPrint[index % rows].push(card);
+        toPrint[index % rows]!.push(card);
     });
   
     // Print row by row
     for (let r = 0; r < rows; r++) {
         let rowOutput = '';
-        for (let c = 0; c < toPrint[r].length; c++) {
-            let card = toPrint[r][c]
+        for (let c = 0; c < toPrint[r]!.length; c++) {
+            let card = toPrint[r]![c]
+            if (!card) return;
             rowOutput += printCard(card);
         }
         console.log(rowOutput);
     }
 }
 
-function printHand(hand) {
+function printHand(hand: Card[]) {
     let output = '';
     for (let c = 0; c < hand.length; c++) {
         let card = hand[c];
+        if (!card) return;
         output += printCard(card);
     }
     console.log(output);
 }
 
-function printCard(card) {
-    let cardOutput = getStringFromSuit(card.suit) + ' ' + card.value + ', ';
-    let colorCodedCardOutput = getANSICodeFromSuit(card.suit) + cardOutput.padEnd(12) + '\x1b[0m'
+function printCard(card: Card) {
+    let cardOutput = getStringFromSuit(card.suit!) + ' ' + card.value + ', ';
+    let colorCodedCardOutput = getANSICodeFromSuit(card.suit!) + cardOutput.padEnd(12) + '\x1b[0m'
     return colorCodedCardOutput;
 }
 
-function getANSICodeFromSuit(suit) {
+function getANSICodeFromSuit(suit: number) {
     switch(suit) {
         case 0:
             return '\x1b[90m';
@@ -1303,7 +1623,7 @@ function getANSICodeFromSuit(suit) {
     }
 }
 
-function getStringFromSuit(suit) {
+function getStringFromSuit(suit: number) {
     switch(suit) {
         case 0:
             return 'Stone';
@@ -1323,15 +1643,16 @@ function generateDeck() {
 
     // TODO bug? should be 5?
     for (let i = 0; i < 4; i++) {
-        deck.push(new Card(OperatorCards.MULTIPLY, Suits.OPERATOR));
-        deck.push(new Card(OperatorCards.ROOT, Suits.OPERATOR));
+        deck.push(new Card(false, OperatorCard.MULTIPLY, Suit.OPERATOR)); //TODO bad to have false first argument
+        deck.push(new Card(false, OperatorCard.ROOT, Suit.OPERATOR));
     }
     
+    // TODO I think this is different in TypeScript
     // One of each of numbers 0-10 of each of 4 suits.
-    for (const number of Object.values(NumberCards)) {
-        for (const suit of Object.values(Suits)) {
-            if (suit !== Suits.OPERATOR) {
-                deck.push(new Card(number, suit));
+    for (const number of Object.values(NumberCard)) {
+        for (const suit of Object.values(Suit)) {
+            if (suit !== Suit.OPERATOR) {
+                deck.push(new Card(false, number as NumberCard, suit as Suit));
             }
         }
     }
@@ -1341,14 +1662,14 @@ function generateDeck() {
     return deck;
 }
 
-function getHandToSendFromHand(hand, revealHiddenCard) {
+function getHandToSendFromHand(hand: Card[], revealHiddenCard: boolean) {
     let handToSend = JSON.parse(JSON.stringify(hand));
 
     for (let i = 0; i < handToSend.length; i++) {
         if (handToSend[i].hidden === true) {
             if (!revealHiddenCard) {
                 // hide the card if the user is not the owner of the card
-                handToSend[i] = new Card(null, null, true);
+                handToSend[i] = new Card(true);
             }
         }
     }
@@ -1381,7 +1702,9 @@ function logRoomsAndPlayers() {
 }
 
 const heartbeatInterval = setInterval(function ping() {
-    wss.clients.forEach(function each(ws) {
+    wss.clients.forEach(function each(c) {
+        const ws = c as ExtendedWebSocket; // TODO better to have Map then I guess?
+
         if (ws.isAlive === false) {
             return ws.terminate();
         }
@@ -1394,7 +1717,7 @@ const heartbeatInterval = setInterval(function ping() {
 const roomCleanupInterval = setInterval(function ping() {
     games.forEach(function each(game) {
         if (Date.now() - game.createdAt > 24 * 60 * 60 * 1000) {
-            games.delete(game.id);
+            games.delete(game.roomCode);
         }
     });
 }, 24 * 60 * 60 * 1000);
