@@ -1,0 +1,11 @@
+{
+  "version": "2.0.0",
+  "tasks": [
+    {
+      "label": "tsc: enums",
+      "type": "shell",
+      "command": "npx tsc enums.ts --outDir public --target ES2020 --module NodeNext",
+      "problemMatcher": ["$tsc"]
+    }
+  ]
+}

@@ -91,7 +91,7 @@
     <script src="./sortable.js"></script>
     <script type="module">
     
-    import { NumberCards, OperatorCards, Suits, GamePhases } from './enums.js';
+    import { NumberCard, OperatorCard, Suit, GamePhase } from './enums.js';
     import { SoundManager } from './sounds.js';
     import CountdownTimer from "./timer.js";
         
@@ -352,9 +352,9 @@
             });
 
             console.log("socket message end-betting-round");
-            if (msg.round === GamePhases.FIRSTBETTING){
+            if (msg.round === GamePhase.FIRSTBETTING){
                 showNotification('First betting round complete. Dealing last open card');
-            } else if (msg.round === GamePhases.SECONDBETTING) {
+            } else if (msg.round === GamePhase.SECONDBETTING) {
                 showNotification('Second betting round complete.');
             }
             // TODO test that a folded player gets the right message once equation forming starts
@@ -803,7 +803,7 @@
             
             let cardDivParagraph;
 
-            if (card.value === OperatorCards.ROOT){
+            if (card.value === OperatorCard.ROOT){
                 const canvas = drawRootSymbol(id, index, folded);
                 cardDiv.appendChild(canvas);
             } else {
@@ -835,17 +835,17 @@
                 }
 
                 // careful with card and cardDiv naming like this
-                if (card.value === NumberCards.TEN){
+                if (card.value === NumberCard.TEN){
                     cardDivParagraph.classList.add('ten');
-                } else if (card.suit !== Suits.OPERATOR) {
+                } else if (card.suit !== Suit.OPERATOR) {
                     cardDivParagraph.classList.add('single-digit');
                 }
 
                 // is one of the three discardable operators
                 if (
-                    card.value === OperatorCards.SUBTRACT ||
-                    card.value === OperatorCards.ADD ||
-                    card.value === OperatorCards.MULTIPLY
+                    card.value === OperatorCard.SUBTRACT ||
+                    card.value === OperatorCard.ADD ||
+                    card.value === OperatorCard.MULTIPLY
                 ) {
                     cardDivParagraph.dataset.value = card.value;
 
@@ -949,16 +949,16 @@
 
     function getColorFromSuit(suit) {
         switch(suit) {
-            case Suits.GOLD:
+            case Suit.GOLD:
                 return 'rgb(232, 179, 64)';
                 break;
-            case Suits.SILVER:
+            case Suit.SILVER:
                 return 'rgb(170, 170, 170)';
                 break;
-            case Suits.BRONZE:
+            case Suit.BRONZE:
                 return 'rgb(149, 90, 49)';
                 break;
-            case Suits.STONE:
+            case Suit.STONE:
                 return 'rgb(101, 101, 101)';
                 break;
         }
@@ -1202,6 +1202,7 @@
             updateChipStack(result.chipCount, document.getElementById("chipStacksContainer-" + result.id), result.chipDifferential);
 
             let nameDiv = document.getElementById("handLabel-" + result.id);
+            console.log(nameDiv);
             let loOptionDiv = document.getElementById("low-symbol-" + result.id);
             let hiOptionDiv = document.getElementById("high-symbol-" + result.id);
             let trophyDiv = document.getElementById("trophy-" + result.id);
@@ -1224,7 +1225,7 @@
             }
 
             const handDiv = handDivs.get(result.id);
-            handDiv.innerHTML = ``; // injection
+            handDiv.querySelectorAll('.card').forEach(el => el.remove());
 
             if (result.choices.includes("low")) {
                 drawCards(handDiv, result.id, result.lowHand, result.folded, false, result.lowHand?.length);
@@ -1253,9 +1254,10 @@
                 handDiv.appendChild(lowCardDiv);
             }
 
-            const lineBreakDiv = document.createElement("div");
-            lineBreakDiv.style.width = "100%";
-            handDiv.appendChild(lineBreakDiv);
+            // TODO was this for mobile!?
+            // const lineBreakDiv = document.createElement("div");
+            // lineBreakDiv.style.width = "100%";
+            // handDiv.appendChild(lineBreakDiv);
 
             const otherEquationDiv = document.createElement("div");
             otherEquationDiv.style.display = "flex";
@@ -1267,6 +1269,9 @@
 
                 drawCards(otherEquationDiv, result.id, result.highHand, result.folded, false, result.highHand?.length);
 
+                let nameDiv = document.getElementById("handLabel-" + result.id);
+                console.log(nameDiv);
+                
                 const hiCardDiv = document.createElement("div");
 
                 let hiCardDivResultParagraph = document.createElement("p");

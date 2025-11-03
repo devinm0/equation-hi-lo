@@ -1,5 +1,5 @@
 import { mintUniqueCode } from "./utilities.js";
-import { GamePhase, NumberCard, OperatorCard, Suit } from "./enums.js" // LEARN enums should be singular
+import { GamePhase, NumberCard, OperatorCard, Suit } from "../enums"
 
 const startingChipCount = 25;
 

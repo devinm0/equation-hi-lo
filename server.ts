@@ -1,4 +1,4 @@
-import { OperatorCard, Suit, NumberCard, GamePhase } from './public/enums';
+import { OperatorCard, Suit, NumberCard, GamePhase } from './enums';
 import { Game, Player, Card } from './public/classes.js';
 import { findNextKeyWithWrap, removeWhitespace } from './public/utilities.js';
 import express from "express";
@@ -236,8 +236,8 @@ interface ChipDistributionMessage {
 interface RoundResultMessage {
     type: "round-result";
     message: string;
-    loWinner: Player;
-    hiWinner: Player;
+    loWinner: Player | null;
+    hiWinner: Player | null;
     results: Result[];
 }
 
@@ -301,7 +301,7 @@ wss.on("connection", (ws: ExtendedWebSocket) => { // LEARN pass in extended
 
                 game.currentTurnPlayerId = game.hostId = ws.userId; // no, right? TODO remove concept of hostId?? or add host promotion
 
-                enterRoom(game, clientMsg);
+                enterRoom(game, clientMsg, ws);
                 console.log(game);
                 break;
             }
@@ -316,7 +316,7 @@ wss.on("connection", (ws: ExtendedWebSocket) => { // LEARN pass in extended
                     return;
                 }
 
-                enterRoom(game, clientMsg);
+                enterRoom(game, clientMsg, ws);
                 break;
             }
 
@@ -421,7 +421,7 @@ wss.on("connection", (ws: ExtendedWebSocket) => { // LEARN pass in extended
                     return;
                 }
 
-                if (player.username !== null) {
+                if (player.username != null) {
                     // this player already submitted their username, so this must be a duplicate message
                     return;
                 }
@@ -445,88 +445,6 @@ wss.on("connection", (ws: ExtendedWebSocket) => { // LEARN pass in extended
 
                 logRoomsAndPlayers(); // this will be outside game class
                 break;
-            }
-
-            function enterRoom(game: Game, clientMsg: CreateMessage | EnterMessage) { // TODO  this union is bad
-
-                if (game.phase === GamePhase.LOBBY) {
-                    // send a newly connected player the list of all players that have joined thus far
-                    // player.username != null is because we don't want to share players that have entered but not submitted name
-                    [...players.values()].filter(player => player.roomCode === game.roomCode && player.username != null).forEach(player => {
-                        ws.send(JSON.stringify({
-                            type: "player-joined",
-                            id: player.id,
-                            hostId: game.hostId,// client.userId === hostId, // this is wrong because it means the host will show everyone joining as host
-                            color: player.color, // what happens if we put user color here?
-                            username: player.username,
-                        }));
-                    });
-
-                    const player = players.get(clientMsg.userId);
-
-                    if (player) {
-                        // TODO how to change the flow so we don't have to trust this
-                        ws.send(JSON.stringify({ type: "room-entered", roomCode: game.roomCode, hostId: game.hostId, joined: player.username !== null }));
-
-                        if (player.roomCode === game.roomCode){
-                            ws.userId = clientMsg.userId;
-
-                            logRoomsAndPlayers();
-                        } else {
-
-                        }
-                    } else {
-                        ws.send(JSON.stringify({ type: "room-entered", roomCode: game.roomCode, hostId: game.hostId, joined: false }));
-
-                        console.log("creating userId but no username yet");
-                        // if (ws.isHost) { // without this, later players joining become the host
-                        //     currentTurnPlayerId = clientMsg.userId; // TODO surely we can set this later? as just the first player in players list?
-                        //     hostId = clientMsg.userId; // just use ws.userId here?
-                        // }
-
-                        console.log(`***** 👩‍💻 ${game.hostId === clientMsg.userId ? 'Host' : 'Player'} joined: ${clientMsg.userId} *****`);
-
-                        // TODO THIS for rejoining active rooms
-                        // have to reassign userId because what if someone refreshes? have to ignore the init message // TODO rethink this in the context of join/ enter
-                        // need to assign ws.userId because it's used to check clientId === id on server
-                        ws.userId = clientMsg.userId; // TODO need this??
-                        players.set(clientMsg.userId, new Player(clientMsg.userId, game.roomCode, clientMsg.color)); // TODO sanitize clientMsg.username to standards
-
-                        console.log([...players].filter(([id, player]) => player.roomCode === game.roomCode));
-                        
-                        logRoomsAndPlayers();
-                    }
-                } else { // gamephase is not lobby
-                    ws.send(JSON.stringify({ type: "room-entered", roomCode: game.roomCode, hostId: game.hostId, joined: true, inProgress: true }));
-
-                    const playerToNotify = players.get(ws.userId); // can use ws if not gamephase bc must be true
-                    if (!playerToNotify) return;
-
-                    // send game state
-                    switch (game.phase) {
-                        case GamePhase.FIRSTDEAL:
-                            playersInRoom(game.roomCode).forEach(player => {
-                                notifyPlayerOfNewlyDealtCards(player, playerToNotify, player.needToDiscard);
-                            });
-                            break;
-                        case GamePhase.FIRSTBETTING:
-                            playersInRoom(game.roomCode).forEach(player => {
-                                notifyPlayerOfNewlyDealtCards(player, playerToNotify, false);
-                            });
-                            break;
-                        case GamePhase.SECONDDEAL:
-                            break;
-                        case GamePhase.EQUATIONFORMING:
-                            break;
-                        case GamePhase.SECONDBETTING:
-                            break;
-                        case GamePhase.HILOSELECTION:
-                            break;
-                        case GamePhase.RESULTVIEWING:
-                            break;
-                    }
-                }
-                    console.log("made it to sending game state");
             }
 
             // tests
@@ -576,7 +494,7 @@ wss.on("connection", (ws: ExtendedWebSocket) => { // LEARN pass in extended
                 const game = games.get(player.roomCode);
                 if (!game) return;
 
-                if (player.equationResult !== null) { // duplicate message
+                if (player.equationResult != null) { // duplicate message
                     return;
                 }
                 if (game.phase !== GamePhase.EQUATIONFORMING) {
@@ -605,7 +523,7 @@ wss.on("connection", (ws: ExtendedWebSocket) => { // LEARN pass in extended
                     }
                 })
 
-                if (nonFoldedPlayers(game).every(player => player.equationResult !== null)) {
+                if (nonFoldedPlayers(game).every(player => player.equationResult != null)) {
                     endEquationForming(game);
                     clearTimeout(endEquationFormingTimeout);
 
@@ -661,7 +579,7 @@ wss.on("connection", (ws: ExtendedWebSocket) => { // LEARN pass in extended
                     // if we've received equation result socket messages from every player, we can proceed to second round of betting.
                     // this check must be inside the parent if loop, otherwise we may have a case where no one submitted an equation,
                     // so whichever client is last to have its message received actually takes the whole pot
-                    nonFoldedPlayers(game).every(player => player.equationResult !== null)) 
+                    nonFoldedPlayers(game).every(player => player.equationResult != null)) 
                 {
                     // TODO I think this if statement only can be moved outside the parent if. No way to race condition to 0
                     if (nonFoldedPlayers(game).length === 0){
@@ -696,9 +614,9 @@ wss.on("connection", (ws: ExtendedWebSocket) => { // LEARN pass in extended
                 if (player.choices.includes("low") && !player.choices.includes("high")) {
                     player.lowHand = player.hand;
                     player.lowEquationResult = player.equationResult;
-                } else if (player.choices.includes("low") && !player.choices.includes("high")) {
-                    player.lowHand = player.hand;
-                    player.lowEquationResult = player.equationResult;
+                } else if (player.choices.includes("high") && !player.choices.includes("low")) {
+                    player.highHand = player.hand;
+                    player.highEquationResult = player.equationResult;
                 } else if (player.choices.includes("low") && player.choices.includes("high")) {
                     if (!clientMsg.otherEquationResult || !clientMsg.order) {
                         console.log("if swing betting chosen, there should be a second equation");
@@ -765,6 +683,88 @@ server.listen(8080, "0.0.0.0", () => {
   console.log("Server running on port 8080");
 });
 
+function enterRoom(game: Game, clientMsg: CreateMessage | EnterMessage, ws: ExtendedWebSocket) { // TODO  this union is bad
+
+    if (game.phase === GamePhase.LOBBY) {
+        // send a newly connected player the list of all players that have joined thus far
+        // player.username != null is because we don't want to share players that have entered but not submitted name
+        [...players.values()].filter(player => player.roomCode === game.roomCode && player.username != null).forEach(player => {
+            ws.send(JSON.stringify({
+                type: "player-joined",
+                id: player.id,
+                hostId: game.hostId,// client.userId === hostId, // this is wrong because it means the host will show everyone joining as host
+                color: player.color, // what happens if we put user color here?
+                username: player.username,
+            }));
+        });
+
+        const player = players.get(clientMsg.userId);
+
+        if (player) {
+            // TODO how to change the flow so we don't have to trust this
+            ws.send(JSON.stringify({ type: "room-entered", roomCode: game.roomCode, hostId: game.hostId, joined: player.username !== null }));
+
+            if (player.roomCode === game.roomCode){
+                ws.userId = clientMsg.userId;
+
+                logRoomsAndPlayers();
+            } else {
+
+            }
+        } else {
+            ws.send(JSON.stringify({ type: "room-entered", roomCode: game.roomCode, hostId: game.hostId, joined: false }));
+
+            console.log("creating userId but no username yet");
+            // if (ws.isHost) { // without this, later players joining become the host
+            //     currentTurnPlayerId = clientMsg.userId; // TODO surely we can set this later? as just the first player in players list?
+            //     hostId = clientMsg.userId; // just use ws.userId here?
+            // }
+
+            console.log(`***** 👩‍💻 ${game.hostId === clientMsg.userId ? 'Host' : 'Player'} joined: ${clientMsg.userId} *****`);
+
+            // TODO THIS for rejoining active rooms
+            // have to reassign userId because what if someone refreshes? have to ignore the init message // TODO rethink this in the context of join/ enter
+            // need to assign ws.userId because it's used to check clientId === id on server
+            ws.userId = clientMsg.userId; // TODO need this??
+            players.set(clientMsg.userId, new Player(clientMsg.userId, game.roomCode, clientMsg.color)); // TODO sanitize clientMsg.username to standards
+
+            console.log([...players].filter(([id, player]) => player.roomCode === game.roomCode));
+            
+            logRoomsAndPlayers();
+        }
+    } else { // gamephase is not lobby
+        ws.send(JSON.stringify({ type: "room-entered", roomCode: game.roomCode, hostId: game.hostId, joined: true, inProgress: true }));
+
+        const playerToNotify = players.get(ws.userId); // can use ws if not gamephase bc must be true
+        if (!playerToNotify) return;
+
+        // send game state
+        switch (game.phase) {
+            case GamePhase.FIRSTDEAL:
+                playersInRoom(game.roomCode).forEach(player => {
+                    notifyPlayerOfNewlyDealtCards(player, playerToNotify, player.needToDiscard);
+                });
+                break;
+            case GamePhase.FIRSTBETTING:
+                playersInRoom(game.roomCode).forEach(player => {
+                    notifyPlayerOfNewlyDealtCards(player, playerToNotify, false);
+                });
+                break;
+            case GamePhase.SECONDDEAL:
+                break;
+            case GamePhase.EQUATIONFORMING:
+                break;
+            case GamePhase.SECONDBETTING:
+                break;
+            case GamePhase.HILOSELECTION:
+                break;
+            case GamePhase.RESULTVIEWING:
+                break;
+        }
+    }
+        console.log("made it to sending game state");
+}
+
 function nonFoldedPlayers(game: Game){
     return [...(playersInRoom(game.roomCode).filter(player => player.foldedThisTurn !== true))];
 }
@@ -803,8 +803,8 @@ function endRoundOrProceedToNextPlayer(game: Game, justPlayedPlayer: Player) {
     }
 }
 
-function clearHandsAndDealOperatorCards(roomCode: string, players: Player[]) {
-    players.forEach(player => { // change players in room to be just the values. then modify logic everywhere
+function clearHandsAndDealOperatorCards(roomCode: string, playersInThisRoom: Player[]) {
+    playersInThisRoom.forEach(player => { // change players in room to be just the values. then modify logic everywhere
         player.hand = [];
 
         player.hand.push(new Card(false, OperatorCard.ADD, Suit.OPERATOR));
@@ -1371,7 +1371,7 @@ function findHighestCard(hand: Card[]): Card {
     });
 }
 
-function findLoWinner(loBettingPlayers: Player[]): [Player, Card] {
+function findLoWinner(loBettingPlayers: Player[]): [Player | null, Card | null] {
     const loTarget = 1;
     let loWinner = null;
     let loWinnerLowCard = null;
@@ -1384,6 +1384,7 @@ function findLoWinner(loBettingPlayers: Player[]): [Player, Card] {
             // wipe out in case of second place tie. but TODO this doesn't work because what if there's a 3 way tie. this will wipe out the first
             // TODO need extra if (diff < loContenderDiff)
             loBettingPlayers.forEach(player => player.isLoContender = false);
+            loWinnerLowCard = findLowestCard(loWinner!.hand); // have this line here just so return statement doesn't break. don't really need it tho
         } else if (diff === winningDiff) {
             // make tied players contenders for card highlighting later
             player.isLoContender = true;
@@ -1402,23 +1403,24 @@ function findLoWinner(loBettingPlayers: Player[]): [Player, Card] {
         }
     }
 
-    if (!loWinner || !loWinnerLowCard) throw new Error;
+    // if (!loWinner || !loWinnerLowCard) throw new Error; // TODO need to handle this error. but it's a true error
 
     return [loWinner, loWinnerLowCard];
 }
 
-function findHiWinner(hiBettingPlayers: Player[]): [Player, Card]  {
+function findHiWinner(hiBettingPlayers: Player[]): [Player | null, Card | null]  {
     const hiTarget = 20;
     let hiWinner = null;
     let hiWinnerHighCard = null;
     let winningDiff = Infinity;
     for (const player of hiBettingPlayers) {
-        const diff = Math.abs(player.highEquationResult! - hiTarget);
+        const diff = Math.abs(player.highEquationResult! - hiTarget); // should not force this here. there was a bug. throw if no highEquationResult
         if (diff < winningDiff) {
             winningDiff = diff;
             hiWinner = player;
             // wipe out in case of second place tie
             hiBettingPlayers.forEach(player => player.isHiContender = false);
+            hiWinnerHighCard = findHighestCard(hiWinner!.hand); // have this line here just so return statement doesn't break. don't really need it tho
         } else if (diff === winningDiff) {
             // make tied players contenders for card highlighting later
             player.isHiContender = true;
@@ -1439,7 +1441,7 @@ function findHiWinner(hiBettingPlayers: Player[]): [Player, Card]  {
         }
     }
     
-    if (!hiWinner || !hiWinnerHighCard) throw new Error;
+    // if (!hiWinner || !hiWinnerHighCard) throw new Error;
 
     return [hiWinner, hiWinnerHighCard];
 }
@@ -1493,11 +1495,11 @@ function determineWinners(game: Game) {
     // TODO what if everyone swing bets but not one wins both... do chips just get returned?
     // what about just find winnerAmongSwingBetters
     // what if someone bets swing and others bet only low. then hiWinner is null
-    const swingBetterWon = swingBettingPlayers.length > 0 && loWinnerIncludingSwingBetters.id === loWinnerOfSwingBetters.id && loWinnerOfSwingBetters.id === hiWinnerIncludingSwingBetters.id && hiWinnerIncludingSwingBetters.id === hiWinnerOfSwingBetters.id;
+    const swingBetterWon = swingBettingPlayers.length > 0 && loWinnerIncludingSwingBetters?.id === loWinnerOfSwingBetters?.id && loWinnerOfSwingBetters?.id === hiWinnerIncludingSwingBetters?.id && hiWinnerIncludingSwingBetters?.id === hiWinnerOfSwingBetters?.id;
     if (swingBetterWon) { // TODO rename loSwingWinner...
-        loWinnerOfSwingBetters.chipCount += game.pot;
+        loWinnerOfSwingBetters!.chipCount += game.pot; // TODO refactor to have control flow. "If swing better won, etc"
         hiWinnerChipsDelta = loWinnerChipsDelta = game.pot;
-        message = loWinnerOfSwingBetters.username + " won the swing bet.";
+        message = loWinnerOfSwingBetters!.username + " won the swing bet.";
     } else {
         const potWillSplit = loWinner !== null && hiWinner !== null;
 
@@ -1537,7 +1539,7 @@ function determineWinners(game: Game) {
     let results = [...nonFoldedPlayers(game).values()].map(player => ({
         id: player.id,
         chipCount: player.chipCount,
-        chipDifferential: swingBetterWon ? player.id === loWinnerOfSwingBetters.id ? loWinnerChipsDelta : 0 :
+        chipDifferential: swingBetterWon ? player.id === loWinnerOfSwingBetters?.id ? loWinnerChipsDelta : 0 :
             player.id === hiWinner?.id ? hiWinnerChipsDelta : // todo rename to hiWinnerExcludingSwingBetters
             player.id === loWinner?.id ? loWinnerChipsDelta : 0,
         lowHand: player.lowHand, // TODO adjust for swing
@@ -1649,10 +1651,16 @@ function generateDeck() {
     
     // TODO I think this is different in TypeScript
     // One of each of numbers 0-10 of each of 4 suits.
-    for (const number of Object.values(NumberCard)) {
-        for (const suit of Object.values(Suit)) {
-            if (suit !== Suit.OPERATOR) {
-                deck.push(new Card(false, number as NumberCard, suit as Suit));
+    for (const key in NumberCard) {
+        const value = NumberCard[key as keyof typeof NumberCard];
+        if (typeof value === "number") {
+            for (const key2 in Suit) {
+                const value2 = Suit[key2 as keyof typeof Suit];
+                if (typeof value2 === "number") { // can probably refactor since I have a number to string method elsewhere as well
+                    if (value2 !== 4) { // rewrite to be Suit.operator
+                        deck.push(new Card(false, value as NumberCard, value2 as Suit));
+                    }
+                }
             }
         }
     }

@@ -5,8 +5,8 @@
   "type": "module",
   "scripts": {
     "build": "tsc",
-    "start": "npm run build && node dist/server.js",
-    "dev": "nodemon --ext ts --exec ts-node server.ts"
+    "start": "npx tsc enums.ts --outDir public --target ES2020 --module NodeNext && npx tsx server.ts",
+    "dev": "nodemon --ext ts --exec npx tsx server.ts"
   },
   "keywords": [],
   "author": "",
@@ -19,11 +19,14 @@
     "ws": "^8.18.2"
   },
   "devDependencies": {
+    "@playwright/test": "^1.56.1",
     "@types/express": "^5.0.3",
     "@types/node": "^24.4.0",
     "@types/ws": "^8.18.1",
     "nodemon": "^3.1.10",
+    "playwright": "^1.56.1",
     "ts-node": "^10.9.2",
-    "typescript": "^5.9.2"
+    "typescript": "^5.9.2",
+    "undici-types": "^7.16.0"
   }
 }
