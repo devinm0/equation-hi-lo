@@ -6,7 +6,8 @@
   "scripts": {
     "build": "tsc",
     "start": "npx tsc enums.ts --outDir public --target ES2020 --module NodeNext && npx tsx server.ts",
-    "dev": "nodemon --ext ts --exec npx tsx server.ts"
+    "dev": "nodemon --ext ts --exec npx tsx server.ts",
+    "test": "jest"
   },
   "keywords": [],
   "author": "",
@@ -21,10 +22,13 @@
   "devDependencies": {
     "@playwright/test": "^1.56.1",
     "@types/express": "^5.0.3",
+    "@types/jest": "^30.0.0",
     "@types/node": "^24.4.0",
     "@types/ws": "^8.18.1",
+    "jest": "^30.2.0",
     "nodemon": "^3.1.10",
     "playwright": "^1.56.1",
+    "ts-jest": "^29.4.5",
     "ts-node": "^10.9.2",
     "typescript": "^5.9.2",
     "undici-types": "^7.16.0"

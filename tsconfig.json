@@ -15,13 +15,13 @@
     "target": "ES2020",
     // For nodejs:
     "lib": ["es2020"],
-    "types": ["node"],
+    "types": ["jest", "node"],
     // and npm install -D @types/node
 
     // Other Outputs
-    "sourceMap": true,
+    "sourceMap": false,
     "inlineSources": true,      // Include TS source code in .map for VS Code
-    "inlineSourceMap": false,   // Use separate .map files (recommended)
+    "inlineSourceMap": true,   // Use separate .map files (recommended)
     "declaration": true,
     "declarationMap": true,
 
@@ -48,6 +48,6 @@
     "checkJs": true,   // shows type errors in .js files
     "outDir": "dist"
   },
-  "include": ["./**/*.ts", "**/*.js"],
+  "include": ["./**/*.ts", "**/*.js", "jest.config.mjs"],
   "exclude": ["node_modules", "dist", "public"]
 }

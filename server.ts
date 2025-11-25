@@ -1359,19 +1359,35 @@ function revealHiddenCards(game: Game) {
     })
 }
 
-function findLowestCard(hand: Card[]): Card {
+export function findLowestCard(hand: Card[]): Card {
     return hand.filter(card => card.suit !== Suit.OPERATOR).reduce((minCard, currentCard) => {
-        return currentCard.value! < minCard.value! ? currentCard : minCard;
+        if (currentCard.value! < minCard.value!) {
+            return currentCard;
+        }
+
+        if (currentCard.value! == minCard.value! && currentCard.suit! < minCard.suit!) {
+            return currentCard;
+        }
+
+        return minCard;
     });
 }
 
-function findHighestCard(hand: Card[]): Card {
+export function findHighestCard(hand: Card[]): Card {
     return hand.filter(card => card.suit !== Suit.OPERATOR).reduce((maxCard, currentCard) => {
-        return currentCard.value! > maxCard.value! ? currentCard : maxCard;
+        if (currentCard.value! > maxCard.value!) {
+            return currentCard;
+        }
+
+        if (currentCard.value! == maxCard.value! && currentCard.suit! > maxCard.suit!) {
+            return currentCard;
+        }
+
+        return maxCard;
     });
 }
 
-function findLoWinner(loBettingPlayers: Player[]): [Player | null, Card | null] {
+export function findLoWinner(loBettingPlayers: Player[]): [Player | null, Card | null] {
     const loTarget = 1;
     let loWinner = null;
     let loWinnerLowCard = null;
@@ -1383,6 +1399,7 @@ function findLoWinner(loBettingPlayers: Player[]): [Player | null, Card | null] 
             loWinner = player;
             // wipe out in case of second place tie. but TODO this doesn't work because what if there's a 3 way tie. this will wipe out the first
             // TODO need extra if (diff < loContenderDiff)
+            // if we are in this block (diff < winningDiff) it means there's no tie. So we can clear all contenders.
             loBettingPlayers.forEach(player => player.isLoContender = false);
             loWinnerLowCard = findLowestCard(loWinner!.hand); // have this line here just so return statement doesn't break. don't really need it tho
         } else if (diff === winningDiff) {
@@ -1391,13 +1408,13 @@ function findLoWinner(loBettingPlayers: Player[]): [Player | null, Card | null] 
             loWinner!.isLoContender = true; // loWinner! is because we can never hit this case given the diff is Infinity to start
 
             let playerLowCard = findLowestCard(player.hand);
-            loWinnerLowCard = findLowestCard(loWinner!.hand);
 
-            if (playerLowCard.value! < loWinnerLowCard.value!) {
+            if (playerLowCard.value! < loWinnerLowCard!.value!) {
                 loWinner = player;
-            } else if (playerLowCard.value === loWinnerLowCard.value) {
-                if (playerLowCard.suit! < loWinnerLowCard.suit!) {
+            } else if (playerLowCard.value === loWinnerLowCard!.value) {
+                if (playerLowCard.suit! < loWinnerLowCard!.suit!) {
                     loWinner = player;
+                    loWinnerLowCard = findLowestCard(loWinner!.hand);
                 } // impossible to be equal. suit+number pairs (cards) are unique
             }
         }
@@ -1408,7 +1425,7 @@ function findLoWinner(loBettingPlayers: Player[]): [Player | null, Card | null] 
     return [loWinner, loWinnerLowCard];
 }
 
-function findHiWinner(hiBettingPlayers: Player[]): [Player | null, Card | null]  {
+export function findHiWinner(hiBettingPlayers: Player[]): [Player | null, Card | null]  {
     const hiTarget = 20;
     let hiWinner = null;
     let hiWinnerHighCard = null;
@@ -1429,13 +1446,13 @@ function findHiWinner(hiBettingPlayers: Player[]): [Player | null, Card | null] 
             // right now, let's say two people tie for second place. we compare the highest card of each
             // but we don't really need it because then the first place ends up winning. bit of a waste
             const playerHighCard = findHighestCard(player.hand);
-            hiWinnerHighCard = findHighestCard(hiWinner!.hand);
 
-            if (playerHighCard.value! > hiWinnerHighCard.value!) {
+            if (playerHighCard.value! > hiWinnerHighCard!.value!) {
                 hiWinner = player;
-            } else if (playerHighCard.value === hiWinnerHighCard.value) {
-                if (playerHighCard.suit! > hiWinnerHighCard.suit!) {
+            } else if (playerHighCard.value === hiWinnerHighCard!.value) {
+                if (playerHighCard.suit! > hiWinnerHighCard!.suit!) {
                     hiWinner = player;
+                    hiWinnerHighCard = findHighestCard(hiWinner!.hand);
                 } // impossible to be equal. suit+number pairs (cards) are unique
             }
         }
@@ -1446,18 +1463,11 @@ function findHiWinner(hiBettingPlayers: Player[]): [Player | null, Card | null] 
     return [hiWinner, hiWinnerHighCard];
 }
 
-function determineWinners(game: Game) {
-    // TESTS
-    // only swing betters
-    // one swing better and all hi betters
-    // one swing better and all lo betters
-    // one swing better and hi and lo betters
-    // swing betters and hi and lo betters (6 total)
-
-    // TODO change to player.choice = "swing"
-    const swingBettingPlayers = nonFoldedPlayers(game).filter(player => player.choices.includes('low') && player.choices.includes('high'));
-    const loBettingPlayers = nonFoldedPlayers(game).filter(player => player.choices.includes('low') && !player.choices.includes('high'));
-    const hiBettingPlayers = nonFoldedPlayers(game).filter(player => player.choices.includes('high') && !player.choices.includes('low'));
+// can't we simply have hiBetWinner and loBetWinner!?
+export function determineWinnersInternal(notFoldedPlayers: Player[]) { // TODO rename to just determine winners
+    const swingBettingPlayers = notFoldedPlayers.filter(player => player.choices.includes('low') && player.choices.includes('high'));
+    const loBettingPlayers = notFoldedPlayers.filter(player => player.choices.includes('low') && !player.choices.includes('high'));
+    const hiBettingPlayers = notFoldedPlayers.filter(player => player.choices.includes('high') && !player.choices.includes('low'));
     
     let [loWinnerIncludingSwingBetters, loWinnerIncludingSwingBettersLowCard] = findLoWinner(swingBettingPlayers.concat(loBettingPlayers));
     let [hiWinnerIncludingSwingBetters, hiWinnerIncludingSwingBettersHighCard] = findHiWinner(swingBettingPlayers.concat(hiBettingPlayers));
@@ -1465,7 +1475,37 @@ function determineWinners(game: Game) {
     let [hiWinnerOfSwingBetters, hiWinnerOfSwingBettersHighCard] = findHiWinner(swingBettingPlayers);
     let [loWinner, loWinnerLowCard] = findLoWinner(loBettingPlayers);
     let [hiWinner, hiWinnerHighCard] = findHiWinner(hiBettingPlayers);
-    
+    const swingBetterWon = swingBettingPlayers.length > 0 && loWinnerIncludingSwingBetters?.id === loWinnerOfSwingBetters?.id && loWinnerOfSwingBetters?.id === hiWinnerIncludingSwingBetters?.id && hiWinnerIncludingSwingBetters?.id === hiWinnerOfSwingBetters?.id;
+    // TODO why can't swingBetterWon just be hiWinner.id === loWinner.id?
+        // the reason, what if one swing better wins the hi, but a lo only better wins lo, for example.
+        // then we need to have known who was the hiWinner excluding swing betters.
+    // i think this present implementation allows for two swing players to have their tie card highlighted, AND two non swing players to have their tie card highlighted.
+        // TEST add this
+
+    // what about, find hi and lo winners of all. if there are any swing betters, check if hi and lo id are equal. if not, redo hi and lo finding excluding any swing betters
+        // this is flawed as well. because what if the swing betters lost by a tie. then on redo, their lo cards won't be highlighted.
+        // or maybe they will. but let's say 
+
+
+    return {loWinnerIncludingSwingBetters, loWinnerIncludingSwingBettersLowCard,
+        hiWinnerIncludingSwingBetters, hiWinnerIncludingSwingBettersHighCard,
+        loWinnerOfSwingBetters, loWinnerOfSwingBettersLowCard,
+        hiWinnerOfSwingBetters, hiWinnerOfSwingBettersHighCard,
+        loWinner, loWinnerLowCard,
+        hiWinner, hiWinnerHighCard,
+        swingBetterWon
+    }; // TODO clean up this return
+}
+
+export function determineWinners(game: Game) { // this is determineWinners and send results. need to decouple
+    // TODO change to player.choice = "swing"
+    const {loWinnerIncludingSwingBetters, loWinnerIncludingSwingBettersLowCard,
+        hiWinnerIncludingSwingBetters, hiWinnerIncludingSwingBettersHighCard,
+        loWinnerOfSwingBetters, loWinnerOfSwingBettersLowCard, // TODO why are these not used
+        hiWinnerOfSwingBetters, hiWinnerOfSwingBettersHighCard,
+        loWinner, loWinnerLowCard,
+        hiWinner, hiWinnerHighCard,
+        swingBetterWon} = determineWinnersInternal(nonFoldedPlayers(game));
           /* If player is greater         compare(diff)
     If value is greater             compare(value)
     If suit is greater              compare(suit) */
@@ -1483,7 +1523,7 @@ function determineWinners(game: Game) {
     //     });
     // }
 
-    // equationResult > high card > high suit
+    // equationResult > high card > high suit //TODO BREAK UP THE FUNCTION LIKE THIS
     // TODO findLowestCard(reversedCards) something like this
 
     let hiWinnerChipsDelta: number;
@@ -1495,7 +1535,6 @@ function determineWinners(game: Game) {
     // TODO what if everyone swing bets but not one wins both... do chips just get returned?
     // what about just find winnerAmongSwingBetters
     // what if someone bets swing and others bet only low. then hiWinner is null
-    const swingBetterWon = swingBettingPlayers.length > 0 && loWinnerIncludingSwingBetters?.id === loWinnerOfSwingBetters?.id && loWinnerOfSwingBetters?.id === hiWinnerIncludingSwingBetters?.id && hiWinnerIncludingSwingBetters?.id === hiWinnerOfSwingBetters?.id;
     if (swingBetterWon) { // TODO rename loSwingWinner...
         loWinnerOfSwingBetters!.chipCount += game.pot; // TODO refactor to have control flow. "If swing better won, etc"
         hiWinnerChipsDelta = loWinnerChipsDelta = game.pot;
@@ -1516,7 +1555,7 @@ function determineWinners(game: Game) {
             const splitPot = game.pot / 2;
             hiWinnerChipsDelta = splitPot;
             loWinnerChipsDelta = splitPot;
-            hiWinner.chipCount += splitPot;
+            hiWinner!.chipCount += splitPot;
             loWinner.chipCount += splitPot;
 
             message = hiWinner.username + " won the high bet and " + loWinner.username + " won the low bet.";
@@ -1535,7 +1574,6 @@ function determineWinners(game: Game) {
 
     game.pot = 0; // TODO put this inside of endHand??
 
-    // notify everyone about the winners
     let results = [...nonFoldedPlayers(game).values()].map(player => ({
         id: player.id,
         chipCount: player.chipCount,
@@ -1562,7 +1600,6 @@ function determineWinners(game: Game) {
         isHiContender: player.isHiContender
     }));
 
-    console.log(results);
     sendSocketMessageToEveryClientInRoom(game.roomCode, {
         type: "round-result",
         message: message!,
@@ -1570,6 +1607,8 @@ function determineWinners(game: Game) {
         hiWinner: hiWinner,
         results: results
     });
+
+    return results;
 }
   
 // TODO above code - test that pot splits correctly, and also if there's only one winner
@@ -1670,7 +1709,7 @@ function generateDeck() {
     return deck;
 }
 
-function getHandToSendFromHand(hand: Card[], revealHiddenCard: boolean) {
+export function getHandToSendFromHand(hand: Card[], revealHiddenCard: boolean) {
     let handToSend = JSON.parse(JSON.stringify(hand));
 
     for (let i = 0; i < handToSend.length; i++) {
