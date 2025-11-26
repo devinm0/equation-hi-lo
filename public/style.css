@@ -160,6 +160,7 @@ body {
     user-select: none;
     touch-action: manipulation;
     overflow: hidden;
+    position: relative;
 }
 
 .card-apple-myungjo {
@@ -262,7 +263,7 @@ body {
   }
 
 .card-bounce {
-    animation: bounce 0.3s cubic-bezier(0,2,1,2);
+    animation: bounce 0.6s cubic-bezier(0.25, 1, 0.5, 1);
     animation-delay: var(--delay);
 }
 
@@ -428,6 +429,10 @@ body {
     transform: translateX(-50%)
 }
 
+#confirmResults { /* temp override, clean it up so perhaps confirm equation buttons the same */
+    top: 3%;
+}
+
 #enterRoomButton:hover,
 #callRaiseButton:hover,
 #foldButton:hover,
@@ -530,7 +535,7 @@ body {
         opacity: 0;
         filter: sepia() saturate(500%);
     }
-    30% {
+    10% {
         transform: translateX(0);
         opacity: 1;
     }
@@ -590,6 +595,24 @@ body {
     }
 }
 
+@keyframes materialize {
+    0% {
+      opacity: 0;
+      transform: scale(1.5);
+    }
+    60% {
+        opacity: 0.5;
+      transform: scale(.95);
+    }
+    80% {
+        opacity: 1;
+        transform: scale(1.02);
+    }
+    100% {
+        transform: scale(1);
+    }
+}
+
 @keyframes fadeIn {
     0% {
       opacity: 0;
@@ -631,7 +654,26 @@ body {
 }
 
 .differential-span {
-    color: yellow;
+    background: linear-gradient(
+        215deg, 
+        #ffda0b 0%, 
+        #fffbe7 5%, 
+        #fcf9e5 15%, 
+        #fffb0b 20%
+    );
+    background-size: 200% 100%;
+    -webkit-background-clip: text;
+    -webkit-text-fill-color: transparent;
+    animation: shine 2s linear infinite;
+}
+
+@keyframes shine {
+    0% {
+        background-position: -200% 0;
+    }
+    100% {
+        background-position: 200% 0;
+    }
 }
 
 .chip {
@@ -699,7 +741,7 @@ body {
   max-width: 400px;
   width: 90%;
   text-align: center;
-  animation: fadeUp 0.15s ease-out forwards;
+  animation: materialize .4s ease-out forwards;
 }
 
 .modal h2 {
@@ -759,6 +801,11 @@ body {
     font-size: 20px;
 }
 
+.winner-div {
+    border-radius: 30px;
+    background-color: #dddd5375;
+}
+
 .high-symbol {
     border-radius: 8px;
   width: calc(115px / sqrt(2));
@@ -796,6 +843,10 @@ body {
   display: none;
 }
 
+.secret {
+    opacity: 0.5;
+}
+
 .single-digit {
     transform: translateY(-4%);
 }
@@ -831,6 +882,7 @@ body {
         font-size: 40px;
         margin: 2px;
         border-radius: 8px;
+        box-shadow: 3px 3px rgba(0,0,0,0.3);
     }
 
     .small-hand .difference-card {

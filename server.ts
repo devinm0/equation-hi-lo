@@ -245,6 +245,11 @@ interface Result {
 
 }
 
+server.on("upgrade", (req, socket, head) => {
+    console.log("### UPGRADE RECEIVED ###");
+    console.log(req.headers);
+});
+
 wss.on("connection", (ws: ExtendedWebSocket) => { // LEARN pass in extended
     // keep alive, in the case of 90 seconds equation forming
     ws.isAlive = true;
@@ -297,8 +302,9 @@ wss.on("connection", (ws: ExtendedWebSocket) => { // LEARN pass in extended
 
             case "create": {
                 let game = new Game();
+                console.log(game);
                 games.set(game.roomCode, game);
-
+                console.log(games);
                 game.currentTurnPlayerId = game.hostId = ws.userId; // no, right? TODO remove concept of hostId?? or add host promotion
 
                 enterRoom(game, clientMsg, ws);
@@ -677,6 +683,11 @@ wss.on("connection", (ws: ExtendedWebSocket) => { // LEARN pass in extended
             }
         }
     });
+
+    ws.on("close", (code, reason) => {
+        console.log(`[WS] close code: ${code}`);
+        console.log(`[WS] reason: ${reason.toString()}`);
+    });
 });
 
 server.listen(8080, "0.0.0.0", () => {
@@ -700,6 +711,7 @@ function enterRoom(game: Game, clientMsg: CreateMessage | EnterMessage, ws: Exte
 
         const player = players.get(clientMsg.userId);
 
+        console.log(player);
         if (player) {
             // TODO how to change the flow so we don't have to trust this
             ws.send(JSON.stringify({ type: "room-entered", roomCode: game.roomCode, hostId: game.hostId, joined: player.username !== null }));
@@ -1770,6 +1782,7 @@ const roomCleanupInterval = setInterval(function ping() {
 }, 24 * 60 * 60 * 1000);
 
 wss.on('close', function close() {
+    console.log()
     clearInterval(heartbeatInterval);
     clearInterval(roomCleanupInterval);
 });

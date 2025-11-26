@@ -26,8 +26,11 @@ export class SoundManager {
           this.unlocked = true;
           // "prime" the sounds
           for (const sound of this.sounds.values()) {
-            sound.load();
+            sound.volume = 0;
+            sound.play().catch(() => {});
             sound.pause();
+            sound.currentTime = 0;
+            sound.volume = sound._volume || sound.volume;
           }
           window.removeEventListener("click", unlockHandler);
           window.removeEventListener("keydown", unlockHandler);
@@ -37,11 +40,12 @@ export class SoundManager {
   }
 
   add(name, src, volume = 1.0) {
-      const audio = new Audio(src);
-      audio.preload = "auto";
-      audio.volume = volume;
-      this.sounds.set(name, audio);
-  }
+    const audio = new Audio(src);
+    audio.preload = "auto";
+    audio.volume = volume;
+    audio._volume = volume;
+    this.sounds.set(name, audio);
+}
 
   play(name) {
       const sound = this.sounds.get(name);

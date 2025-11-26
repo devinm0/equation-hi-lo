@@ -19,9 +19,9 @@
     // and npm install -D @types/node
 
     // Other Outputs
-    "sourceMap": false,
+    "sourceMap": true,
     "inlineSources": true,      // Include TS source code in .map for VS Code
-    "inlineSourceMap": true,   // Use separate .map files (recommended)
+    "inlineSourceMap": false,   // Use separate .map files (recommended)
     "declaration": true,
     "declarationMap": true,
 

@@ -861,7 +861,7 @@
             }
 
             if (card.hidden && card.value !== null) { // shadow on either my card, or others cards once revealed in resultsview
-                cardDiv.style.boxShadow = 'rgba(0, 0, 0, .4) 0px 0px 4px 4px inset, 4px 4px rgba(0, 0, 0, 0.3)';
+                cardDiv.classList.add('secret');
                 // cardDiv.style.backgroundColor = 'lightgrey';
             }
 
@@ -1206,6 +1206,7 @@
             let loOptionDiv = document.getElementById("low-symbol-" + result.id);
             let hiOptionDiv = document.getElementById("high-symbol-" + result.id);
             let trophyDiv = document.getElementById("trophy-" + result.id);
+            const handDiv = handDivs.get(result.id);
 
             if (result.choices.includes("low")) {
                 loOptionDiv.classList.remove("hidden");
@@ -1215,16 +1216,17 @@
             }
             if (result.isHiWinner) {
                 trophyDiv.classList.remove("hidden");
+                handDiv.classList.add("winner-div");
                 // TODO redraw by indexOf hiWinnerHighCard
             }
             if (result.isLoWinner) {
                 trophyDiv.classList.remove("hidden");
+                handDiv.classList.add("winner-div");
                 let nameDiv = document.getElementById("handLabel-" + result.id);
                 // TODO redraw by indexOf currentLowestPlayersLowestCard
 
             }
 
-            const handDiv = handDivs.get(result.id);
             handDiv.querySelectorAll('.card').forEach(el => el.remove());
 
             if (result.choices.includes("low")) {
@@ -1345,6 +1347,11 @@
         const smallHands = document.querySelectorAll('.small-hand');
         smallHands.forEach(hand => {
             hand.classList.remove('small-hand')
+        })
+
+        const winningHands = document.querySelectorAll('.winner-div');
+        smallHands.forEach(hand => {
+            hand.classList.remove('winner-div');
         })
 
         // const winningHands = document.querySelectorAll('.winning-hand');
