@@ -2,7 +2,8 @@ body {
     display: flex;
     flex-wrap: wrap; 
     margin: 0; 
-    /*overflow: hidden; */
+    overflow-y: auto;
+    padding-bottom: 440px; /* so that my hand doesn't obscure the last of scrollable hands */
     background-color: hsl(183, 89%, 31%); 
     font-family: 'Arial'
 }
@@ -54,16 +55,29 @@ body {
 .full-width-hand {
     width: 100%;
     justify-content: center;
-    margin-bottom: 1em;
+    /* margin-bottom: 1em; TODO issues with this? */
 }
 
 .my-hand {
     gap: 8px;
-    position: absolute;
+    /* position: absolute; */
     width: 100%;
     justify-content: center;
-    bottom: 10%;
+    /* bottom: 10%; */
     margin-left: 0;
+    background: hsl(183, 89%, 31%);
+    z-index: 1000;
+    position: fixed;
+    bottom: 0%;
+    border-top: 2px solid hsl(183, 89%, 21%);
+    border-radius: 40px;
+    padding-bottom: 80px;
+    padding-top: 14px;
+    transition: transform 0.4s cubic-bezier(0.06, 0.72, 0, 0.96);
+}
+
+.crouched {
+    transform: translateY(55%);
 }
 
 .ten {
@@ -224,7 +238,17 @@ body {
 }
 
 .card-highlighted {
-    background-color: rgb(252, 252, 170);
+    /* background-color: rgb(252, 252, 170); */
+    background: linear-gradient(
+        215deg, 
+        #ffda0b 0%, 
+        #fffbe7 5%, 
+        #fcf9e5 15%, 
+        #fffb0b 20%
+    );
+    background-size: 200% 100%;
+    animation: shine 2s linear infinite,
+                breathe 2s linear infinite;
     box-shadow: 4px 4px rgba(255, 215, 0, 0.9);
 }
 
@@ -314,16 +338,17 @@ body {
 }
 
 #bettingControls {
-    position: absolute;
+    position: fixed;
     text-align: center;
     width: 370px;
-    bottom: 1%;
+    bottom: 2.5%;
     left: 50%;
     transform: translate(-50%, -0%);
     display: flex;
     flex-direction: column;
     align-items: center;
     gap: 16px;
+    z-index: 1001;
 }
 
 #betSlider {
@@ -431,6 +456,17 @@ body {
 
 #confirmResults { /* temp override, clean it up so perhaps confirm equation buttons the same */
     top: 3%;
+    background: linear-gradient(
+        215deg, 
+        #0bff4c 0%, 
+        #8fffb4 5%, 
+        #00ac06 15%, 
+        #9affad 20%
+    );
+    background-size: 200% 100%;
+    -webkit-background-clip: text;
+    -webkit-text-fill-color: transparent;
+    animation: shine 2s linear infinite;
 }
 
 #enterRoomButton:hover,
@@ -460,9 +496,11 @@ body {
 }
 
 #progressBarWrapper {
+    margin: 10px;
     width: 100%;
     height: 20px;
-    background-color: rgba(0,0,0,0.4);;
+    background-color: rgba(0,0,0,0.4);
+    border-radius: 10px;
 }
 
 #progressBar {
@@ -598,15 +636,29 @@ body {
 @keyframes materialize {
     0% {
       opacity: 0;
+      filter: blur(12px); 
       transform: scale(1.5);
     }
     60% {
         opacity: 0.5;
+        filter: blur(0); 
       transform: scale(.95);
     }
     80% {
         opacity: 1;
         transform: scale(1.02);
+    }
+    100% {
+        transform: scale(1);
+    }
+}
+
+@keyframes breathe {
+    0% {
+        transform: scale(1);
+    }
+    50% {
+        transform: scale(1.1);
     }
     100% {
         transform: scale(1);
@@ -866,6 +918,10 @@ body {
 }
 
 @media (max-width: 800px) {
+    body { 
+        padding-bottom: 120px; /* my hand will be smaller because smaller cards, so less padding to achieve non hiding of last hand in scroll window */
+    }
+
     #lobbyTitleContainer, #homeTitleContainer {
         font-size: 80px;
     }

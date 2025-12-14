@@ -1497,6 +1497,8 @@ export function determineWinnersInternal(notFoldedPlayers: Player[]) { // TODO r
     // what about, find hi and lo winners of all. if there are any swing betters, check if hi and lo id are equal. if not, redo hi and lo finding excluding any swing betters
         // this is flawed as well. because what if the swing betters lost by a tie. then on redo, their lo cards won't be highlighted.
         // or maybe they will. but let's say 
+        // this would work for the case of oen swing better and one hi better. the hi better would win the whole pot as expected
+        // TESTS: correct chip distributions for each win (probably separate this out to another method to be separate from the determineWinners tests)
 
 
     return {loWinnerIncludingSwingBetters, loWinnerIncludingSwingBettersLowCard,

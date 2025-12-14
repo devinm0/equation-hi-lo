@@ -906,6 +906,7 @@
         let progressBar = document.getElementById("progressBar");
         progressBar.style.display = "block";
         progressBar.style.width = "100%";
+        progressBar.style.borderRadius = "10px";
 
         timer.start(); // only call once because it call requestAnimationFrame recursively
     }
@@ -1426,6 +1427,7 @@
             scaleFactor = 0.75;
         }
         
+        // TODO set background color to rgb(251, 251, 250)
         canvas.id = `sqrt-canvas-${id}-${index}`;
         const ctx = canvas.getContext('2d');
 
@@ -1455,6 +1457,22 @@
 
         return canvas;
     }
+
+    let lastScroll = 0;
+
+    window.addEventListener("scroll", () => {
+        const current = window.pageYOffset;
+        const myHand = document.querySelector(".my-hand");
+
+        if (current > lastScroll) {
+            myHand.classList.add("crouched");
+        } else {
+            myHand.classList.remove("crouched");
+        }
+
+        lastScroll = current;
+    });
+
 </script>
 </body>
 </html>
