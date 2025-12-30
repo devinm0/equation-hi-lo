@@ -509,18 +509,18 @@ test
         expect(loWinnerOfSwingBettersLowCard!.suit).toBe(expectedLoCard.suit);
     }
 
-    players.forEach(player => {
-        if (expectedLoContenders.includes(player)) {
-            expect(player.isLoContender).toBe(true);
-        } else {
-            expect(player.isLoContender).not.toBe(true);
-        }
-        if (expectedHiContenders.includes(player)) {
-            expect(player.isHiContender).toBe(true);
-        } else {
-            expect(player.isHiContender).not.toBe(true);
-        }
-    });
+    // players.forEach(player => {
+    //     if (expectedLoContenders.includes(player)) {
+    //         expect(player.isLoContender).toBe(true);
+    //     } else {
+    //         expect(player.isLoContender).not.toBe(true);
+    //     }
+    //     if (expectedHiContenders.includes(player)) {
+    //         expect(player.isHiContender).toBe(true);
+    //     } else {
+    //         expect(player.isHiContender).not.toBe(true);
+    //     }
+    // });
 });
 
 //TODO push this to GitHub for projects

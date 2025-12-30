@@ -26,6 +26,7 @@ app.use(express.static("public"));
 
 let games = new Map<string, Game>();
 let players = new Map<string, Player>();
+const emojis = ['💀','❤️','😎','💩','👽','🧠','🐸','🍄','🪐','🔥','❄️','🍩']; 
 const RATE_LIMIT = 20;
 const INTERVAL = 10000;
 let endEquationFormingTimeout: NodeJS.Timeout;
@@ -255,7 +256,7 @@ wss.on("connection", (ws: ExtendedWebSocket) => { // LEARN pass in extended
     ws.isAlive = true;
     ws.on('pong', () => {ws.isAlive = true;});
 
-    console.log("connection");
+    console.log("=== CONNECTION ===");
     // only our domain can upgrade from http to ws
     // const origin = req.headers.origin;
     // if (!allowedOrigins.includes(origin)) {
@@ -266,10 +267,11 @@ wss.on("connection", (ws: ExtendedWebSocket) => { // LEARN pass in extended
     ws.msgCount = 0;
     setInterval(() => ws.msgCount = 0, INTERVAL);
 
-    const userColor = `hsl(${Math.random() * 360}, 100%, 70%)`; // same here
+
+    // const userColor = `hsl(${Math.random() * 360}, 100%, 70%)`; // same here
     const userId = uuidv4();
     ws.userId = userId; // in the case of rejoin or room code, this will be overwritten later
-    ws.send(JSON.stringify({ type: "init", id: userId, color: userColor/*, hostId: hostId */ }));
+    ws.send(JSON.stringify({ type: "init", id: userId/*, color: userColor/*, hostId: hostId */ }));
     
     console.log(`Socket connected, generating userId ${userId} but it may not be used in the case that someone is rejoining, in which case the existing client userId will overwrite this.`);
 
@@ -302,7 +304,6 @@ wss.on("connection", (ws: ExtendedWebSocket) => { // LEARN pass in extended
 
             case "create": {
                 let game = new Game();
-                console.log(game);
                 games.set(game.roomCode, game);
                 console.log(games);
                 game.currentTurnPlayerId = game.hostId = ws.userId; // no, right? TODO remove concept of hostId?? or add host promotion
@@ -432,7 +433,7 @@ wss.on("connection", (ws: ExtendedWebSocket) => { // LEARN pass in extended
                     return;
                 }
 
-                player.username = removeWhitespace(clientMsg.username);
+                player.username = player.emoji + " " + removeWhitespace(clientMsg.username);
                 const game = games.get(player.roomCode);
                 if (game == null) {
                     // must be incorrect room code
@@ -445,8 +446,8 @@ wss.on("connection", (ws: ExtendedWebSocket) => { // LEARN pass in extended
                     type: "player-joined",
                     id: clientMsg.userId,
                     hostId: game.hostId!,// client.userId === hostId, // this is wrong because it means the host will show everyone joining as host
-                    color: clientMsg.color, // what happens if we put user color here?
-                    username: clientMsg.username,
+                    color: player.color!,
+                    username: player.username,
                 });
 
                 logRoomsAndPlayers(); // this will be outside game class
@@ -522,6 +523,7 @@ wss.on("connection", (ws: ExtendedWebSocket) => { // LEARN pass in extended
                         client.send(JSON.stringify({
                             type: "player-formed-equation",
                             id: clientMsg.userId,
+                            color: player.color!,
                             username: player.username,
                             chipCount: player.chipCount,
                             hand: handToSend
@@ -541,6 +543,7 @@ wss.on("connection", (ws: ExtendedWebSocket) => { // LEARN pass in extended
                         return;
                     }
                 
+                    /* TODO DRY with below. call it DetermineIfSecondRoundOrHiLoSelection */
                     // I feel like there could be a bug here. Let's say everyone submits there equations early.
                     // so we are hitting this code, and about to progress to hiloselection
                     // but if the interval runs out in that time in between, we send end equation socket message
@@ -577,7 +580,7 @@ wss.on("connection", (ws: ExtendedWebSocket) => { // LEARN pass in extended
                 });
 
                 sendSocketMessageThatPlayerFolded(foldedPlayer.roomCode, foldedPlayer.id);
-                    
+                
                 // two cases to check:
 
                 // player manually folded in first betting round, and there's only one player left, go ahead and distribute pot
@@ -600,9 +603,37 @@ wss.on("connection", (ws: ExtendedWebSocket) => { // LEARN pass in extended
                         distributePotToOnlyRemainingPlayer(game, onlyRemainingPlayer);
                         return;
                     }
+
+                    // more tests
+                    // everyone but one submits equations early, last person is invalid and folds. make sure betting controls still shown
+                    // one person submits early, one person submits valid with ending tiemout, and one person folds
+                    // one person submits early, 2 people fold
+                    // all people fold
+
+                    /* TODO this is repeated */
+
+                    // this is the case that everyone force submitted equations except one person,
+                    // so they folded on equation submission
+
+                    // I feel like there could be a bug here. Let's say everyone submits there equations early.
+                    // so we are hitting this code, and about to progress to hiloselection
+                    // but if the interval runs out in that time in between, we send end equation socket message
+                    // and everyone will resend equation results.
+                    if (game.maxRaiseReached) {
+                        console.log('Max bet was reached on first round of betting. Skipping second round.');
+
+                        sendSocketMessageToNonFoldedPlayers(game, { type: "second-round-betting-skipped" });
+
+                        commenceHiLoSelection(game);
+                    } else {
+                        console.log('All equations received. Proceeding to second round of betting.');
+
+                        commenceSecondRoundBetting(game);
+                    }
+                    /* */
                 }
 
-                if (clientMsg.manual === true) { // TODO unreadable
+                if (clientMsg.manual === true) { // TODO unreadable (looks like same condition above but it's not)
                     endRoundOrProceedToNextPlayer(game, foldedPlayer);
                 }
                 break;
@@ -724,9 +755,7 @@ function enterRoom(game: Game, clientMsg: CreateMessage | EnterMessage, ws: Exte
 
             }
         } else {
-            ws.send(JSON.stringify({ type: "room-entered", roomCode: game.roomCode, hostId: game.hostId, joined: false }));
-
-            console.log("creating userId but no username yet");
+            console.log("creating userId but no username yet"); // is this message still right?
             // if (ws.isHost) { // without this, later players joining become the host
             //     currentTurnPlayerId = clientMsg.userId; // TODO surely we can set this later? as just the first player in players list?
             //     hostId = clientMsg.userId; // just use ws.userId here?
@@ -738,7 +767,24 @@ function enterRoom(game: Game, clientMsg: CreateMessage | EnterMessage, ws: Exte
             // have to reassign userId because what if someone refreshes? have to ignore the init message // TODO rethink this in the context of join/ enter
             // need to assign ws.userId because it's used to check clientId === id on server
             ws.userId = clientMsg.userId; // TODO need this??
-            players.set(clientMsg.userId, new Player(clientMsg.userId, game.roomCode, clientMsg.color)); // TODO sanitize clientMsg.username to standards
+            
+            let color;
+            let emoji;
+            // assign color and emoji to player
+            while (true) {
+                const index = Math.floor(Math.random() * 12);
+                if (index in game.usedColors) {
+                    continue;
+                } else {
+                    color = `hsl(${index * 30}, 100%, 70%)`;
+                    emoji = emojis[index];
+                    break;
+                }
+            }
+
+            players.set(clientMsg.userId, new Player(clientMsg.userId, game.roomCode, color)); // TODO sanitize clientMsg.username to standards
+            players.get(clientMsg.userId)!.emoji = emoji;
+            ws.send(JSON.stringify({ type: "room-entered", roomCode: game.roomCode, hostId: game.hostId, joined: false, color: color }));
 
             console.log([...players].filter(([id, player]) => player.roomCode === game.roomCode));
             
@@ -983,8 +1029,10 @@ function sendSocketMessageThatPlayerFolded(roomCode: string, foldedUserId: strin
             client.send(JSON.stringify({
                 type: "player-folded",
                 id: foldedUserId,
+                color: foldedPlayer.color!,
                 username: foldedPlayer.username,
-                hand: handToSend
+                hand: handToSend,
+                chipCount: foldedPlayer.chipCount
             }));
         }
     })
@@ -1058,7 +1106,8 @@ function initializeHand(game: Game) { // means start a hand of play
         if (!playerToSendMessage) return;
         if (client.readyState === WebSocket.OPEN && playerToSendMessage.roomCode === game.roomCode) {
             const payload = JSON.stringify({ 
-                type: "deal", 
+                type: "deal",
+                color: players.get(client.userId)!.color!,
                 // something to do with client.userId not equaling anyone's userId
                 chipCount: playerToSendMessage.chipCount, 
                 id: client.userId, 
@@ -1105,6 +1154,7 @@ function endBettingRound(game: Game) {
 interface DealPayload {
     type: "deal";
     id: string;
+    color: string; // remove this and don't have color come through each time? what about players rejoining though...
     username: string;
     chipCount: number;
     multiplicationCardDealt: boolean;
@@ -1119,6 +1169,7 @@ function notifyPlayerOfNewlyDealtCards(playerDealtTo: Player, playerNotifying: P
             let payload: DealPayload = {
                 type: "deal",
                 id: playerDealtTo.id,
+                color: playerDealtTo.color!,
                 username: playerDealtTo.username!,
                 chipCount: playerDealtTo.chipCount,
                 multiplicationCardDealt: multiplicationCardDealt,
@@ -1148,6 +1199,7 @@ function notifyAllPlayersOfNewlyDealtCards(roomCode: string, player: Player, mul
         if (players.get(client.userId)?.roomCode === roomCode) { // just change to client.userId in room map?
             let payload: DealPayload = {
                 type: "deal",
+                color: player.color!,
                 id: player.id,
                 username: player.username!,
                 chipCount: player.chipCount,
@@ -1590,6 +1642,7 @@ export function determineWinners(game: Game) { // this is determineWinners and s
 
     let results = [...nonFoldedPlayers(game).values()].map(player => ({
         id: player.id,
+        color: player.color,
         chipCount: player.chipCount,
         chipDifferential: swingBetterWon ? player.id === loWinnerOfSwingBetters?.id ? loWinnerChipsDelta : 0 :
             player.id === hiWinner?.id ? hiWinnerChipsDelta : // todo rename to hiWinnerExcludingSwingBetters

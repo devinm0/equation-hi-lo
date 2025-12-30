@@ -238,17 +238,8 @@ body {
 }
 
 .card-highlighted {
-    /* background-color: rgb(252, 252, 170); */
-    background: linear-gradient(
-        215deg, 
-        #ffda0b 0%, 
-        #fffbe7 5%, 
-        #fcf9e5 15%, 
-        #fffb0b 20%
-    );
-    background-size: 200% 100%;
-    animation: shine 2s linear infinite,
-                breathe 2s linear infinite;
+    background-color: rgb(252, 252, 170);
+    animation: breathe 2s linear infinite;
     box-shadow: 4px 4px rgba(255, 215, 0, 0.9);
 }
 
@@ -451,21 +442,16 @@ body {
     position: absolute;
     left: 50%;
     top: 90%;
-    transform: translateX(-50%)
+    transform: translateX(-50%);
+    z-index: 1001;
 }
 
 #confirmResults { /* temp override, clean it up so perhaps confirm equation buttons the same */
     top: 3%;
-    background: linear-gradient(
-        215deg, 
-        #0bff4c 0%, 
-        #8fffb4 5%, 
-        #00ac06 15%, 
-        #9affad 20%
-    );
+    background: linear-gradient(90deg, #0bff4c 0%, #7fffa9 5%, #8fff93 15%, #14dc3a 20%);
     background-size: 200% 100%;
-    -webkit-background-clip: text;
-    -webkit-text-fill-color: transparent;
+    /* -webkit-background-clip: text;
+    -webkit-text-fill-color: transparent; */
     animation: shine 2s linear infinite;
 }
 
@@ -528,7 +514,7 @@ body {
 
 #progressBarOverlay {
     text-align: center;
-    font-size: 18px;
+    font-size: 16px;
     vertical-align: center;
     color: white;
     background-color: transparent;
@@ -721,10 +707,10 @@ body {
 
 @keyframes shine {
     0% {
-        background-position: -200% 0;
+        background-position: 200% 0;
     }
     100% {
-        background-position: 200% 0;
+        background-position: -200% 0;
     }
 }
 
@@ -739,6 +725,10 @@ body {
     opacity: 0;
     transform: translateY(10px);
     animation: chipIn 0.3s ease forwards;
+}
+
+.chip-highlighted {
+    background-color: rgb(255, 187, 78);
 }
 
 @keyframes chipIn {

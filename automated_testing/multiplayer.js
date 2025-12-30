@@ -1,12 +1,14 @@
 import { chromium, devices } from 'playwright';
 
+const NUM_PLAYERS = 3;
+
 async function openTabs() {
     const iPhone = devices['iPhone 12'];
     const iPhonePro = devices['iPhone 15 Pro'];
 
     const browser = await chromium.launch({ headless: false });
 
-    const contexts = await Promise.all([...Array(10)].map(() =>
+    const contexts = await Promise.all([...Array(NUM_PLAYERS)].map(() =>
       browser.newContext({ ...iPhonePro })
     ));
     const pages = await Promise.all(
@@ -39,7 +41,7 @@ async function openTabs() {
       if (index === 0) continue; // hostPage
       await page.fill("#roomCodeInput", roomCode);
       await page.click("#enterRoomButton");
-      await page.fill("#nameInput", index.toString());
+      await page.fill("#nameInput", "Player" + index.toString());
       await page.click("#submitNameButton");
     };
 

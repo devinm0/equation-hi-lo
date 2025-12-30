@@ -47,10 +47,10 @@
         <div id="roomCodeInputContainer">
             <input type="text" id="roomCodeInput" placeholder="Room Code" pattern="^[a-zA-Z0-9]{4}$" required title="Room code does not exist. Room code consists of 4 letters or numbers"/>
             <p id="roomCodeError" style="color: rgb(255, 128, 128);"></p>
-            <button id="enterRoomButton">Join Existing Game</button> <!--TODO change other join button name?-->
+            <button id="enterRoomButton">Enter Room</button> <!--TODO change other join button name?-->
         </div>
         <p id="createRoomInfo" style="color: white;">Otherwise, host a new game here:</p>
-        <button class="button" id="createButton">Create Private Game</button>
+        <button class="button" id="createButton">New Game</button>
     </div>
 
     <div id="uiContainer" class="hidden"> <!--TODO rename to lobbyContainer-->
@@ -60,7 +60,7 @@
         <div id="nameContainer">
             <input type="text" id="nameInput" placeholder="Enter your name" pattern="^[a-zA-Z0-9]{1,12}$" required title="Username consists of 1-12 letters or numbers"/>
             <p id="nameError" style="color: rgb(255, 128, 128);"></p>
-            <button id="submitNameButton">Submit Name</button>
+            <button id="submitNameButton">Join</button>
         </div>
         <button class="button" id="startButton" style="display:none;" disabled>Start Game</button>
     </div>
@@ -131,9 +131,7 @@
             console.log("myId is: ", myId, timestamp, " server message is: ", event.data, " So if the userIds don't match, it means we've rejoined. Discarding the server generated id.");
             if (!myId || !timestamp || now - timestamp > EXPIRATION_TIME) { // nothing in localStorage, means we are new, fill in with server generated user data
                 myId = msg.id;
-                myColor = msg.color;
                 localStorage.setItem(USER_ID_KEY, myId);
-                localStorage.setItem(USER_COLOR_KEY, myColor);
                 localStorage.setItem(TIMESTAMP_KEY, now);
             } else { // items exist in localStorage = we exist = page refreshed
                 // send rejoin socket message
@@ -197,11 +195,10 @@
         case "deal": {
             sounds.play("deal");
 
-            console.log(msg);
             if (msg.id === myId) {
                 myHand = msg.hand;
             }        
-            drawHand(msg.id, msg.username, msg.hand, msg.multiplicationCardDealt);
+            drawHand(msg.id, msg.color, msg.username, msg.hand, msg.multiplicationCardDealt);
         
             if (msg.chipCount !== undefined) {
                 // this should be msg.id I guess. originally I was only using the deal message for myself
@@ -214,8 +211,6 @@
                 // have a guard clause here but might be better to KNOW that I'll only call this once
                 if (!card.classList.contains('listener-added')) {
                     card.addEventListener('click', function() {
-                        console.log('sending a discard message ');
-                        console.log(this);
                         const data = {
                             type: "discard",
                             userId: myId,
@@ -238,7 +233,6 @@
         } 
         
         case "player-joined": {
-            console.log("player-joined");
             drawPlayer(msg.id, msg.color, msg.username, msg.hostId);
 
             numPlayersJoined += 1;
@@ -264,7 +258,6 @@
         } 
         
         case "first-round-betting-commenced": {
-            console.log("First round betting commenced.");
             showNotification("First round betting has commenced.");  
 
             break;
@@ -300,15 +293,17 @@
 
             //     console.log(Date.now());
 
-                drawHand(msg.id, msg.username, msg.hand, false, true);
+            drawHand(msg.id, msg.color, msg.username, msg.hand, false, true);
             // }, 50 * hand.length + 300 );
+            updateChipStack(msg.chipCount, document.getElementById("chipStacksContainer-" + msg.id), null, true);
   
             break;
         } 
         
         case "player-formed-equation": {
             // no new cards are dealt, so we need this special message to make everyone redraw the reordered hands 
-            drawHand(msg.id, msg.username, msg.hand, false, false); 
+            drawHand(msg.id, msg.color, msg.username, msg.hand, false, false); 
+            updateChipStack(msg.chipCount, document.getElementById("chipStacksContainer-" + msg.id));
 
             break;
         } 
@@ -319,7 +314,6 @@
 
             showNotification(msg.username + " bet " + msg.betAmount);
             updateChipStack(msg.chipCount, document.getElementById("chipStacksContainer-" + msg.id));
-
             updatePot(msg.pot);
 
             break;
@@ -410,6 +404,8 @@
             try {
                 equationResult = applyOps(handDivs.get(myId).querySelectorAll('.card'));
                 console.log("265 equationResult " + equationResult);
+
+                submitEquation(equationResult);
             } catch (e) {
                 // bug here. if we sent a good equation early, but then custom send a client message with bad equation, now we fold. server doesn't check for that
                 // i guess it means we should be doing the applyOps on the server side anyway
@@ -417,7 +413,6 @@
                 // actually don't even need to send anything here. server can just handle it
                 socket.send(JSON.stringify({ type: "fold", manual: false }));
             }
-            submitEquation(equationResult);
         }
 
         case "end-equation-forming": {
@@ -538,6 +533,11 @@
         } 
         
         case "room-entered": {
+            if (msg.color) {
+                myColor = msg.color;
+                localStorage.setItem(USER_COLOR_KEY, myColor);
+            }
+
             document.getElementById("homeContainer").classList.add("hidden");
             document.getElementById("uiContainer").classList.remove("hidden");
 
@@ -659,7 +659,7 @@
       location.reload(); // Reload to reset game state
     });
 
-    function drawHand(id, username, hand, multiplicationCardDealt = false, folded = false) {
+    function drawHand(id, color, username, hand, multiplicationCardDealt = false, folded = false) {
         let isRightHand = false;
 
         if (!handDivs.has(id)) { // check if hand has ever been drawn since game start. basically that there is a holder.
@@ -738,6 +738,7 @@
         const nameDiv = document.createElement("div");
         nameDiv.className = "handLabel";
         nameDiv.id = "handLabel-" + id;
+        nameDiv.style.color = color;
         if (folded) {
             nameDiv.classList.add("folded");
         }
@@ -892,7 +893,7 @@
         let handLabel = document.getElementById("handLabel-" + currentTurnPlayerId);
         handLabel.classList.add("card-bounce");
         let handLabelParagraph = handLabel.querySelectorAll("p").forEach(el => {
-            el.style.backgroundColor = "rgb(230, 208, 15)";
+            el.style.backgroundColor = "rgba(230, 208, 15, 0.5)";
         });
     }
 
@@ -926,13 +927,13 @@
     function drawPlayer(id, color, username, hostId) {
         let lobbyPlayerListItem = document.getElementById("lobbyPlayerListItem-" + id);
         if (lobbyPlayerListItem !== null) {
-            lobbyPlayerListItem.innerHTML = `<p>👩‍💻 ${username}</p>` + (hostId === id ? ' (Host)' : '') + (id === myId ? ' (You)' : ''); // injection
+            lobbyPlayerListItem.innerHTML = `<p>${username}</p>` + (hostId === id ? ' (Host)' : '') + (id === myId ? ' (You)' : ''); // injection
         } else {
             let lobbyPlayerListContainer = document.getElementById("lobbyPlayerListContainer");
             const div = document.createElement("div");
             div.id = "lobbyPlayerListItem-" + id;
             div.className = "lobbyPlayerListItem";
-            div.innerHTML = `<p>👩‍💻 ${username}</p>` + (hostId === id ? ' (Host)' : '') + (id === myId ? ' (You)' : ''); // injection
+            div.innerHTML = `<p>${username}</p>` + (hostId === id ? ' (Host)' : '') + (id === myId ? ' (You)' : ''); // injection
             div.style.color = color;
             lobbyPlayerListContainer.appendChild(div);
         }
@@ -996,6 +997,29 @@
         // Show controls
         document.getElementById("bettingControls").style.display = "block";
 
+        function highlightChipsToBet() {
+            const chipStacksContainer = document.getElementById("chipStacksContainer-" + myId);
+            const chips = chipStacksContainer.querySelectorAll(".chip");
+            const betAmount = parseInt(slider.value);
+
+            // Clear previous highlights
+            chips.forEach(chip => {
+                chip.classList.remove("chip-highlighted");
+            });
+
+            // Highlight chips up to betAmount
+            let total = 0;
+            for (let i = chips.length - 1; i >= 0; i--) {
+                const chip = chips[i];
+                total += 1; // each chip represents 1 unit
+                if (total <= betAmount) {
+                    chip.classList.add("chip-highlighted");
+                } else {
+                    break;
+                }
+            }
+        }
+
         slider.oninput = () => {
             const val = parseInt(slider.value);
             console.log(slider.min, slider.max, slider.value);
@@ -1003,6 +1027,7 @@
             betLabel.textContent = "Bet " + val + " (Raise " + (val - toCall) + ")";
             // what if currentBet is null
             callRaiseButton.textContent = val > toCall ? "Raise" : "Call";
+            highlightChipsToBet();
         };
 
         allInButton.onclick = () => {
@@ -1040,11 +1065,15 @@
     const maxStackSize = 10;
     let chipCount = 0;
 
-    function updateChipStack(newCount, containerToUpdate, differential) {
+    function updateChipStack(newCount, containerToUpdate, differential, folded = false) {
         chipCount = newCount;
 
         // Clear all previous stacks and any previous overlay
         containerToUpdate.innerHTML = "";
+        containerToUpdate.classList.remove("folded");
+        if (folded) {
+            containerToUpdate.classList.add("folded");
+        }
 
         // Create and add the overlay for total chip count
         const overlay = document.createElement("div");
@@ -1203,6 +1232,7 @@
             updateChipStack(result.chipCount, document.getElementById("chipStacksContainer-" + result.id), result.chipDifferential);
 
             let nameDiv = document.getElementById("handLabel-" + result.id);
+            nameDiv.style.color = result.color;
             console.log(nameDiv);
             let loOptionDiv = document.getElementById("low-symbol-" + result.id);
             let hiOptionDiv = document.getElementById("high-symbol-" + result.id);

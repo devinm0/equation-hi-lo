@@ -46,7 +46,6 @@
     "skipLibCheck": true,
     "allowJs": true,
     "checkJs": true,   // shows type errors in .js files
-    "outDir": "dist"
   },
   "include": ["./**/*.ts", "**/*.js", "jest.config.mjs"],
   "exclude": ["node_modules", "dist", "public"]

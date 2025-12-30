@@ -16,6 +16,7 @@ export class Game {
   toCall: number;
   phase: GamePhase;
   createdAt: number;
+  usedColors: Set<number>;
 
   constructor() {
     this.roomCode = mintUniqueCode();
@@ -28,6 +29,7 @@ export class Game {
     this.toCall = 0;
     this.phase = GamePhase.LOBBY;
     this.createdAt = Date.now();
+    this.usedColors = new Set<number>();
   }
 }
 
@@ -56,6 +58,7 @@ export class Player {
   lowEquationResult?: number | null;
   highEquationResult?: number | null;
   acknowledgedResults: boolean = false;
+  emoji: string | undefined;
 
   constructor(id: string, roomCode: string, color: string) {
       this.id = id;
