@@ -56,13 +56,13 @@
     <div id="uiContainer" class="hidden"> <!--TODO rename to lobbyContainer-->
         <div id="lobbyTitleContainer">Equation <span style="white-space: nowrap;">Hi Lo</span></div>
         <div id="roomCodeContainer">Room Code:</div>
-        <div id="lobbyPlayerListContainer"></div>
         <div id="nameContainer">
             <input type="text" id="nameInput" placeholder="Enter your name" pattern="^[a-zA-Z0-9]{1,12}$" required title="Username consists of 1-12 letters or numbers"/>
             <p id="nameError" style="color: rgb(255, 128, 128);"></p>
             <button id="submitNameButton">Join</button>
         </div>
         <button class="button" id="startButton" style="display:none;" disabled>Start Game</button>
+        <div id="lobbyPlayerListContainer"></div>
     </div>
 
     <div id="potContainer" style="width:100%; min-height: 90px;">
@@ -299,6 +299,17 @@
   
             break;
         } 
+
+        case "kicked": {
+            sounds.play("eliminated");
+
+            showNotification(msg.username + " is out.");
+
+            drawHand(msg.id, msg.color, msg.username, msg.hand, false, false, true);
+            updateChipStack(msg.chipCount, document.getElementById("chipStacksContainer-" + msg.id), null, true);
+
+            break;
+        }
         
         case "player-formed-equation": {
             // no new cards are dealt, so we need this special message to make everyone redraw the reordered hands 
@@ -345,7 +356,6 @@
                 el.style.backgroundColor = "";
             });
 
-            console.log("socket message end-betting-round");
             if (msg.round === GamePhase.FIRSTBETTING){
                 showNotification('First betting round complete. Dealing last open card');
             } else if (msg.round === GamePhase.SECONDBETTING) {
@@ -359,39 +369,39 @@
         case "commence-equation-forming": {
             sounds.play("start");
 
-            const confirmEquationFormedButton = document.getElementById("confirmEquationFormed");
-            confirmEquationFormedButton.classList.remove("hidden");
-            confirmEquationFormedButton.onclick = () => {
-                let equationResult;
-                const cards = handDivs.get(myId).querySelectorAll('.card');
-                try {
-                    equationResult = applyOps(cards);
-                    console.log(equationResult);
-                } catch (e) {
-                    cards.forEach(card => {
-                        card.classList.remove('blink-red');
-
-                        card.classList.add('blink-red');
-
-                        setTimeout(() => {
-                            card.classList.remove('blink-red');
-                        }, 1200)
-                    });
-
-                    showNotification("Malformed equation, try again.", "red", 5000);
-                    return;
-                }
-                submitEquation(equationResult);
-                confirmEquationFormedButton.classList.add('hidden');
-            };
-
-            console.log("socket message commence-equation-forming");
             beginCountdownNotification();
-            if (msg.folded) {
+
+            if (msg.cannotFormEquation) {
                 showNotification('Other players are forming their equations.');
             } else {
-            showNotification('90 seconds! Drag cards to get close to 1 or 20.', "limegreen", 3000);
-            sortable.option("disabled", false)
+                const confirmEquationFormedButton = document.getElementById("confirmEquationFormed");
+                confirmEquationFormedButton.classList.remove("hidden");
+                confirmEquationFormedButton.onclick = () => {
+                    let equationResult;
+                    const cards = handDivs.get(myId).querySelectorAll('.card');
+                    try {
+                        equationResult = applyOps(cards);
+                        console.log(equationResult);
+                    } catch (e) {
+                        cards.forEach(card => {
+                            card.classList.remove('blink-red');
+
+                            card.classList.add('blink-red');
+
+                            setTimeout(() => {
+                                card.classList.remove('blink-red');
+                            }, 1200)
+                        });
+
+                        showNotification("Malformed equation, try again.", "red", 5000);
+                        return;
+                    }
+                    submitEquation(equationResult);
+                    confirmEquationFormedButton.classList.add('hidden');
+                };
+
+                showNotification('90 seconds! Drag cards to get close to 1 or 20.', "limegreen", 3000);
+                sortable.option("disabled", false)
             }
 
             break;
@@ -659,7 +669,7 @@
       location.reload(); // Reload to reset game state
     });
 
-    function drawHand(id, color, username, hand, multiplicationCardDealt = false, folded = false) {
+    function drawHand(id, color, username, hand, multiplicationCardDealt = false, folded = false, out = false) {
         let isRightHand = false;
 
         if (!handDivs.has(id)) { // check if hand has ever been drawn since game start. basically that there is a holder.
@@ -739,8 +749,11 @@
         nameDiv.className = "handLabel";
         nameDiv.id = "handLabel-" + id;
         nameDiv.style.color = color;
-        if (folded) {
-            nameDiv.classList.add("folded");
+        if (folded || out) {
+            nameDiv.classList.add("folded"); // rename class to greyscale
+        }
+        if (out) {
+            nameDiv.style.textDecoration = "line-through";
         }
         playerInfoDiv.appendChild(nameDiv);
 
@@ -788,6 +801,9 @@
         }
         if (folded) {
             nameSpanContents += ' (folded)'; // injection
+        }
+        if (out) {
+            nameSpanContents += ' (out)'; // injection
         }
         if (multiplicationCardDealt && id !== myId) {
             nameSpanContents += ' (discarding...)';
@@ -1223,134 +1239,140 @@
     // made low hand first, selected high then low
     // made low hand first, selected high then low
     function displayHandResults(msg) {
-        const confirmResults = document.getElementById('confirmResults');
-
-        confirmResults.classList.remove('hidden');
 
         msg.results.forEach(result => {
             console.log(result);
-            updateChipStack(result.chipCount, document.getElementById("chipStacksContainer-" + result.id), result.chipDifferential);
+            if (result.id === myId && result.out !== true) { // out players won't have a result object, so we don't want to require
+            // them to acknowledge the hand results and make others wait on them 
+                const confirmResults = document.getElementById('confirmResults');
 
-            let nameDiv = document.getElementById("handLabel-" + result.id);
-            nameDiv.style.color = result.color;
-            console.log(nameDiv);
-            let loOptionDiv = document.getElementById("low-symbol-" + result.id);
-            let hiOptionDiv = document.getElementById("high-symbol-" + result.id);
-            let trophyDiv = document.getElementById("trophy-" + result.id);
-            const handDiv = handDivs.get(result.id);
-
-            if (result.choices.includes("low")) {
-                loOptionDiv.classList.remove("hidden");
+                confirmResults.classList.remove('hidden');
             }
-            if (result.choices.includes("high")) {
-                hiOptionDiv.classList.remove("hidden");
-            }
-            if (result.isHiWinner) {
-                trophyDiv.classList.remove("hidden");
-                handDiv.classList.add("winner-div");
-                // TODO redraw by indexOf hiWinnerHighCard
-            }
-            if (result.isLoWinner) {
-                trophyDiv.classList.remove("hidden");
-                handDiv.classList.add("winner-div");
-                let nameDiv = document.getElementById("handLabel-" + result.id);
-                // TODO redraw by indexOf currentLowestPlayersLowestCard
+            if (result.out !== true && result.folded !== true) {
 
-            }
-
-            handDiv.querySelectorAll('.card').forEach(el => el.remove());
-
-            if (result.choices.includes("low")) {
-                drawCards(handDiv, result.id, result.lowHand, result.folded, false, result.lowHand?.length);
-
-                const lowCardDiv = document.createElement("div");
-
-                let lowCardDivResultParagraph = document.createElement("p");
-                let lowCardDivDifferenceParagraph = document.createElement("p");
-
-                lowCardDivResultParagraph.className = "result-paragraph"; // without null check, 0 becomes card-back since equivalent to false
-                lowCardDivDifferenceParagraph.className = "difference-paragraph"; // without null check, 0 becomes card-back since equivalent to false
-
-                lowCardDivResultParagraph.innerHTML = "=" + formatNumber(result.lowResult);
-                lowCardDivDifferenceParagraph.innerHTML = "(" + formatNumber(result.lowDifference) + ")";
-
-                lowCardDiv.appendChild(lowCardDivResultParagraph);
-                lowCardDiv.appendChild(lowCardDivDifferenceParagraph);
-
-                lowCardDiv.className = "card"; // without null check, 0 becomes card-back since equivalent to false
-                lowCardDiv.classList.add("difference-card"); // without null check, 0 becomes card-back since equivalent to false
-
-                // if (result.difference >= 10){ // TODO this is different for the refactor
-                //     cardDivResultParagraph.style.transform = 'translateX(-0.7rem)';
-                // }
-
-                handDiv.appendChild(lowCardDiv);
-            }
-
-            // TODO was this for mobile!?
-            // const lineBreakDiv = document.createElement("div");
-            // lineBreakDiv.style.width = "100%";
-            // handDiv.appendChild(lineBreakDiv);
-
-            const otherEquationDiv = document.createElement("div");
-            otherEquationDiv.style.display = "flex";
-            otherEquationDiv.style.flex = "0 0 auto";
-            handDiv.appendChild(otherEquationDiv);
-
-            if (result.choices.includes("high")) {
-                console.log(result.id, result.highHand, result.highHand.length);
-
-                drawCards(otherEquationDiv, result.id, result.highHand, result.folded, false, result.highHand?.length);
+                updateChipStack(result.chipCount, document.getElementById("chipStacksContainer-" + result.id), result.chipDifferential);
 
                 let nameDiv = document.getElementById("handLabel-" + result.id);
+                nameDiv.style.color = result.color;
                 console.log(nameDiv);
-                
-                const hiCardDiv = document.createElement("div");
+                let loOptionDiv = document.getElementById("low-symbol-" + result.id);
+                let hiOptionDiv = document.getElementById("high-symbol-" + result.id);
+                let trophyDiv = document.getElementById("trophy-" + result.id);
+                const handDiv = handDivs.get(result.id);
 
-                let hiCardDivResultParagraph = document.createElement("p");
-                let hiCardDivDifferenceParagraph = document.createElement("p");
+                if (result.choices.includes("low")) {
+                    loOptionDiv.classList.remove("hidden");
+                }
+                if (result.choices.includes("high")) {
+                    hiOptionDiv.classList.remove("hidden");
+                }
+                if (result.isHiWinner) {
+                    trophyDiv.classList.remove("hidden");
+                    handDiv.classList.add("winner-div");
+                    // TODO redraw by indexOf hiWinnerHighCard
+                }
+                if (result.isLoWinner) {
+                    trophyDiv.classList.remove("hidden");
+                    handDiv.classList.add("winner-div");
+                    let nameDiv = document.getElementById("handLabel-" + result.id);
+                    // TODO redraw by indexOf currentLowestPlayersLowestCard
 
-                hiCardDivResultParagraph.className = "result-paragraph"; // without null check, 0 becomes card-back since equivalent to false
-                hiCardDivDifferenceParagraph.className = "difference-paragraph"; // without null check, 0 becomes card-back since equivalent to false
+                }
 
-                console.log(result.highResult);
-                hiCardDivResultParagraph.innerHTML = "=" + formatNumber(result.highResult);
-                hiCardDivDifferenceParagraph.innerHTML = "(" + formatNumber(result.highDifference) + ")";
+                handDiv.querySelectorAll('.card').forEach(el => el.remove());
 
-                hiCardDiv.appendChild(hiCardDivResultParagraph);
-                hiCardDiv.appendChild(hiCardDivDifferenceParagraph);
+                if (result.choices.includes("low")) {
+                    drawCards(handDiv, result.id, result.lowHand, result.folded, false, result.lowHand?.length);
 
-                hiCardDiv.className = "card"; // without null check, 0 becomes card-back since equivalent to false
-                hiCardDiv.classList.add("difference-card"); // without null check, 0 becomes card-back since equivalent to false
+                    const lowCardDiv = document.createElement("div");
 
-                // if (result.difference >= 10){ // TODO this is different for the refactor
-                //     cardDivResultParagraph.style.transform = 'translateX(-0.7rem)';
-                // }
+                    let lowCardDivResultParagraph = document.createElement("p");
+                    let lowCardDivDifferenceParagraph = document.createElement("p");
 
-                otherEquationDiv.appendChild(hiCardDiv);
-            }
+                    lowCardDivResultParagraph.className = "result-paragraph"; // without null check, 0 becomes card-back since equivalent to false
+                    lowCardDivDifferenceParagraph.className = "difference-paragraph"; // without null check, 0 becomes card-back since equivalent to false
 
-            // TODO add id for lowHand and highHand, cuz don't wanna highlight the low tiebreaker card inside the high hand or vice versa
-            // and finally, highlight the tiebreaker card if there is one
-            // TODO this logic won't work if the tiebreaker card is different value
-            // need to check if equationResult is the same, AND THEN just highlight the lowest card
-            // TODO it also won't work if one player has two cards of lowest value. in that case only
-            //  show the lower suit which was their attempt at winning
-            if (result.isLoContender) {
-                const cards = Array.from(handDiv.querySelectorAll('.card'));
-                for (let i = 0; i < cards.length - 1; i++) {
-                    console.log(cards[i].dataset.value, result.lowCard);
-                    if (Number(cards[i].dataset.value) === result.lowCard) {
-                        cards[i].classList.add('card-highlighted');
+                    lowCardDivResultParagraph.innerHTML = "=" + formatNumber(result.lowResult);
+                    lowCardDivDifferenceParagraph.innerHTML = "(" + formatNumber(result.lowDifference) + ")";
+
+                    lowCardDiv.appendChild(lowCardDivResultParagraph);
+                    lowCardDiv.appendChild(lowCardDivDifferenceParagraph);
+
+                    lowCardDiv.className = "card"; // without null check, 0 becomes card-back since equivalent to false
+                    lowCardDiv.classList.add("difference-card"); // without null check, 0 becomes card-back since equivalent to false
+
+                    // if (result.difference >= 10){ // TODO this is different for the refactor
+                    //     cardDivResultParagraph.style.transform = 'translateX(-0.7rem)';
+                    // }
+
+                    handDiv.appendChild(lowCardDiv);
+                }
+
+                // TODO was this for mobile!?
+                // const lineBreakDiv = document.createElement("div");
+                // lineBreakDiv.style.width = "100%";
+                // handDiv.appendChild(lineBreakDiv);
+
+                const otherEquationDiv = document.createElement("div");
+                otherEquationDiv.style.display = "flex";
+                otherEquationDiv.style.flex = "0 0 auto";
+                handDiv.appendChild(otherEquationDiv);
+
+                if (result.choices.includes("high")) {
+                    console.log(result.id, result.highHand, result.highHand.length);
+
+                    drawCards(otherEquationDiv, result.id, result.highHand, result.folded, false, result.highHand?.length);
+
+                    let nameDiv = document.getElementById("handLabel-" + result.id);
+                    console.log(nameDiv);
+                    
+                    const hiCardDiv = document.createElement("div");
+
+                    let hiCardDivResultParagraph = document.createElement("p");
+                    let hiCardDivDifferenceParagraph = document.createElement("p");
+
+                    hiCardDivResultParagraph.className = "result-paragraph"; // without null check, 0 becomes card-back since equivalent to false
+                    hiCardDivDifferenceParagraph.className = "difference-paragraph"; // without null check, 0 becomes card-back since equivalent to false
+
+                    console.log(result.highResult);
+                    hiCardDivResultParagraph.innerHTML = "=" + formatNumber(result.highResult);
+                    hiCardDivDifferenceParagraph.innerHTML = "(" + formatNumber(result.highDifference) + ")";
+
+                    hiCardDiv.appendChild(hiCardDivResultParagraph);
+                    hiCardDiv.appendChild(hiCardDivDifferenceParagraph);
+
+                    hiCardDiv.className = "card"; // without null check, 0 becomes card-back since equivalent to false
+                    hiCardDiv.classList.add("difference-card"); // without null check, 0 becomes card-back since equivalent to false
+
+                    // if (result.difference >= 10){ // TODO this is different for the refactor
+                    //     cardDivResultParagraph.style.transform = 'translateX(-0.7rem)';
+                    // }
+
+                    otherEquationDiv.appendChild(hiCardDiv);
+                }
+
+                // TODO add id for lowHand and highHand, cuz don't wanna highlight the low tiebreaker card inside the high hand or vice versa
+                // and finally, highlight the tiebreaker card if there is one
+                // TODO this logic won't work if the tiebreaker card is different value
+                // need to check if equationResult is the same, AND THEN just highlight the lowest card
+                // TODO it also won't work if one player has two cards of lowest value. in that case only
+                //  show the lower suit which was their attempt at winning
+                if (result.isLoContender) {
+                    const cards = Array.from(handDiv.querySelectorAll('.card'));
+                    for (let i = 0; i < cards.length - 1; i++) {
+                        console.log(cards[i].dataset.value, result.lowCard);
+                        if (Number(cards[i].dataset.value) === result.lowCard) {
+                            cards[i].classList.add('card-highlighted');
+                        }
                     }
                 }
-            }
-            if (result.isHiContender) {
-                const cards = Array.from(otherEquationDiv.querySelectorAll('.card'));
-                for (let i = 0; i < cards.length - 1; i++) {
-                    console.log(cards[i].dataset.value, result.highCard);
-                    if (Number(cards[i].dataset.value) === result.highCard) {
-                        cards[i].classList.add('card-highlighted');
+                if (result.isHiContender) {
+                    const cards = Array.from(otherEquationDiv.querySelectorAll('.card'));
+                    for (let i = 0; i < cards.length - 1; i++) {
+                        console.log(cards[i].dataset.value, result.highCard);
+                        if (Number(cards[i].dataset.value) === result.highCard) {
+                            cards[i].classList.add('card-highlighted');
+                        }
                     }
                 }
             }
@@ -1494,10 +1516,12 @@
         const current = window.pageYOffset;
         const myHand = document.querySelector(".my-hand");
 
-        if (current > lastScroll) {
-            myHand.classList.add("crouched");
-        } else {
-            myHand.classList.remove("crouched");
+        if (myHand) {
+            if (current > lastScroll) {
+                myHand.classList.add("crouched");
+            } else {
+                myHand.classList.remove("crouched");
+            }
         }
 
         lastScroll = current;

@@ -322,6 +322,7 @@ body {
     flex-direction: column;
     align-items: center;
     gap: 16px;
+    max-height: 100vh;
 }
 
 #uiContainer.hidden, #homeContainer.hidden {
@@ -414,6 +415,7 @@ body {
     position: relative;
     overflow: hidden;
     background: rgba(0,0,0,.7);
+    flex-shrink: 0;
 }
 
 #submitNameButton::before {
@@ -920,6 +922,7 @@ body {
         margin: 0px;
         gap: 2px;
         justify-content: center;
+        width: 100%;
     }
 
     .card, .card-back, .small-hand .card, .small-hand .card-back {
