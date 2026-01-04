@@ -17,6 +17,9 @@ export class Game {
   phase: GamePhase;
   createdAt: number;
   usedColors: Set<number>;
+  equationEndTime: number = 0;
+  endEquationFormingTimeout?: NodeJS.Timeout; // TODO make this game.endEquationFormingTimeout
+  results: any[] = []; // TODO type this better
 
   constructor() {
     this.roomCode = mintUniqueCode();

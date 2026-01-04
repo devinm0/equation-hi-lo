@@ -31,7 +31,8 @@ let players = new Map<string, Player>();
 const emojis = ['💀','❤️','😎','💩','👽','🧠','🐸','🍄','🪐','🔥','❄️','🍩']; 
 const RATE_LIMIT = 20;
 const INTERVAL = 10000;
-let endEquationFormingTimeout: NodeJS.Timeout;
+const EQUATION_DURATION =
+  (process.env.GAME_MODE === 'debug' ? 20 : 90) * 1000;
 
 interface ExtendedWebSocket extends WebSocket { // LEARN why interface and not class?
     isAlive: boolean;
@@ -538,7 +539,7 @@ wss.on("connection", (ws: ExtendedWebSocket) => { // LEARN pass in extended
 
                 if (nonFoldedAndNotOutPlayers(game).every(player => player.equationResult != null)) {
                     endEquationForming(game);
-                    clearTimeout(endEquationFormingTimeout);
+                    clearTimeout(game.endEquationFormingTimeout);
 
                     if (nonFoldedAndNotOutPlayers(game).length === 1){
                         const onlyRemainingPlayer = nonFoldedAndNotOutPlayers(game)[0];
@@ -753,7 +754,7 @@ function enterRoom(game: Game, clientMsg: CreateMessage | EnterMessage, ws: Exte
         const player = players.get(clientMsg.userId);
 
         console.log(player);
-        if (player) {
+        if (player && player.roomCode === game.roomCode) {
             // TODO how to change the flow so we don't have to trust this
             ws.send(JSON.stringify({ type: "room-entered", roomCode: game.roomCode, hostId: game.hostId, joined: player.username !== null }));
 
@@ -765,6 +766,11 @@ function enterRoom(game: Game, clientMsg: CreateMessage | EnterMessage, ws: Exte
 
             }
         } else {
+            // more test cases - a player in an existing game can change autofilled room code
+            // to join a different game, thus overwriting and leaving that game
+
+            // either there's no player, or a player for a different game and we are joining a new one
+            // so overwrite it
             console.log("creating userId but no username yet"); // is this message still right?
             // if (ws.isHost) { // without this, later players joining become the host
             //     currentTurnPlayerId = clientMsg.userId; // TODO surely we can set this later? as just the first player in players list?
@@ -802,32 +808,102 @@ function enterRoom(game: Game, clientMsg: CreateMessage | EnterMessage, ws: Exte
             logRoomsAndPlayers();
         }
     } else { // gamephase is not lobby
+        // TODO what makes this a "rejoin"? I should have that word, that's what I expected.
         ws.send(JSON.stringify({ type: "room-entered", roomCode: game.roomCode, hostId: game.hostId, joined: true, inProgress: true }));
 
-        const playerToNotify = players.get(ws.userId); // can use ws if not gamephase bc must be true
-        if (!playerToNotify) return;
+        const rejoiningPlayer = players.get(ws.userId); // can use ws if not gamephase bc must be true
+        if (!rejoiningPlayer) return;
 
         // send game state
         switch (game.phase) {
             case GamePhase.FIRSTDEAL:
                 playersInRoom(game.roomCode).forEach(player => {
-                    notifyPlayerOfNewlyDealtCards(player, playerToNotify, player.needToDiscard);
+                    notifyPlayerOfNewlyDealtCards(player, rejoiningPlayer, player.needToDiscard);
                 });
                 break;
             case GamePhase.FIRSTBETTING:
                 playersInRoom(game.roomCode).forEach(player => {
-                    notifyPlayerOfNewlyDealtCards(player, playerToNotify, false);
+                    notifyPlayerOfNewlyDealtCards(player, rejoiningPlayer, false);
                 });
+                // test cases
+                // one player needs to discard. refreshes, still needs to discard
+                // one players has discarded. refreshes, still does not need to
+                // one player needs to discard. different player refreshes, they still see player X discarding
+                // two players need to discard. One discards, each refresh and still see correct state
+
+                // player is betting when toCall > 0. refreshes, still sees correct toCall
+                // player is betting when toCall > 0 and their stake > 0. and sees correct
+
+                // actually don't need the commented code... bc for players whose turn it isn't,
+                // it'll just say "player X is betting" so they'll have context on whose turn it is
+                // TODO rename advance to NotifyItIsPlayersTurn (because it might not actually be advancing)
+                // TODO Also if I refresh when toCall was the ante 1, it is now 0. so just implement ante right
+                // if (rejoiningPlayer.id === game.currentTurnPlayerId) {
+                    // TODO need to notify a player if they are betting or not here
+                    advanceToNextPlayersTurn(game, game.toCall - rejoiningPlayer.stake);
+                // }
                 break;
             case GamePhase.SECONDDEAL:
+                // TODO need to send the pot here as well
+
+                playersInRoom(game.roomCode).forEach(player => {
+                    notifyPlayerOfNewlyDealtCards(player, rejoiningPlayer, player.needToDiscard);
+                });
+                // this happens instantaneously unless there is a discard...
                 break;
             case GamePhase.EQUATIONFORMING:
+                // need to send whether they've locked, and their card order. and the time left
+                // and everyone else's card order. 
+                // TODO players might start refreshing to get the fresh card order, so have it live
+                playersInRoom(game.roomCode).forEach(player => {
+                    notifyPlayerOfNewlyDealtCards(player, rejoiningPlayer, false);
+                });
+                // TODO need to send roomCode as well, it gets lost
+                console.log(getSecondsLeft(game))
+                ws.send(JSON.stringify({ 
+                    type: "commence-equation-forming", 
+                    cannotFormEquation: rejoiningPlayer.equationResult != null, 
+                    remainingSeconds: getSecondsLeft(game),
+                    pot: game.pot
+                }));
                 break;
             case GamePhase.SECONDBETTING:
+                // TODO REALLY need to send the pot here as well
+                playersInRoom(game.roomCode).forEach(player => {
+                    notifyPlayerOfNewlyDealtCards(player, rejoiningPlayer, false);
+                });
+                advanceToNextPlayersTurn(game, game.toCall - rejoiningPlayer.stake);
                 break;
             case GamePhase.HILOSELECTION:
+                // have to send this so the player sees hands after submitting their selection,
+                // while waiting for other players to select
+                playersInRoom(game.roomCode).forEach(player => {
+                    notifyPlayerOfNewlyDealtCards(player, rejoiningPlayer, false);
+                });
+
+                ws.send(JSON.stringify({ 
+                    type: "hi-lo-selection"
+                }));
                 break;
             case GamePhase.RESULTVIEWING:
+                // TODO rewrite index.html to only use msg.results, not hiWinner or loWinner
+                /* 
+                sendSocketMessageToEveryClientInRoom(game.roomCode, {
+                    type: "round-result",
+                    message: message!,
+                    loWinner: loWinner,
+                    hiWinner: hiWinner,
+                    results: results
+                });
+                */
+                playersInRoom(game.roomCode).forEach(player => {
+                    notifyPlayerOfNewlyDealtCards(player, rejoiningPlayer, false);
+                });
+
+                ws.send(JSON.stringify({ 
+                    type: "round-result",
+                    results: game.results
+                }));
                 break;
         }
     }
@@ -1010,6 +1086,7 @@ function endHand(game: Game) {
     clearHands(game.roomCode, playersInRoom(game.roomCode));
     game.maxRaiseReached = false;
     game.handNumber += 1;
+    game.results = [];
 
     playersInRoom(game.roomCode).forEach(player => { // refactor to this.players() which is a function
         if (player.chipCount === 0) {
@@ -1335,11 +1412,12 @@ function commenceEquationForming(game: Game) {
     sendSocketMessageToNonFoldedAndNotOutPlayers(game, { type: "commence-equation-forming" });
     sendSocketMessageToFoldedOrOutPlayers(game, { type: "commence-equation-forming", cannotFormEquation: true });
 
-    endEquationFormingTimeout = setTimeout(() => {
-        endEquationForming(game);
+    game.equationEndTime = Date.now() + EQUATION_DURATION;
 
+    game.endEquationFormingTimeout = setTimeout(() => {
+        endEquationForming(game);
         requestPlayerEquations(game);
-    }, (process.env.GAME_MODE === 'debug' ? 20 : 90) * 1000);
+    }, EQUATION_DURATION);
 }
 
 function endEquationForming(game: Game) {
@@ -1348,6 +1426,11 @@ function endEquationForming(game: Game) {
     });
 }
 
+function getSecondsLeft(game: Game) {
+    const msLeft = game.equationEndTime - Date.now();
+    return Math.max(0, Math.ceil(msLeft / 1000));
+  }
+  
 function requestPlayerEquations(game: Game) {
     console.log("Timer expired for equation forming, notifying clients to receive equation results.");
 
@@ -1679,6 +1762,8 @@ export function determineWinners(game: Game) { // this is determineWinners and s
 
     game.pot = 0; // TODO put this inside of endHand??
 
+    // should I have game.results variable? probably easiest...
+    // need to set it to undefined in endHand
     let results = [...playersInRoom(game.roomCode).values()].map(player => { 
         if (player.out === true || player.foldedThisTurn === true) {
             return ({
@@ -1716,6 +1801,8 @@ export function determineWinners(game: Game) { // this is determineWinners and s
         })
     });
 
+    game.results = results;
+
     sendSocketMessageToEveryClientInRoom(game.roomCode, {
         type: "round-result",
         message: message!,
@@ -1724,7 +1811,7 @@ export function determineWinners(game: Game) { // this is determineWinners and s
         results: results
     });
 
-    return results;
+    return results; // just for unit tests
 }
   
 // TODO above code - test that pot splits correctly, and also if there's only one winner

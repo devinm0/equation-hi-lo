@@ -25,7 +25,7 @@ export default class CountdownTimer {
         }
 
         if (this.progressBarEl) {
-            const width = Math.max(0, (remainingUnrounded * 100) / (this.durationMs / 1000));
+            const width = Math.max(0, (remainingUnrounded * 100) / (/*this.durationMs / 1000*/ 90));
             this.progressBarEl.style.width = width + "%";
         }
 

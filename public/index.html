@@ -14,7 +14,7 @@
     <link href="https://fonts.googleapis.com/css2?family=Uchen&display=swap" rel="stylesheet">
     <link href="https://fonts.googleapis.com/css2?family=Zen+Old+Mincho&display=swap" rel="stylesheet">
     </head>
-<body>
+<body class="show-home-bg">
     <div id="choiceModal" class="modal-overlay hidden">
         <div class="modal">
             <h2>Select Hi, Lo, or Swing Betting</h2>
@@ -40,6 +40,139 @@
     </div>
 
     <div id="notifications"></div>
+
+    <div id="grid-container">
+        <div class="grid">
+            <div class="rect"></div>
+            <div class="rect"></div>
+            <div class="rect"></div>
+            <div class="rect"></div>
+            <div class="rect"></div>
+            <div class="rect"></div>
+            <div class="rect"></div>
+            <div class="rect"></div>
+            <div class="rect"></div>
+            <div class="rect"></div>
+            <div class="rect"></div>
+            <div class="rect"></div>
+            <div class="rect"></div>
+            <div class="rect"></div>
+            <div class="rect"></div>
+            <div class="rect"></div>
+            <div class="rect"></div>
+            <div class="rect"></div>
+            <div class="rect"></div>
+            <div class="rect"></div>
+            <div class="rect"></div>
+            <div class="rect"></div>
+            <div class="rect"></div>
+            <div class="rect"></div>
+            <div class="rect"></div>
+            <div class="rect"></div>
+            <div class="rect"></div>
+            <div class="rect"></div>
+            <div class="rect"></div>
+            <div class="rect"></div>
+            <div class="rect"></div>
+            <div class="rect"></div>
+            <div class="rect"></div>
+            <div class="rect"></div>
+            <div class="rect"></div>
+            <div class="rect"></div>
+            <div class="rect"></div>
+            <div class="rect"></div>
+            <div class="rect"></div>
+            <div class="rect"></div>
+            <div class="rect"></div>
+            <div class="rect"></div>
+            <div class="rect"></div>
+            <div class="rect"></div>
+            <div class="rect"></div>
+            <div class="rect"></div>
+            <div class="rect"></div>
+            <div class="rect"></div>
+            <div class="rect"></div>
+            <div class="rect"></div>
+            <div class="rect"></div>
+            <div class="rect"></div>
+            <div class="rect"></div>
+            <div class="rect"></div>
+            <div class="rect"></div>
+            <div class="rect"></div>
+            <div class="rect"></div>
+            <div class="rect"></div>
+            <div class="rect"></div>
+            <div class="rect"></div>
+            <div class="rect"></div>
+            <div class="rect"></div>
+            <div class="rect"></div>
+            <div class="rect"></div>
+            <div class="rect"></div>
+            <div class="rect"></div>
+            <div class="rect"></div>
+            <div class="rect"></div>
+            <div class="rect"></div>
+            <div class="rect"></div>
+            <div class="rect"></div>
+            <div class="rect"></div>
+            <div class="rect"></div>
+            <div class="rect"></div>
+            <div class="rect"></div>
+            <div class="rect"></div>
+            <div class="rect"></div>
+            <div class="rect"></div>
+            <div class="rect"></div>
+            <div class="rect"></div>
+            <div class="rect"></div>
+            <div class="rect"></div>
+            <div class="rect"></div>
+            <div class="rect"></div>
+            <div class="rect"></div>
+            <div class="rect"></div>
+            <div class="rect"></div>
+            <div class="rect"></div>
+            <div class="rect"></div>
+            <div class="rect"></div>
+            <div class="rect"></div>
+            <div class="rect"></div>
+            <div class="rect"></div>
+            <div class="rect"></div>
+            <div class="rect"></div>
+            <div class="rect"></div>
+            <div class="rect"></div>
+            <div class="rect"></div>
+            <div class="rect"></div>
+            <div class="rect"></div>
+            <div class="rect"></div>
+            <div class="rect"></div>
+            <div class="rect"></div>
+            <div class="rect"></div>
+            <div class="rect"></div>
+            <div class="rect"></div>
+            <div class="rect"></div>
+            <div class="rect"></div>
+            <div class="rect"></div>
+            <div class="rect"></div>
+            <div class="rect"></div>
+            <div class="rect"></div>
+            <div class="rect"></div>
+            <div class="rect"></div>
+            <div class="rect"></div>
+            <div class="rect"></div>
+            <div class="rect"></div>
+            <div class="rect"></div>
+            <div class="rect"></div>
+            <div class="rect"></div>
+            <div class="rect"></div>
+            <div class="rect"></div>
+            <div class="rect"></div>
+            <div class="rect"></div>
+            <div class="rect"></div>
+            <div class="rect"></div>
+            <div class="rect"></div>
+            <div class="rect"></div>
+        </div>
+    </div>
 
     <div id="homeContainer"> <!--TODO rename to uiContainer-->
         <div id="homeTitleContainer">Equation <span style="white-space: nowrap;">Hi Lo</span></div>
@@ -98,7 +231,6 @@
     const progressBar = document.getElementById("progressBar");
     const progressBarOverlay = document.getElementById("progressBarOverlay");
 
-    const timer = new CountdownTimer(90 * 1000, progressBar, progressBarOverlay);
     const sounds = new SoundManager();
 
     const socket = new WebSocket(`wss://equationhi.lol`);
@@ -119,6 +251,11 @@
     let myHand = null; // TODO this needs to be a serialized object
     let sortable = null; // allows for rearranging our hand to form the equation
     let numPlayersJoined = 0;
+
+    const rects = document.querySelectorAll('.rect');
+    rects.forEach(rect => {
+        rect.textContent = Math.floor(Math.random() * 10);
+    });
 
     socket.addEventListener("message", (event) => {
       const msg = JSON.parse(event.data);
@@ -164,6 +301,7 @@
             // document.getElementById("leaveButton").style.display = "block";
             document.getElementById("lobbyPlayerListContainer").remove();
             document.getElementById("lobbyTitleContainer").remove();
+            document.getElementById("uiContainer").classList.add("hidden");
             showNotification('The game has started!');
 
             break;
@@ -369,7 +507,13 @@
         case "commence-equation-forming": {
             sounds.play("start");
 
-            beginCountdownNotification();
+            beginCountdownNotification(msg.remainingSeconds ?? 90);
+            
+            if (msg.pot) {
+                updatePot(msg.pot); 
+                // otherwise rejoining user sees blank pot. 
+                // probably better to factor this out into separate message
+            }
 
             if (msg.cannotFormEquation) {
                 showNotification('Other players are forming their equations.');
@@ -400,12 +544,12 @@
                     confirmEquationFormedButton.classList.add('hidden');
                 };
 
-                showNotification('90 seconds! Drag cards to get close to 1 or 20.', "limegreen", 3000);
+                showNotification(`${msg.remainingSeconds ?? 90} seconds! Drag cards to get close to 1 or 20.`, "limegreen", 3000);
                 sortable.option("disabled", false)
             }
 
             break;
-        } 
+        }
         
         case "request-formed-equation": {
             showNotification('Time is up!');
@@ -523,7 +667,7 @@
                 sounds.play("win");
             }
             showNotification(msg.message, "limegreen", 10000);
-            updatePot(0);
+            updatePot(0); // maybe breaking here?
 
             // in the case of everyone but one folding, we don't need to show results. Same for everyone failing to form equation
             if (! msg.becauseAllButOneFolded && ! msg.becauseNoOneFormedEquation) {
@@ -619,6 +763,9 @@
 
     document.getElementById("enterRoomButton").addEventListener("click", () => { // TODO rename to enter room button?
         // if (myName === null || myName === undefined) { // server prevents username being set twice
+            document.getElementById("grid-container").classList.add("hidden");
+            document.body.classList.remove("show-home-bg");
+        
             const roomCodeInput = document.getElementById("roomCodeInput");
             const error = document.getElementById("roomCodeError");
 
@@ -647,6 +794,9 @@
     });
 
     document.getElementById("createButton").addEventListener("click", () => {
+        document.getElementById("grid-container").classList.add("hidden");
+        document.body.classList.remove("show-home-bg");
+
         console.log("myId " + myId);
 
         socket.send(JSON.stringify({ type: "create", userId: myId, color: myColor }));
@@ -913,7 +1063,7 @@
         });
     }
 
-    function beginCountdownNotification() {
+    function beginCountdownNotification(secondsRemaining) {
         let progressBarWrapper = document.getElementById("progressBarWrapper");
         progressBarWrapper.style.display = "block";
 
@@ -922,9 +1072,12 @@
 
         let progressBar = document.getElementById("progressBar");
         progressBar.style.display = "block";
-        progressBar.style.width = "100%";
+        progressBar.style.width = secondsRemaining / 90 * 100 + "%";
         progressBar.style.borderRadius = "10px";
+        progressBar.style.animationDelay = `-${90 - secondsRemaining}s`;
 
+        // TODO change to game.timer (need one for each game)
+        const timer = new CountdownTimer(secondsRemaining * 1000, progressBar, progressBarOverlay);
         timer.start(); // only call once because it call requestAnimationFrame recursively
     }
 

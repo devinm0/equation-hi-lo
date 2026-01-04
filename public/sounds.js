@@ -20,6 +20,7 @@ export class SoundManager {
       this.add("newhand", "./sounds/newhand.wav", 0.6);
       this.add("start", "./sounds/start.wav", 0.1);
       this.add("end", "./sounds/end.wav", 0.1);
+      this.add("eliminated", "./sounds/eliminated.wav", 0.1);
 
       // Unlock audio on first user interaction
       const unlockHandler = () => {
