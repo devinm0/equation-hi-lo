@@ -15,6 +15,7 @@ body {
     position: absolute;
     pointer-events: none;
 }
+
 #grid-container {
     position: fixed;
     top: 0;
@@ -91,7 +92,7 @@ body.show-home-bg .grid-container {
     display: flex;
     /* gap: 4px; */
     flex-wrap: wrap;
-    touch-action: none;
+    touch-action: pan-y;
     margin-left: 16px;
     margin-right: 16px;
 }
@@ -118,6 +119,7 @@ body.show-home-bg .grid-container {
     padding-bottom: 80px;
     padding-top: 14px;
     transition: transform 0.4s cubic-bezier(0.06, 0.72, 0, 0.96);
+    touch-action: pan-y;
 }
 
 .crouched {
@@ -216,7 +218,7 @@ body.show-home-bg .grid-container {
     color: black;
     margin: 8px;
     user-select: none;
-    touch-action: manipulation;
+    touch-action: pan-y;
     overflow: hidden;
     position: relative;
 }
@@ -368,7 +370,7 @@ body.show-home-bg .grid-container {
     gap: 16px;
     max-height: 100vh;
     background: rgba(0, 100, 105, .8);
-    border-radius: 16px;
+    border-radius: 24px;
     padding: 16px;
 }
 

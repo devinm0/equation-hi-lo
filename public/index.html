@@ -738,7 +738,9 @@
         console.log(error);
         const regex = /^[a-zA-Z0-9]{1,12}$/;
 
-        if (!regex.test(nameInput.value)) {
+        const input = nameInput.value.trim();
+
+        if (!regex.test(input)) {
             console.log("Must be 1-12 alphanumeric characters.");
             error.textContent = "Must be 1-12 alphanumeric characters.";
         } else {
@@ -746,7 +748,7 @@
 
             error.textContent = "";
         
-            myName = nameInput.value; //.trim();
+            myName = input; //.trim();
             localStorage.setItem('userName', myName);
 
             const data = {
