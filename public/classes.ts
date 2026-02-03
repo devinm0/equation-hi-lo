@@ -45,6 +45,7 @@ export class Player {
   stake: number = 0; // the total chips a player has added to the pot for a given betting round
   turnTakenThisRound: boolean = false;
   equationResult?: number | null;
+  isLockedIn: boolean = false;
   betAmount: number = 0;
   choices: string[] = []; // TODO make choice type / enum
   out: boolean = false;

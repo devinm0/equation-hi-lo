@@ -71,12 +71,17 @@ interface FoldMessage {
     manual: boolean;
 }
 
-interface EquationResultMessage {
-    type: "equation-result";
+interface HandOrderMessage {
+    type: "hand-order";
     userId: string;
     username: string;
-    result: number;
     order: number[];
+}
+
+interface LockInMessage {
+    type: "lock-in";
+    userId: string;
+    username: string;
 }
 
 interface HiLoSelectedMessage {
@@ -126,7 +131,8 @@ type ClientMessage =
     | RefreshMessage 
     | DiscardMessage 
     | FoldMessage 
-    | EquationResultMessage 
+    | HandOrderMessage 
+    | LockInMessage
     | HiLoSelectedMessage 
     | JoinMessage 
     | EnterMessage 
@@ -148,7 +154,6 @@ type ServerMessage =
     | FirstRoundBettingCommencedMessage
     | SecondRoundBettingCommencedMessage
     | EndEquationFormingMessage
-    | RequestFormedEquationMessage
     | HiLoSelectionMessage
     | ChipDistributionMessage
     | RoundResultMessage
@@ -228,10 +233,6 @@ interface KickedMessage {
 
 interface EndEquationFormingMessage {
     type: "end-equation-forming"
-}
-
-interface RequestFormedEquationMessage {
-    type: "request-formed-equation", 
 }
 
 interface ChipDistributionMessage {
@@ -498,28 +499,19 @@ wss.on("connection", (ws: ExtendedWebSocket) => { // LEARN pass in extended
                 endRoundOrProceedToNextPlayer(game, justPlayedPlayer);
                 break;
             }
-
             // TODO more tests - have a folded player submit an equation anyway and confirm it's discarded by server.
-            case "equation-result": {
+            case "hand-order": {
                 // definitely DON'T want to tell everyone what the results are yet
                 const player = players.get(clientMsg.userId);
                 if (!player) return;
                 const game = games.get(player.roomCode);
                 if (!game) return;
 
-                if (player.equationResult != null) { // duplicate message
-                    return;
-                }
                 if (game.phase !== GamePhase.EQUATIONFORMING) {
                     return;
                 }
-                // a folded player may have manually sent a formed equation despite not given the opportunity, just ignore
-                // if (player.foldedThisTurn) { return; }
-                console.log("equation-result received " + clientMsg.result);
-
-                player.hand = clientMsg.order.map(i => player.hand[i]!); // TODO actually throw if any are undefined
-                player.equationResult = clientMsg.result;
-
+                player.hand = clientMsg.order.map(i => player.hand[i]!);
+                
                 // let everyone else know I've moved my cards, so they can see the order.
                 wss.clients.forEach((c) => {
                     const client = c as ExtendedWebSocket; // TODO better to have Map then I guess?
@@ -527,7 +519,7 @@ wss.on("connection", (ws: ExtendedWebSocket) => { // LEARN pass in extended
                     
                     if (/*client !== ws && */client.readyState === WebSocket.OPEN && player.roomCode === player.roomCode) { //some kind of clientsInRoom function
                         client.send(JSON.stringify({
-                            type: "player-formed-equation",
+                            type: "player-reordered-hand",
                             id: clientMsg.userId,
                             color: player.color!,
                             username: player.username,
@@ -536,35 +528,43 @@ wss.on("connection", (ws: ExtendedWebSocket) => { // LEARN pass in extended
                         }));
                     }
                 })
+                break;
+            }
 
-                if (nonFoldedAndNotOutPlayers(game).every(player => player.equationResult != null)) {
-                    endEquationForming(game);
+            case "lock-in": {
+                const player = players.get(clientMsg.userId);
+                if (!player) return;
+                const game = games.get(player.roomCode);
+                if (!game) return;
+
+                if (game.phase !== GamePhase.EQUATIONFORMING) {
+                    return;
+                }
+
+                player.isLockedIn = true;
+
+                // TODO send this. Also need to send it for every locked in player to a rejoining player
+                // wss.clients.forEach((c) => {
+                //     const client = c as ExtendedWebSocket; // TODO better to have Map then I guess?
+                //     let handToSend = getHandToSendFromHand(player.hand, client.userId === clientMsg.userId);
+                    
+                //     if (client.userId !== player.id && client.readyState === WebSocket.OPEN && player.roomCode === player.roomCode) { //some kind of clientsInRoom function
+                //         client.send(JSON.stringify({
+                //             type: "player-locked-in",
+                //             id: clientMsg.userId,
+                //             color: player.color!,
+                //             username: player.username,
+                //             chipCount: player.chipCount,
+                //             hand: handToSend
+                //         }));
+                //     }
+                // })
+
+                if (nonFoldedAndNotOutPlayers(game).every(player => player.isLockedIn === true)) {
+                    endEquationForming(game); 
                     clearTimeout(game.endEquationFormingTimeout);
 
-                    if (nonFoldedAndNotOutPlayers(game).length === 1){
-                        const onlyRemainingPlayer = nonFoldedAndNotOutPlayers(game)[0];
-                        if (!onlyRemainingPlayer) return;
-
-                        distributePotToOnlyRemainingPlayer(game, onlyRemainingPlayer);
-                        return;
-                    }
-                
-                    /* TODO DRY with below. call it DetermineIfSecondRoundOrHiLoSelection */
-                    // I feel like there could be a bug here. Let's say everyone submits there equations early.
-                    // so we are hitting this code, and about to progress to hiloselection
-                    // but if the interval runs out in that time in between, we send end equation socket message
-                    // and everyone will resend equation results.
-                    if (game.maxRaiseReached) {
-                        console.log('Max bet was reached on first round of betting. Skipping second round.');
-
-                        sendSocketMessageToEveryClientInRoom(game.roomCode, { type: "second-round-betting-skipped" });
-
-                        commenceHiLoSelection(game);
-                    } else {
-                        console.log('All equations received. Proceeding to second round of betting.');
-
-                        commenceSecondRoundBetting(game);
-                    }
+                    checkIfOneRemainingPlayerOrMaxRaiseReachedOrProceedToSecondRoundBetting(game);
                 }
                 break;
             }
@@ -574,78 +574,12 @@ wss.on("connection", (ws: ExtendedWebSocket) => { // LEARN pass in extended
                 if (!foldedPlayer) return;
                 const game = games.get(foldedPlayer.roomCode); // remove when going to OOP?
                 if (!game) return;
-                
-                // can only fold in these 3 phases
-                if (game.phase !== GamePhase.FIRSTBETTING && game.phase !== GamePhase.SECONDBETTING && game.phase !== GamePhase.EQUATIONFORMING) {
+                    // can only fold in these 3 phases
+                    if (game.phase !== GamePhase.FIRSTBETTING && game.phase !== GamePhase.SECONDBETTING && game.phase !== GamePhase.EQUATIONFORMING) {
                     return;
                 }
-                
-                foldedPlayer.foldedThisTurn = true;
-                foldedPlayer.hand.forEach(card => {
-                    card.hidden = true;
-                });
 
-                sendSocketMessageThatPlayerFolded(foldedPlayer.roomCode, foldedPlayer.id);
-                
-                // two cases to check:
-
-                // player manually folded in first betting round, and there's only one player left, go ahead and distribute pot
-                if (clientMsg.manual === true || 
-                    // if we've received equation result socket messages from every player, we can proceed to second round of betting.
-                    // this check must be inside the parent if loop, otherwise we may have a case where no one submitted an equation,
-                    // so whichever client is last to have its message received actually takes the whole pot
-                    nonFoldedAndNotOutPlayers(game).every(player => player.equationResult != null)) 
-                {
-                    // TODO I think this if statement only can be moved outside the parent if. No way to race condition to 0
-                    if (nonFoldedAndNotOutPlayers(game).length === 0){
-                        returnChipsToAllPlayers(game);
-                        return;
-                    }
-
-                    if (nonFoldedAndNotOutPlayers(game).length === 1){
-                        const onlyRemainingPlayer = nonFoldedAndNotOutPlayers(game)[0];
-                        if (!onlyRemainingPlayer) return;
-
-                        distributePotToOnlyRemainingPlayer(game, onlyRemainingPlayer);
-                        return;
-                    }
-
-                    // more tests
-                    // everyone but one submits equations early, last person is invalid and folds. make sure betting controls still shown
-                    // one person submits early, one person submits valid with ending tiemout, and one person folds
-                    // one person submits early, 2 people fold
-                    // all people fold
-
-                    /* TODO this is repeated */
-
-                    // this is the case that everyone force submitted equations except one person,
-                    // so they folded on equation submission
-                    // we have to wrap in a check for gamephase.equationforming because, if two people go all in in 1st round betting, and one folds,
-                    // without this check, we'd proceed to hi lo selection before going to equation forming
-
-                    // I feel like there could be a bug here. Let's say everyone submits there equations early.
-                    // so we are hitting this code, and about to progress to hiloselection
-                    // but if the interval runs out in that time in between, we send end equation socket message
-                    // and everyone will resend equation results.
-                    if (game.phase === GamePhase.EQUATIONFORMING) {
-                        if (game.maxRaiseReached) {
-                            console.log('Max bet was reached on first round of betting. Skipping second round.');
-
-                            sendSocketMessageToEveryClientInRoom(game.roomCode, { type: "second-round-betting-skipped" });
-
-                            commenceHiLoSelection(game);
-                        } else {
-                            console.log('All equations received. Proceeding to second round of betting.');
-
-                            commenceSecondRoundBetting(game);
-                        }
-                    }
-                    /* */
-                }
-
-                if (clientMsg.manual === true) { // TODO unreadable (looks like same condition above but it's not)
-                    endRoundOrProceedToNextPlayer(game, foldedPlayer);
-                }
+                fold(foldedPlayer, clientMsg.manual, game);
                 break;
             }
 
@@ -789,7 +723,7 @@ function enterRoom(game: Game, clientMsg: CreateMessage | EnterMessage, ws: Exte
             // assign color and emoji to player
             while (true) {
                 const index = Math.floor(Math.random() * 12);
-                if (index in game.usedColors) {
+                if (game.usedColors.has(index)) {
                     continue;
                 } else {
                     color = `hsl(${index * 30}, 100%, 70%)`;
@@ -908,6 +842,74 @@ function enterRoom(game: Game, clientMsg: CreateMessage | EnterMessage, ws: Exte
         }
     }
         console.log("made it to sending game state");
+}
+
+function fold(foldedPlayer: Player, manual: Boolean, game: Game) {           
+    foldedPlayer.foldedThisTurn = true;
+    foldedPlayer.hand.forEach(card => {
+        card.hidden = true;
+    });
+
+    sendSocketMessageThatPlayerFolded(foldedPlayer.roomCode, foldedPlayer.id);
+    
+    // two cases to check:
+
+    // player manually folded in first betting round, and there's only one player left, go ahead and distribute pot
+    if (manual === true || 
+        // if we've received equation result socket messages from every player, we can proceed to second round of betting.
+        // this check must be inside the parent if loop, otherwise we may have a case where no one submitted an equation,
+        // so whichever client is last to have its message received actually takes the whole pot
+        nonFoldedAndNotOutPlayers(game).every(player => player.equationResult != null)) 
+    {
+        // TODO I think this if statement only can be moved outside the parent if. No way to race condition to 0
+        if (nonFoldedAndNotOutPlayers(game).length === 0){
+            returnChipsToAllPlayers(game);
+            return;
+        }
+
+        if (nonFoldedAndNotOutPlayers(game).length === 1){
+            const onlyRemainingPlayer = nonFoldedAndNotOutPlayers(game)[0];
+            if (!onlyRemainingPlayer) return;
+
+            distributePotToOnlyRemainingPlayer(game, onlyRemainingPlayer);
+            return;
+        }
+
+        // more tests
+        // everyone but one submits equations early, last person is invalid and folds. make sure betting controls still shown
+        // one person submits early, one person submits valid with ending tiemout, and one person folds
+        // one person submits early, 2 people fold
+        // all people fold
+
+        /* TODO this is repeated */
+
+        // this is the case that everyone force submitted equations except one person,
+        // so they folded on equation submission
+        // we have to wrap in a check for gamephase.equationforming because, if two people go all in in 1st round betting, and one folds,
+        // without this check, we'd proceed to hi lo selection before going to equation forming
+
+        // I feel like there could be a bug here. Let's say everyone submits there equations early.
+        // so we are hitting this code, and about to progress to hiloselection
+        // but if the interval runs out in that time in between, we send end equation socket message
+        // and everyone will resend equation results.
+        if (game.phase === GamePhase.EQUATIONFORMING) {
+            if (game.maxRaiseReached) {
+                console.log('Max bet was reached on first round of betting. Skipping second round.');
+
+                sendSocketMessageToEveryClientInRoom(game.roomCode, { type: "second-round-betting-skipped" });
+
+                commenceHiLoSelection(game);
+            } else {
+                console.log('All equations received. Proceeding to second round of betting.');
+
+                commenceSecondRoundBetting(game);
+            }
+        }
+    }
+
+    if (manual === true) { // TODO unreadable (looks like same condition above but it's not)
+        endRoundOrProceedToNextPlayer(game, foldedPlayer);
+    }
 }
 
 function nonFoldedAndNotOutPlayers(game: Game){
@@ -1104,6 +1106,7 @@ function endHand(game: Game) {
 
         player.foldedThisTurn = false;
         player.equationResult = null;
+        player.isLockedIn = false;
         player.otherEquationResult = null;
         player.lowEquationResult = null;
         player.highEquationResult = null;
@@ -1416,27 +1419,55 @@ function commenceEquationForming(game: Game) {
 
     game.endEquationFormingTimeout = setTimeout(() => {
         endEquationForming(game);
-        requestPlayerEquations(game);
     }, EQUATION_DURATION);
 }
 
 function endEquationForming(game: Game) {
+    players.forEach(player => {
+        try {
+            player.equationResult = applyOps(player.hand);
+
+            console.log("final order received and equationResult calculated " + player.equationResult);
+        } catch (e) {
+            // TODO add test for malformed hand
+            console.log("Malformed equation for player " + player.id);
+
+            fold(player, false, game);
+        }
+    });
+
     sendSocketMessageToEveryClientInRoom(game.roomCode, { // NEED to change this to game
         type: "end-equation-forming"
     });
+
+    checkIfOneRemainingPlayerOrMaxRaiseReachedOrProceedToSecondRoundBetting(game);
+}
+
+function checkIfOneRemainingPlayerOrMaxRaiseReachedOrProceedToSecondRoundBetting(game: Game) {
+    if (nonFoldedAndNotOutPlayers(game).length === 1){
+        const onlyRemainingPlayer = nonFoldedAndNotOutPlayers(game)[0];
+        if (!onlyRemainingPlayer) return;
+
+        distributePotToOnlyRemainingPlayer(game, onlyRemainingPlayer);
+        return;
+    }
+
+    if (game.maxRaiseReached) {
+        console.log('Max bet was reached on first round of betting. Skipping second round.');
+
+        sendSocketMessageToEveryClientInRoom(game.roomCode, { type: "second-round-betting-skipped" });
+
+        commenceHiLoSelection(game);
+    } else {
+        console.log('All equations received. Proceeding to second round of betting.');
+
+        commenceSecondRoundBetting(game);
+    }
 }
 
 function getSecondsLeft(game: Game) {
     const msLeft = game.equationEndTime - Date.now();
     return Math.max(0, Math.ceil(msLeft / 1000));
-  }
-  
-function requestPlayerEquations(game: Game) {
-    console.log("Timer expired for equation forming, notifying clients to receive equation results.");
-
-    sendSocketMessageToNonFoldedAndNotOutPlayers(game, { 
-        type: "request-formed-equation", 
-    });
 }
 
 function commenceHiLoSelection(game: Game) {
@@ -1813,6 +1844,163 @@ export function determineWinners(game: Game) { // this is determineWinners and s
 
     return results; // just for unit tests
 }
+  
+function isNumberCard(
+    value: NumberCard | OperatorCard
+  ): value is NumberCard {
+    return typeof value === "number" && NumberCard[value] !== undefined;
+  }
+  
+  type Op = "+" | "-" | "*" | "/";
+
+  type Token =
+    | { kind: "number"; value: number }
+    | { kind: "op"; value: Op }
+    | { kind: "sqrt" };
+  
+  const precedence: Record<Op, number> = {
+    "+": 1,
+    "-": 1,
+    "*": 2,
+    "/": 2,
+  };
+  
+  function isOpToken(tok: Token | undefined): tok is { kind: "op"; value: Op } {
+    return tok?.kind === "op";
+  }
+  
+  function operatorFromCard(card: OperatorCard): Op | null {
+    switch (card) {
+      case OperatorCard.ADD: return "+";
+      case OperatorCard.SUBTRACT: return "-";
+      case OperatorCard.MULTIPLY: return "*";
+      case OperatorCard.DIVIDE: return "/";
+      default: return null;
+    }
+  }
+  
+  function applyOps(cardElements: Card[]): number {
+    const tokens: Token[] = [];
+  
+    // 1️⃣ Cards → tokens
+    for (const card of cardElements) {
+      const val = card.value;
+      if (val == null) continue;
+  
+      if (isNumberCard(val)) {
+        tokens.push({ kind: "number", value: Number(val) });
+      }
+      else if (val === OperatorCard.ROOT) {
+        tokens.push({ kind: "sqrt" });
+      }
+      else {
+        const op = operatorFromCard(val);
+        if (!op) throw new Error(`Unhandled card value: ${val}`);
+        tokens.push({ kind: "op", value: op });
+      }
+    }
+  
+    if (tokens.length === 0) {
+      throw new Error("Empty expression");
+    }
+  
+    // 2️⃣ Shunting-yard + infix validation
+    const output: Token[] = [];
+    const ops: Token[] = [];
+    let prev: Token | null = null;
+  
+    for (const tok of tokens) {
+  
+      // 🔢 Number
+      if (tok.kind === "number") {
+        // number cannot directly follow another number
+        if (prev?.kind === "number") {
+          throw new Error("Missing operator between numbers");
+        }
+        output.push(tok);
+      }
+  
+      // √ Unary operator
+      else if (tok.kind === "sqrt") {
+        // √ can only appear at start or after another operator
+        if (prev && prev.kind === "number") {
+          throw new Error("√ cannot follow a number");
+        }
+        ops.push(tok);
+      }
+  
+      // ➕ Binary operator
+      else if (tok.kind === "op") {
+        // binary operators must follow a number
+        if (!prev || prev.kind !== "number") {
+          throw new Error(`Operator '${tok.value}' must follow a number`);
+        }
+  
+        while (true) {
+          const top = ops[ops.length - 1];
+          if (!isOpToken(top)) break;
+          if (precedence[top.value] < precedence[tok.value]) break;
+          output.push(ops.pop()!);
+        }
+  
+        ops.push(tok);
+      }
+  
+      prev = tok;
+    }
+  
+    // expression cannot end with an operator or √
+    if (prev && prev.kind !== "number") {
+      throw new Error("Expression cannot end with an operator");
+    }
+  
+    while (ops.length > 0) {
+      output.push(ops.pop()!);
+    }
+  
+    // 3️⃣ Evaluate postfix
+    const stack: number[] = [];
+  
+    for (const tok of output) {
+  
+      if (tok.kind === "number") {
+        stack.push(tok.value);
+      }
+  
+      else if (tok.kind === "sqrt") {
+        const v = stack.pop();
+        if (v === undefined) {
+          throw new Error("√ missing operand");
+        }
+        stack.push(Math.sqrt(v));
+      }
+  
+      else if (tok.kind === "op") {
+        const b = stack.pop();
+        const a = stack.pop();
+        if (a === undefined || b === undefined) {
+          throw new Error("Operator missing operands");
+        }
+  
+        switch (tok.value) {
+          case "+": stack.push(a + b); break;
+          case "-": stack.push(a - b); break;
+          case "*": stack.push(a * b); break;
+          case "/": stack.push(a / b); break;
+        }
+      }
+    }
+  
+    if (stack.length !== 1) {
+      throw new Error("Invalid expression");
+    }
+  
+    const result = stack.pop();
+    if (result === undefined) {
+      throw new Error("Invalid expression");
+    }
+    return result;
+} // TODO tests for applyOps - make sure infix expressions do not count. only root can be unary
   
 // TODO above code - test that pot splits correctly, and also if there's only one winner
 

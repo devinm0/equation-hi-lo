@@ -402,6 +402,9 @@
         } 
         
         case "second-round-betting-commenced": {
+            sortable.option("disabled", true); // need this in case a player was disconnected during end equation forming, and rejoins. 
+                                                // TODO actually need it everywhere... because what if they rejoin during a different phase (maybe they automatically folded and so game
+                                                // can proceed beyond second round betting without their input)
             showNotification("Second round betting has commenced.");
             break;
         } 
@@ -449,7 +452,7 @@
             break;
         }
         
-        case "player-formed-equation": {
+        case "player-reordered-hand": {
             // no new cards are dealt, so we need this special message to make everyone redraw the reordered hands 
             drawHand(msg.id, msg.color, msg.username, msg.hand, false, false); 
             updateChipStack(msg.chipCount, document.getElementById("chipStacksContainer-" + msg.id));
@@ -521,6 +524,7 @@
                 const confirmEquationFormedButton = document.getElementById("confirmEquationFormed");
                 confirmEquationFormedButton.classList.remove("hidden");
                 confirmEquationFormedButton.onclick = () => {
+                    // Leaving this equationResult calculation as a guard from submitting a malformed one early
                     let equationResult;
                     const cards = handDivs.get(myId).querySelectorAll('.card');
                     try {
@@ -540,7 +544,8 @@
                         showNotification("Malformed equation, try again.", "red", 5000);
                         return;
                     }
-                    submitEquation(equationResult);
+                    submitHandOrder();
+                    lockIn();
                     confirmEquationFormedButton.classList.add('hidden');
                 };
 
@@ -551,26 +556,15 @@
             break;
         }
         
-        case "request-formed-equation": {
-            showNotification('Time is up!');
-
-            let equationResult;
-            try {
-                equationResult = applyOps(handDivs.get(myId).querySelectorAll('.card'));
-                console.log("265 equationResult " + equationResult);
-
-                submitEquation(equationResult);
-            } catch (e) {
-                // bug here. if we sent a good equation early, but then custom send a client message with bad equation, now we fold. server doesn't check for that
-                // i guess it means we should be doing the applyOps on the server side anyway
-                showNotification("You were unable to form an equation. You fold automatically.", "red", 5000);
-                // actually don't even need to send anything here. server can just handle it
-                socket.send(JSON.stringify({ type: "fold", manual: false }));
-            }
+        // TODO implement this message
+        case "player-couldnt-form-equation": {
+            showNotification("You were unable to form an equation. You fold automatically.", "red", 5000);
         }
 
         case "end-equation-forming": {
             sounds.play("end");
+
+            sortable.option("disabled", true); // what if someone rejoins after this...
 
             hideProgressBar();
 
@@ -579,20 +573,6 @@
             console.log("socket message end-equation-forming");
             break;
         } 
-        
-        function submitEquation(equationResult) {
-            sortable.option("disabled", true)
-
-            console.log(Array.from(handDivs.get(myId).querySelectorAll('.card')).map(card => card.dataset.id));
-            const data = {
-                type: "equation-result",
-                userId: myId,
-                username: myName,
-                result: equationResult,
-                order: Array.from(handDivs.get(myId).querySelectorAll('.card')).map(card => card.dataset.id)
-            };
-            socket.send(JSON.stringify(data));
-        }
         
         case "hi-lo-selection": {
             showNotification("Select Hi, Lo, or Swing betting.");
@@ -839,6 +819,8 @@
                     disabled: true,
                     forceFallback: true,
                     onEnd: function () {
+                        submitHandOrder();
+
                         const cards = Array.from(div.querySelectorAll('.card'));
                         
                         // Remove old blink class
@@ -1126,7 +1108,7 @@
                 return 'rgb(232, 179, 64)';
                 break;
             case Suit.SILVER:
-                return 'rgb(170, 170, 170)';
+                return 'rgb(190, 190, 190)';
                 break;
             case Suit.BRONZE:
                 return 'rgb(149, 90, 49)';
@@ -1620,6 +1602,26 @@
         setTimeout(() => {
             note.remove();
         }, duration + 300);
+    }
+
+    function submitHandOrder() {
+        console.log(Array.from(handDivs.get(myId).querySelectorAll('.card')).map(card => card.dataset.id));
+        const data = {
+            type: "hand-order",
+            userId: myId,
+            username: myName,
+            order: Array.from(handDivs.get(myId).querySelectorAll('.card')).map(card => card.dataset.id)
+        };
+        socket.send(JSON.stringify(data));
+    }
+
+    function lockIn() {
+        const data = {
+            type: "lock-in",
+            userId: myId,
+            username: myName,
+        };
+        socket.send(JSON.stringify(data));
     }
 
     function drawRootSymbol(id, index, folded) {
