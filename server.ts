@@ -564,7 +564,7 @@ wss.on("connection", (ws: ExtendedWebSocket) => { // LEARN pass in extended
                     endEquationForming(game); 
                     clearTimeout(game.endEquationFormingTimeout);
 
-                    checkIfOneRemainingPlayerOrMaxRaiseReachedOrProceedToSecondRoundBetting(game);
+                    // checkIfOneRemainingPlayerOrMaxRaiseReachedOrProceedToSecondRoundBetting(game);
                 }
                 break;
             }
@@ -1369,7 +1369,9 @@ function advanceToNextPlayersTurn(game: Game, toCall: number) { // should take a
     // Player A bets 10 and then has 20 chips. Player B has 30 chips. Max bet is still 30, not 20. 
     // So add the 10 and 20 to get 30. (Add chips PLUS the chips they have in this round)
     const nonFoldedPlayerChipCounts = nonFoldedAndNotOutPlayers(game).map(player => player.chipCount + player.stake);
-    const maxBet = Math.min(...nonFoldedPlayerChipCounts);
+        // if I raised 9 when I ahd 15, so i have 6 left. This will make the max Bet 15, when it should be 6
+        // but in the other scenario, if I don't add the player stakes, the next 15 player will think max bet is 6 when it should be 15
+    const maxStake = Math.min(...nonFoldedPlayerChipCounts);
     
     // modify this so that we don't trust the client?
     // but technically we do because only currentTurnPlayer can send a betting message.
@@ -1380,14 +1382,14 @@ function advanceToNextPlayersTurn(game: Game, toCall: number) { // should take a
           client.send(JSON.stringify({
             type: "next-turn",
             toCall: toCall, // change to game.toCall and remove second parameter to this method
-            maxBet: maxBet,
+            maxBet: maxStake - players.get(game.currentTurnPlayerId!)!.stake, // need to resubtract player stake here I think
             currentTurnPlayerId: game.currentTurnPlayerId,
             username: players.get(game.currentTurnPlayerId!)!.username,
             playerChipCount: players.get(client.userId)!.chipCount
             // pot: pot
           }));
         }
-    });
+        });
 }
 
 function findNextPlayerTurn(game: Game): string {
@@ -1879,6 +1881,15 @@ function isNumberCard(
     }
   }
   
+  /*
+cases I need to test: 3 players lock in and it proceeds
+2 players lock in or not, but one has a bad hand
+1 player is disconnected, and either their hand was good or bad
+
+applyOps tests: one valid and one invalid. and one with divide by zero
+  */
+
+  // TODO factor this function out to be shared by server and client
   function applyOps(cardElements: Card[]): number {
     const tokens: Token[] = [];
   
