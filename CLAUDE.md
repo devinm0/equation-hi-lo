@@ -77,9 +77,22 @@ No `.env.example` exists yet — add one.
 ```bash
 npm run dev     # nodemon, hot-reload for development
 npm run build   # compile TypeScript
-npm start       # compile enums + start server via tsx (see issue #2 above)
-npm test        # Jest unit tests
+npm start       # start compiled server
+npm test        # Jest unit tests (24 unit tests, uses --experimental-vm-modules + --forceExit)
 ```
+
+## Before Every Commit
+
+Run both test suites and verify manually:
+
+1. **Unit tests:** `npm test` — must pass all 24
+2. **Integration script:** start the server (`npm start`), then in a separate terminal:
+   ```bash
+   node automated_testing/multiplayer.js
+   ```
+   This opens real browser windows simulating 3 players. Walk through a full hand before committing. Requires the server running on `localhost:8080`.
+
+Do not commit if either fails.
 
 ## Deployment Target: AWS EC2 t3.micro (Free Tier)
 

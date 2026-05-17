@@ -1,21 +1,12 @@
 /** @type {import('jest').Config} */
 const config = {
-  globals: {
-    'ts-jest': {
-      useESM: true,
-      tsconfig: {
-        inlineSourceMap: true,
-        inlineSources: true
-      }
-    }
-  },  
   testEnvironment: 'node',
-  transform: {
-      '^.+\\.tsx?$': ['ts-jest', { useESM: true }],
-  },
   extensionsToTreatAsEsm: ['.ts'],
+  transform: {
+    '^.+\\.tsx?$': ['ts-jest', { useESM: true }],
+  },
   moduleNameMapper: {
-      '^(\\.{1,2}/.*)\\.js$': '$1',
+    '^(\\.{1,2}/.*)\\.js$': '$1',
   },
 };
 

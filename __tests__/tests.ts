@@ -1,8 +1,8 @@
 // backend/tests.ts
 // import { sum } from '../sum';
-import { OperatorCard, Suit, NumberCard, GamePhase } from '../enums';
+import { OperatorCard, Suit, NumberCard, GamePhase } from '../enums.js';
 import { Game, Player, Card } from '../public/classes.js';
-import { getHandToSendFromHand, findLowestCard, findHighestCard, findLoWinner, findHiWinner, determineWinnersInternal } from '../server';
+import { getHandToSendFromHand, findLowestCard, findHighestCard, findLoWinner, findHiWinner, determineWinnersInternal } from '../server.js';
 
 test
 .each([
