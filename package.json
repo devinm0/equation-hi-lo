@@ -4,8 +4,8 @@
   "main": "server.js",
   "type": "module",
   "scripts": {
-    "build": "tsc",
-    "start": "npx tsc enums.ts --outDir public --target ES2020 --module NodeNext && npx tsx server.ts",
+    "build": "tsc && npx tsc enums.ts --outDir public --target ES2020 --module NodeNext",
+    "start": "node dist/server.js",
     "dev": "nodemon --ext ts --exec npx tsx server.ts",
     "test": "jest"
   },

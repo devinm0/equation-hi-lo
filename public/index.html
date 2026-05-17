@@ -233,7 +233,8 @@
 
     const sounds = new SoundManager();
 
-    const socket = new WebSocket(`wss://equationhi.lol`);
+    const protocol = window.location.protocol === "https:" ? "wss:" : "ws:";
+    const socket = new WebSocket(`${protocol}//${window.location.host}`);
     const handDivs = new Map(); // map of divs, one for each player
     const handDivsList = []; // ordered list of divs, so that we can draw the user's hand last
     const lobbyPlayerDivs = {}; // list of nametags basically, for game lobby. one per player

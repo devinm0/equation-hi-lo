@@ -3,3 +3,5 @@ node_modules/
 TODO.txt
 equation-hi-lo-keypair.pem
 launch.json
+dist/
+.env
