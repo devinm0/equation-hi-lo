@@ -110,7 +110,7 @@ server {
     ssl_certificate_key /etc/letsencrypt/live/equationhi.lol/privkey.pem;
 
     location / {
-        proxy_pass http://localhost:3000;
+        proxy_pass http://localhost:8080;
         proxy_http_version 1.1;
         proxy_set_header Upgrade $http_upgrade;
         proxy_set_header Connection "upgrade";

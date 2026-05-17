@@ -1,0 +1,108 @@
+Backend split plan (server.ts → src/)
+
+  Proposed layout
+
+  src/
+    server.ts          — Express setup, WebSocket server init, intervals
+    state.ts           — exports `games` Map, `players` Map, `wss`, type re-exports
+    intervals.ts       — heartbeat + room cleanup intervals
+    ws/
+      router.ts        — switch on clientMsg.type, dispatches to handlers
+      broadcast.ts     — sendSocketMessageToEveryClientInRoom, NonFolded variants
+      handlers/
+        lifecycle.ts   — create, enter, join, start, leave, refresh
+        betting.ts     — bet-placed, fold
+        cards.ts       — discard, hand-order
+        flow.ts        — lock-in, hi-lo-selected, acknowledge-hand-results
+    game/
+      rooms.ts         — enterRoom, playersInRoom* helpers, roomCleanup logic
+      lifecycle.ts     — initializeHand, endHand
+      deck.ts          — generateDeck, drawNumberCardFromDeck, drawFromDeck
+      deal.ts          — dealFirstHiddenCardToEachPlayer, dealTwo/dealLast, dealOperatorCards
+      betting.ts       — commenceFirstRoundBetting, commenceSecondRoundBetting,
+                         advanceToNextPlayersTurn, endBettingRound, bettingRoundIsComplete,
+                         fold, checkIfOneRemaining...
+      equation.ts      — commenceEquationForming, endEquationForming, applyOps, isNumberCard
+      selection.ts     — commenceHiLoSelection
+      reveal.ts        — revealHiddenCards, distributePotToOnlyRemainingPlayer,
+                         returnChipsToAllPlayers
+      notify.ts        — notifyPlayerOfNewlyDealtCards, notifyAllPlayersOfNewlyDealtCards,
+                         sendSocketMessageThatPlayerFolded
+    debug/
+      print.ts         — printDeck, printHand, printCard, logRoomsAndPlayers,
+                         ANSI/suit helpers
+
+  Potential breaking points (backend)
+
+  1. ExtendedWebSocket type and ws augmentation — enterRoom takes ExtendedWebSocket. Whatever file defines wss and the augmented type must be importable by every
+  handler. If you split this poorly, you'll hit circular imports.
+  2. Shared mutable Maps (games, players) — These are read and mutated by ~90% of the functions. The split only works if state.ts owns them and every other file
+  imports from it. Risk: if any file accidentally re-declares them or imports from server.ts instead of state.ts, you'll get two divergent in-memory stores and bugs
+  that are murder to debug.
+  3. Cross-phase function calls — endBettingRound calls into commenceEquationForming or commenceHiLoSelection or revealHiddenCards depending on state. endHand may
+  trigger initializeHand. These create a dependency graph that's not a clean tree — likely needs an event emitter or a "phase controller" module to avoid circular
+  imports between betting.ts ↔ equation.ts ↔ selection.ts ↔ reveal.ts.
+  4. ESM .js extension on imports — every new internal import must use .js. We just hit this twice. The whole refactor will be a minefield of similar errors.
+  Mitigation: pin "moduleResolution": "nodenext" in tsconfig — it errors at compile time if extensions are missing rather than failing at runtime.
+  5. fold(player, manual, game) is called from at least three places — discard timeout, manual fold message, and equation-form timeout. Make sure all call sites
+  agree on what "manual" means after the split.
+  6. Timers (setTimeout for equation phase) — currently stored on the Game object. The function that creates them must be in the same module as (or import) the
+  function that clears them. Splitting commenceEquationForming and endEquationForming across files is fine if both touch the same Game property.
+  7. Tests — __tests__/tests.ts imports from server.ts. After the split, update imports to point at the new module locations. Run npm test between every step.
+
+  ---
+  Frontend split plan (index.html → public/)
+  
+  Proposed layout
+
+  public/
+    index.html         — HTML only, single <script type="module" src="./app.js">
+    app.ts             — entry: socket connection, top-level state (myId, myName, etc.),
+                         message router (the big switch on msg.type)
+    ui/
+      modals.ts        — choiceModal show/hide
+      home.ts          — landing page, room create/join form
+      lobby.ts         — pre-game player list, ready states
+      table.ts         — handDivs, lobbyPlayerDivs, hand rendering, seating
+      betting.ts       — bet controls, fold/call/raise/all-in buttons, chip stacks
+      equation.ts      — Sortable.js binding, lock-in button, progress bar/timer integration
+      results.ts       — round result modal, acknowledge button
+      background.ts    — animated rect grid background
+    state.ts           — myId/myName/myColor/myHand, localStorage helpers, EXPIRATION
+    net/
+      socket.ts        — WebSocket creation, send helper, reconnect logic
+      handlers.ts      — switch dispatch (or one handler per case, registered in app.ts)
+    sounds.ts          — (already exists as JS)
+    timer.ts           — (already exists as JS)
+
+  Potential breaking points (frontend)
+
+  1. Massive shared DOM state — every UI section reaches into a shared handDivs Map and DOM elements queried at module load. Splitting this requires either: (a) one
+  module owns the DOM refs and exposes getters, or (b) each UI module queries its own elements lazily. Option (a) is safer.
+  2. socket reference — used in dozens of places to send messages. Must be a singleton importable from net/socket.ts. If two modules accidentally new WebSocket(...)
+  you get duplicate connections.
+  3. Initialization order — localStorage.getItem(...) happens at the very top of the current script. After splitting, modules load in import order — make sure
+  state.ts runs its localStorage reads before app.ts tries to use myId.
+  4. No build step for frontend currently exists end-to-end — classes.ts and utilities.ts are compiled by the backend tsc pass into dist/public/, but the browser
+  loads them from /public/ (served statically). This already works only because the browser is loading from public/ directly — meaning tsc is creating files in
+  dist/public/ that nobody uses, and public/classes.js only exists because... actually let me verify this. If you split index.html into many TS files, you'll need a
+  real frontend build (esbuild) that outputs to public/. Otherwise the browser will request app.js and there'll be no file there.
+  5. The case blocks share local variables across calls — e.g., numPlayersJoined, myHand, sortable, handDivs. After splitting handlers into modules, these need to
+  live in a shared state.ts module, not be re-declared per handler file.
+  6. Sortable.js is loaded via <script src="./sortable.js"> as a global, not as a module. After the split, equation.ts references global Sortable. Either keep the
+  global script tag, or convert Sortable to an ES module import.
+  7. Inline <script type="module"> removal — the moment you change it to <script type="module" src="./app.js">, every line of inline JS is gone in one swoop. Stage
+  this: build app.ts to the point it can do everything the inline script did, then swap. Don't do them piecemeal in the HTML.
+
+  ---
+  Suggested order
+  
+  1. Frontend build pipeline first — add esbuild, set it up to compile public/*.ts → public/*.js and bundle app.ts → app.bundle.js. Verify current code still works.
+  (No refactor yet.)
+  2. Backend state.ts extraction — pull out the Maps and types only. Verify game still runs end-to-end. This is the riskiest step because every other module will
+  depend on it.
+  3. Backend handler extraction by phase — lifecycle, betting, cards, etc. one at a time, running npm test and playing a manual game after each.
+  4. Frontend state.ts extraction — pull out shared variables and localStorage.
+  5. Frontend UI extraction — split app.ts by message-handler case, one section at a time.
+
+  Rule of thumb: each step should be a single commit that leaves the game fully playable. If you can't git bisect it later, the split was too big.

@@ -4,7 +4,8 @@
   "main": "server.js",
   "type": "module",
   "scripts": {
-    "build": "tsc && npx tsc enums.ts --outDir public --target ES2020 --module NodeNext",
+    "build": "tsc && esbuild enums.ts --outfile=public/enums.js --format=esm",
+    "build:client": "esbuild public/app.ts --bundle --outfile=public/app.bundle.js --format=esm --platform=browser",
     "start": "node dist/server.js",
     "dev": "nodemon --ext ts --exec npx tsx server.ts",
     "test": "jest"
@@ -26,6 +27,7 @@
     "@types/jest": "^30.0.0",
     "@types/node": "^24.4.0",
     "@types/ws": "^8.18.1",
+    "esbuild": "^0.28.0",
     "jest": "^30.2.0",
     "nodemon": "^3.1.10",
     "playwright": "^1.56.1",
