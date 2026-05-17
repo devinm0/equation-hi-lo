@@ -8,7 +8,7 @@ export default defineConfig({
     ...devices['iPhone 15 Pro'],
   },
   webServer: {
-    command: 'npm start',
+    command: 'GAME_MODE=debug npm start',
     port: 8080,
     reuseExistingServer: !process.env.CI,
   },
