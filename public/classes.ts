@@ -1,5 +1,5 @@
 import { mintUniqueCode } from "./utilities.js";
-import { GamePhase, NumberCard, OperatorCard, Suit } from "../enums"
+import { GamePhase, NumberCard, OperatorCard, Suit } from "../enums.js"
 
 const startingChipCount = 25;
 
