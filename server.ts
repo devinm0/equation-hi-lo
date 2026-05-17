@@ -1,4 +1,5 @@
 import { OperatorCard, Suit, NumberCard } from './enums.js';
+import { printDeck, printHand, logRoomsAndPlayers } from './debug/print.js';
 import { findNextKeyWithWrap, removeWhitespace } from './public/utilities.js';
 import {
     games, players, emojis, RATE_LIMIT, INTERVAL, EQUATION_DURATION,
@@ -1796,71 +1797,7 @@ applyOps tests: one valid and one invalid. and one with divide by zero
   
 // TODO above code - test that pot splits correctly, and also if there's only one winner
 
-function printDeck(deck: Card[], rows = 10) {
-    console.log("Deck size:", deck.length, "cards.");
 
-    const toPrint: Card[][] = Array.from({ length: rows }, () => [] as Card[]);
-    deck.forEach((card, index) => {
-        toPrint[index % rows]!.push(card);
-    });
-  
-    // Print row by row
-    for (let r = 0; r < rows; r++) {
-        let rowOutput = '';
-        for (let c = 0; c < toPrint[r]!.length; c++) {
-            let card = toPrint[r]![c]
-            if (!card) return;
-            rowOutput += printCard(card);
-        }
-        console.log(rowOutput);
-    }
-}
-
-function printHand(hand: Card[]) {
-    let output = '';
-    for (let c = 0; c < hand.length; c++) {
-        let card = hand[c];
-        if (!card) return;
-        output += printCard(card);
-    }
-    console.log(output);
-}
-
-function printCard(card: Card) {
-    let cardOutput = getStringFromSuit(card.suit!) + ' ' + card.value + ', ';
-    let colorCodedCardOutput = getANSICodeFromSuit(card.suit!) + cardOutput.padEnd(12) + '\x1b[0m'
-    return colorCodedCardOutput;
-}
-
-function getANSICodeFromSuit(suit: number) {
-    switch(suit) {
-        case 0:
-            return '\x1b[90m';
-        case 1:
-            return '\x1b[33m';
-        case 2:
-            return '\x1b[37m';
-        case 3:
-            return '\x1b[33;1m';
-        default: // operators
-            return ''
-    }
-}
-
-function getStringFromSuit(suit: number) {
-    switch(suit) {
-        case 0:
-            return 'Stone';
-        case 1:
-            return 'Bronze';
-        case 2:
-            return 'Silver';
-        case 3:
-            return 'Gold';
-        default: // operators
-            return 'Operator';
-    }
-}
 
 function generateDeck() {
     let deck = [];
@@ -1907,29 +1844,6 @@ export function getHandToSendFromHand(hand: Card[], revealHiddenCard: boolean) {
     return handToSend;
 }
 
-function logRoomsAndPlayers() {
-    console.log("=== Current Rooms & Players ===");
-
-    // build a roomCode → [userId] map
-    const grouped = new Map();
-    for (const [userId, player] of players.entries()) {
-        const roomCode = player.roomCode;
-        if (!grouped.has(roomCode)) {
-            grouped.set(roomCode, []);
-        }
-        grouped.get(roomCode).push(player);
-    }
-
-    // pretty print
-    for (const [roomCode, players] of grouped.entries()) {
-        console.log(`Room ${roomCode}:`);
-        for (const player of players) {
-            console.log(`  - ${player.id} - ${player.username} `);
-        }
-    }
-
-    console.log("================================");
-}
 
 const heartbeatInterval = setInterval(function ping() {
     wss.clients.forEach(function each(c) {
