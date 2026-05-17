@@ -1,4 +1,4 @@
-import { OperatorCard, Suit, NumberCard, GamePhase } from './enums';
+import { OperatorCard, Suit, NumberCard, GamePhase } from './enums.js';
 import { Game, Player, Card } from './public/classes.js';
 import { findNextKeyWithWrap, removeWhitespace } from './public/utilities.js';
 import express from "express";
