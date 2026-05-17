@@ -86,11 +86,7 @@ npm test        # Jest unit tests (24 unit tests, uses --experimental-vm-modules
 Run both test suites and verify manually:
 
 1. **Unit tests:** `npm test` — must pass all 24
-2. **Integration script:** start the server (`npm start`), then in a separate terminal:
-   ```bash
-   node automated_testing/multiplayer.js
-   ```
-   This opens real browser windows simulating 3 players. Walk through a full hand before committing. Requires the server running on `localhost:8080`.
+2. **E2E tests:** `npm run test:e2e` — runs headless, starts server automatically. Use `npm run test:e2e:headed` to watch browsers. Tests 3-player lobby and game start.
 
 Do not commit if either fails.
 
