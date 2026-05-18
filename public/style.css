@@ -22,6 +22,9 @@ body {
     left: 0;
     width: 200%;
     height: 200%;
+}
+
+body.show-home-bg #grid-container {
     animation: scroll 20s linear infinite;
 }
 
