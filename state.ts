@@ -1,11 +1,13 @@
 import { GamePhase } from './enums.js';
 import { Game, Player, Card } from './public/classes.js';
-import { WebSocket } from 'ws';
+import { WebSocket, WebSocketServer } from 'ws';
 
 export { Game, Player, Card, GamePhase };
 
 export let games = new Map<string, Game>();
 export let players = new Map<string, Player>();
+export let wss: WebSocketServer;
+export function setWss(server: WebSocketServer) { wss = server; }
 
 export const emojis = ['💀','❤️','😎','💩','👽','🧠','🐸','🍄','🪐','🔥','❄️','🍩'];
 export const RATE_LIMIT = 20;

@@ -341,7 +341,7 @@
         
             if (msg.chipCount !== undefined) {
                 // this should be msg.id I guess. originally I was only using the deal message for myself
-                updateChipStack(msg.chipCount, document.getElementById("chipStacksContainer-" + msg.id));
+                // updateChipStack(msg.chipCount, document.getElementById("chipStacksContainer-" + msg.id));
             }
             // TODO 5/20
             // need the same bool to only do this with alert.
@@ -437,10 +437,10 @@
 
             drawHand(msg.id, msg.color, msg.username, msg.hand, false, true);
             // }, 50 * hand.length + 300 );
-            updateChipStack(msg.chipCount, document.getElementById("chipStacksContainer-" + msg.id), null, true);
-  
+            // updateChipStack(msg.chipCount, document.getElementById("chipStacksContainer-" + msg.id), null, true);
+
             break;
-        } 
+        }
 
         case "kicked": {
             sounds.play("eliminated");
@@ -448,25 +448,25 @@
             showNotification(msg.username + " is out.");
 
             drawHand(msg.id, msg.color, msg.username, msg.hand, false, false, true);
-            updateChipStack(msg.chipCount, document.getElementById("chipStacksContainer-" + msg.id), null, true);
+            // updateChipStack(msg.chipCount, document.getElementById("chipStacksContainer-" + msg.id), null, true);
 
             break;
         }
-        
+
         case "player-reordered-hand": {
-            // no new cards are dealt, so we need this special message to make everyone redraw the reordered hands 
-            drawHand(msg.id, msg.color, msg.username, msg.hand, false, false); 
-            updateChipStack(msg.chipCount, document.getElementById("chipStacksContainer-" + msg.id));
+            // no new cards are dealt, so we need this special message to make everyone redraw the reordered hands
+            drawHand(msg.id, msg.color, msg.username, msg.hand, false, false);
+            // updateChipStack(msg.chipCount, document.getElementById("chipStacksContainer-" + msg.id));
 
             break;
-        } 
-        
+        }
+
         case "bet-placed": {
             console.log("socket message bet-placed");
             sounds.play(msg.betType);
 
             showNotification(msg.username + " bet " + msg.betAmount);
-            updateChipStack(msg.chipCount, document.getElementById("chipStacksContainer-" + msg.id));
+            // updateChipStack(msg.chipCount, document.getElementById("chipStacksContainer-" + msg.id));
             updatePot(msg.pot);
 
             break;
@@ -1100,7 +1100,7 @@
 
     function updatePot(chipCount) {
         document.getElementById("potDiv").textContent = "Pot";
-        updateChipStack(chipCount, document.getElementById("potChipStacksContainer")); //should rename it to potStacksContainer
+        // updateChipStack(chipCount, document.getElementById("potChipStacksContainer")); //should rename it to potStacksContainer
     }
 
     function getColorFromSuit(suit) {
@@ -1400,7 +1400,7 @@
             }
             if (result.out !== true && result.folded !== true) {
 
-                updateChipStack(result.chipCount, document.getElementById("chipStacksContainer-" + result.id), result.chipDifferential);
+                // updateChipStack(result.chipCount, document.getElementById("chipStacksContainer-" + result.id), result.chipDifferential);
 
                 let nameDiv = document.getElementById("handLabel-" + result.id);
                 nameDiv.style.color = result.color;

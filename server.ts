@@ -9,7 +9,14 @@ import {
     CreateMessage, EnterMessage, JoinMessage, StartMessage, RefreshMessage,
     DiscardMessage, FoldMessage, HandOrderMessage, LockInMessage,
     HiLoSelectedMessage, BetMessage, AcknowledgeHandResultsMessage, LeaveMessage,
+    setWss,
 } from './state.js';
+import {
+    sendSocketMessageToEveryClientInRoom,
+    sendSocketMessageToNonFoldedPlayers,
+    sendSocketMessageToNonFoldedAndNotOutPlayers,
+    sendSocketMessageToFoldedOrOutPlayers,
+} from './ws/broadcast.js';
 import express from "express";
 import http from "http";
 import { WebSocketServer } from 'ws';
@@ -32,6 +39,7 @@ app.use((req, res, next) => {
 
 const server = http.createServer(app);
 const wss = new WebSocketServer({ server });
+setWss(wss);
 
 app.use(express.static("public"));
 
@@ -901,56 +909,6 @@ function sendSocketMessageThatPlayerFolded(roomCode: string, foldedUserId: strin
     })
 }
 
-function sendSocketMessageToEveryClientInRoom(roomCode: string, objectToSend: ServerMessage) {
-    wss.clients.forEach((c) => {
-        const client = c as ExtendedWebSocket; // TODO better to have Map then I guess?
-        // should we retry if not ready state? one missed message could mean game never continues
-        // ? is required on players.get for the following case:
-        //      if someone has gone to the site (opened the tab) but is still on the homepage,
-        //      there is a client and userId, but no player entry for them yet. so players.get will return undefined and therefore there will be no room code
-        if (client.readyState === WebSocket.OPEN && players.get(client.userId)?.roomCode === roomCode /* checking if this player is in the game */) {
-            const payload = JSON.stringify(objectToSend);
-            client.send(payload);
-        }
-    });
-}
-
-// TODO test have one person fold BEFORE equation forming and make sure
-// they don't receive an end-equation-result message
-// then have remaining players fold AFTER and make sure it still ends
-
-function sendSocketMessageToNonFoldedPlayers(game: Game, objectToSend: ServerMessage) {
-    wss.clients.forEach((c) => {
-        const client = c as ExtendedWebSocket; // TODO better to have Map then I guess?
-        // TODO can just use nonFoldedAndNotOutPlayers function here
-        if (!players.get(client.userId)?.foldedThisTurn && client.readyState === WebSocket.OPEN && players.get(client.userId)?.roomCode === game.roomCode) {
-            const payload = JSON.stringify(objectToSend);
-            client.send(payload);
-        }
-    });
-}
-
-// TODO test that hi lo selection ends correctly even with one or more folded players
-function sendSocketMessageToNonFoldedAndNotOutPlayers(game: Game, objectToSend: ServerMessage) {
-    wss.clients.forEach((c) => {
-        const client = c as ExtendedWebSocket; // TODO better to have Map then I guess?
-        // TODO can just use nonFoldedAndNotOutPlayers function here
-        if (!players.get(client.userId)?.foldedThisTurn && !players.get(client.userId)?.out && client.readyState === WebSocket.OPEN && players.get(client.userId)?.roomCode === game.roomCode) {
-            const payload = JSON.stringify(objectToSend);
-            client.send(payload);
-        }
-    });
-}
-
-function sendSocketMessageToFoldedOrOutPlayers(game: Game, objectToSend: ServerMessage) {
-    wss.clients.forEach((c) => {
-        const client = c as ExtendedWebSocket; // TODO better to have Map then I guess?
-        if ((players.get(client.userId)?.foldedThisTurn || players.get(client.userId)?.out) && client.readyState === WebSocket.OPEN && players.get(client.userId)?.roomCode === game.roomCode) {
-            const payload = JSON.stringify(objectToSend);
-            client.send(payload);
-        }
-    });
-}
 
 function initializeHand(game: Game) { // means start a hand of play
     console.log("Initializing hand.");
