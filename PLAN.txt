@@ -134,3 +134,25 @@ Backend split plan (server.ts → src/)
   5. Frontend UI extraction — split app.ts by message-handler case, one section at a time.
 
   Rule of thumb: each step should be a single commit that leaves the game fully playable. If you can't git bisect it later, the split was too big.
+
+  ---
+  Frontend performance (profiled via rAF FPS counter across 5 Playwright windows)
+
+  Findings (May 2026):
+  - updateChipStack disabled → 1fps drops gone, confirms it as the worst offender
+  - Timer bar draw and bulk card dealing still cause drops to ~7fps (main thread / layout)
+
+  P1. Replace per-chip div rendering in updateChipStack
+      Currently: innerHTML="" + one <div class="chip"> per chip, rebuilt on every bet.
+      Fix: keep a single chip-count label + a fixed-height visual bar (e.g. width % of max).
+      Eliminates the innerHTML wipe + reflow + chipIn/chipOut animation cascade.
+
+  P2. Fix timer bar animation to avoid layout
+      Currently: @keyframes progressBar likely animates width, which triggers layout every frame.
+      Fix: animate transform: scaleX() with transform-origin: left instead. The compositor
+      handles transforms without touching layout.
+
+  P3. Batch card DOM inserts with DocumentFragment
+      Currently: each card element is appended individually, causing one reflow per card.
+      With 5 players × 4-5 cards = 20-25 sequential reflows on deal.
+      Fix: build each hand into a DocumentFragment, then append once per hand container.

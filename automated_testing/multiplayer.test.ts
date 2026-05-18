@@ -25,6 +25,25 @@ async function setupPlayers(browser: Browser): Promise<{ pages: Page[]; contexts
     const pages = await Promise.all(contexts.map(ctx => ctx.newPage()));
     await Promise.all(pages.map(page => page.goto('/')));
 
+    // Inject rAF-based FPS counter overlay (headed only)
+    if (!process.env.CI) {
+        await Promise.all(pages.map(page => page.evaluate(() => {
+            const el = document.createElement('div');
+            el.style.cssText = 'position:fixed;top:4px;right:4px;z-index:99999;background:rgba(0,0,0,0.7);color:#0f0;font:bold 11px monospace;padding:2px 5px;border-radius:3px;pointer-events:none';
+            document.documentElement.appendChild(el);
+            let frames = 0, last = performance.now();
+            const tick = (now: number) => {
+                frames++;
+                if (now - last >= 500) {
+                    el.textContent = `${Math.round(frames * 1000 / (now - last))} fps`;
+                    frames = 0; last = now;
+                }
+                requestAnimationFrame(tick);
+            };
+            requestAnimationFrame(tick);
+        })));
+    }
+
     // Position windows in a 3-column grid so none overlap (Chromium headed only)
     const windowW = 430;
     const windowH = 475;
