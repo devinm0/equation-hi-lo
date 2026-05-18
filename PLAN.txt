@@ -101,7 +101,35 @@ Backend split plan (server.ts → src/)
   (No refactor yet.)
   2. Backend state.ts extraction — pull out the Maps and types only. Verify game still runs end-to-end. This is the riskiest step because every other module will
   depend on it.
-  3. Backend handler extraction by phase — lifecycle, betting, cards, etc. one at a time, running npm test and playing a manual game after each.
+  3. Backend handler extraction by phase — one file at a time, ordered leaf-first to avoid circular imports.
+     Run npm test + npm run test:e2e after each sub-step.
+
+     3a. ✅ debug/print.ts       — printDeck, printHand, printCard, logRoomsAndPlayers (done in step 2)
+     3b. game/deck.ts            — generateDeck, drawNumberCardFromDeck, drawFromDeck
+     3c. ws/broadcast.ts         — sendSocketMessageToEveryClientInRoom, sendSocketMessageToFolded/NonFolded
+     3d. game/notify.ts          — notifyAllPlayersOfNewlyDealtCards, notifyPlayerOfNewlyDealtCards,
+                                    sendSocketMessageThatPlayerFolded
+     3e. game/deal.ts            — dealOperatorCards, dealFirstHiddenCardToEachPlayer,
+                                    dealTwoOpenCardsToEachPlayer, dealLastOpenCardToEachPlayer,
+                                    playersThatNeedToDiscard
+     3f. game/rooms.ts           — enterRoom, playersInRoom helpers (activePlayers, nonFolded, etc.),
+                                    roomCleanupInterval logic
+     3g. game/betting.ts         — commenceFirstRoundBetting, commenceSecondRoundBetting,
+                                    advanceToNextPlayersTurn, endBettingRound, bettingRoundIsComplete,
+                                    fold, checkIfOneRemainingPlayerOrMaxRaiseReached...
+     3h. game/equation.ts        — commenceEquationForming, endEquationForming, applyOps,
+                                    operatorFromCard, isNumberCard, Token types
+     3i. game/selection.ts       — commenceHiLoSelection
+     3j. game/reveal.ts          — revealHiddenCards, distributePotToOnlyRemainingPlayer,
+                                    returnChipsToAllPlayers, endHand
+     3k. game/lifecycle.ts       — initializeHand, generateDeck wiring, phase transitions
+     3l. ws/handlers/lifecycle.ts — create, enter, join, start, leave, refresh message handlers
+     3m. ws/handlers/betting.ts   — bet-placed, fold message handlers
+     3n. ws/handlers/cards.ts     — discard, hand-order message handlers
+     3o. ws/handlers/flow.ts      — lock-in, hi-lo-selected, acknowledge-hand-results handlers
+     3p. ws/router.ts             — switch on clientMsg.type, dispatches to handlers
+     3q. intervals.ts             — heartbeat + room cleanup intervals, move out of server.ts
+     3r. Update __tests__/tests.ts imports to point at new module locations
   4. Frontend state.ts extraction — pull out shared variables and localStorage.
   5. Frontend UI extraction — split app.ts by message-handler case, one section at a time.
 

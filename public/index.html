@@ -1332,6 +1332,7 @@
         const exprStr = expr.join(' ');
         try {
             const result = Function(`"use strict"; return (${exprStr})`)();
+            if (!isFinite(result)) throw new Error(`Non-finite result: ${result}`);
             return result;
         } catch (e) {
             console.error("Invalid expression:", exprStr);

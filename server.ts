@@ -370,7 +370,7 @@ wss.on("connection", (ws: ExtendedWebSocket) => { // LEARN pass in extended
                 // TODO need some game phase check here
                 console.log(clientMsg.userId, clientMsg.username, clientMsg.choices, clientMsg.otherEquationResult, clientMsg.order);
                 const player = players.get(ws.userId);
-                if (!player || !player.equationResult) return;
+                if (!player || player.equationResult == null) return;
 
                 player.choices = clientMsg.choices;
 
@@ -1211,11 +1211,15 @@ function endEquationForming(game: Game) {
         try {
             player.equationResult = applyOps(player.hand);
 
+            if (!isFinite(player.equationResult)) {
+                console.log("Non-finite equation result for player " + player.id + ": " + player.equationResult);
+                fold(player, false, game);
+                return;
+            }
+
             console.log("final order received and equationResult calculated " + player.equationResult);
         } catch (e) {
-            // TODO add test for malformed hand
             console.log("Malformed equation for player " + player.id);
-
             fold(player, false, game);
         }
     });

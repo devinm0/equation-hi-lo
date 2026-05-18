@@ -1,9 +1,21 @@
 import { test, expect, Browser, BrowserContext, Page } from '@playwright/test';
 
-const NUM_PLAYERS = 3;
+const NUM_PLAYERS = 5;
 
-async function pause(page: Page, ms = 2000) {
+async function pause(page: Page, ms = 1000) {
     if (!process.env.CI) await page.waitForTimeout(ms);
+}
+
+async function discardIfNeeded(pages: Page[]) {
+    await pause(pages[0]!);
+    for (const page of pages) {
+        const highlighted = page.locator('.card-highlighted').first();
+        const needsDiscard = await highlighted.isVisible({ timeout: 3000 }).catch(() => false);
+        if (needsDiscard) {
+            await highlighted.click({ force: true });
+            await expect(page.locator('.card-highlighted')).toHaveCount(0, { timeout: 3000 });
+        }
+    }
 }
 
 async function setupPlayers(browser: Browser): Promise<{ pages: Page[]; contexts: BrowserContext[] }> {
@@ -13,16 +25,22 @@ async function setupPlayers(browser: Browser): Promise<{ pages: Page[]; contexts
     const pages = await Promise.all(contexts.map(ctx => ctx.newPage()));
     await Promise.all(pages.map(page => page.goto('/')));
 
-    // Position windows side-by-side so none overlap (Chromium headed only)
+    // Position windows in a 3-column grid so none overlap (Chromium headed only)
     const windowW = 430;
-    const windowH = 950;
+    const windowH = 475;
+    const cols = 3;
     await Promise.all(pages.map(async (page, i) => {
         try {
             const client = await page.context().newCDPSession(page);
             const { windowId } = await (client as any).send('Browser.getWindowForTarget');
             await (client as any).send('Browser.setWindowBounds', {
                 windowId,
-                bounds: { left: i * windowW, top: 0, width: windowW, height: windowH },
+                bounds: {
+                    left: (i % cols) * windowW,
+                    top: Math.floor(i / cols) * windowH,
+                    width: windowW,
+                    height: windowH,
+                },
             });
         } catch {
             // headless or non-Chromium — skip positioning
@@ -66,8 +84,9 @@ test.describe('Multiplayer game flow', () => {
         }
 
         // Host sees all players in lobby
-        await expect(hostPage.locator('#lobbyPlayerListContainer')).toContainText('Player1');
-        await expect(hostPage.locator('#lobbyPlayerListContainer')).toContainText('Player2');
+        for (let i = 1; i < NUM_PLAYERS; i++) {
+            await expect(hostPage.locator('#lobbyPlayerListContainer')).toContainText(`Player${i}`);
+        }
 
         // Start button becomes enabled once all players have joined
         await expect(hostPage.locator('#startButton')).toBeEnabled({ timeout: 5000 });
@@ -79,16 +98,8 @@ test.describe('Multiplayer game flow', () => {
             await expect(page.locator('#homeContainer')).toBeHidden();
         }
 
-        // Discard phase — only players who received a multiplication card have a highlighted card to discard
-        await pause(pages[0]!);
-        for (const page of pages) {
-            const highlighted = page.locator('.card-highlighted').first();
-            const needsDiscard = await highlighted.isVisible({ timeout: 3000 }).catch(() => false);
-            if (needsDiscard) {
-                await highlighted.click({ force: true });
-                await expect(page.locator('.card-highlighted')).toHaveCount(0, { timeout: 3000 });
-            }
-        }
+        // Discard phase (first deal) — players who got a multiplication card discard one card
+        await discardIfNeeded(pages);
 
         // First round betting — each player calls in turn until the round ends
         await pause(pages[0]!);
@@ -104,6 +115,9 @@ test.describe('Multiplayer game flow', () => {
             await bettingPage.locator('#callRaiseButton').click();
             await pause(pages[0]!);
         }
+
+        // Discard phase (second deal) — players who got a multiplication card on second deal discard
+        await discardIfNeeded(pages);
 
         // Equation forming phase — all players arrange hands in parallel, then lock in
         await pause(pages[0]!);
@@ -125,6 +139,14 @@ test.describe('Multiplayer game flow', () => {
                 // Stack balance rule: nums must equal binary_ops + 1
                 if (numCards.length !== binaryOpCards.length + 1) return false;
 
+                // Avoid placing 0 as the ÷ denominator (numCards[divIdx+1]) to prevent NaN/Infinity
+                const divIdx = binaryOpCards.findIndex(c => c.dataset.value === '÷');
+                if (divIdx !== -1 && numCards[divIdx + 1]?.dataset.value === '0') {
+                    const swapIdx = numCards.findIndex((c, i) => i !== divIdx + 1 && c.dataset.value !== '0');
+                    if (swapIdx !== -1)
+                        [numCards[swapIdx], numCards[divIdx + 1]] = [numCards[divIdx + 1]!, numCards[swapIdx]!];
+                }
+
                 // Build: [√?] num (op [√?] num)*
                 const ordered: HTMLElement[] = [];
                 for (let i = 0; i < numCards.length; i++) {
@@ -138,14 +160,65 @@ test.describe('Multiplayer game flow', () => {
 
             if (!arranged) return; // unbalanced hand — player will be auto-folded when timer expires
 
-            // 2s pause so all arranged hands are visible before locking in
             await pause(page);
             await lockButton.click();
             // Verify lock-in was accepted (button hides on success; stays visible if equation was rejected)
             await expect(lockButton).toBeHidden({ timeout: 3000 });
         }));
 
+        // Second round betting — player 1 raises by 5, players 2-4 call, player 5 folds
         await pause(pages[0]!);
+        const secondRoundActions: Array<'raise' | 'call' | 'fold'> = ['raise', 'call', 'call', 'call', 'fold'];
+        for (const action of secondRoundActions) {
+            let bettingPage: Page | undefined;
+            for (const page of pages) {
+                if (await page.locator('#bettingControls').isVisible({ timeout: 3000 }).catch(() => false)) {
+                    bettingPage = page;
+                    break;
+                }
+            }
+            // fold is optional: player 5 may have been auto-folded during equation forming
+            if (!bettingPage && action === 'fold') break;
+            expect(bettingPage, `no player had betting controls for action '${action}'`).toBeDefined();
+
+            if (action === 'raise') {
+                await bettingPage.evaluate(() => {
+                    const slider = document.getElementById('betSlider') as HTMLInputElement;
+                    slider.value = String(parseInt(slider.min) + 5);
+                    slider.dispatchEvent(new Event('input'));
+                });
+                await bettingPage.locator('#callRaiseButton').click();
+            } else if (action === 'call') {
+                await bettingPage.locator('#callRaiseButton').click();
+            } else {
+                await bettingPage.locator('#foldButton').click();
+            }
+            await pause(pages[0]!);
+        }
+
+        // Hi/lo selection — each non-folded player selects low
+        await pause(pages[0]!);
+        await Promise.all(pages.map(async (page) => {
+            const modal = page.locator('#choiceModal');
+            const isVisible = await modal.isVisible({ timeout: 5000 }).catch(() => false);
+            if (!isVisible) return; // folded player — modal not shown
+
+            await page.locator('.option[data-choice="low"]').click();
+            await page.locator('#confirmChoice').click();
+            await pause(page);
+        }));
+
+        // Round results — 5s to read the results, then all players hit Next Hand
+        await pause(pages[0]!, 5000);
+        await Promise.all(pages.map(async (page) => {
+            const button = page.locator('#confirmResults');
+            const isVisible = await button.isVisible({ timeout: 5000 }).catch(() => false);
+            if (!isVisible) return; // out player — no button shown
+            await button.click();
+            await pause(page);
+        }));
+
+        await pause(pages[0]!, 5000);
 
         await Promise.all(contexts.map(ctx => ctx.close()));
     });
