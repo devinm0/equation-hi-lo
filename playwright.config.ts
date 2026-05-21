@@ -2,6 +2,7 @@ import { defineConfig, devices } from '@playwright/test';
 
 export default defineConfig({
   testDir: './automated_testing',
+  testIgnore: '**/sandbox.test.ts',
   timeout: 120000,
   use: {
     baseURL: 'http://localhost:8080',

@@ -360,7 +360,9 @@
                         socket.send(JSON.stringify(data));
                         // remove the highlight from ALL cards
                         document.querySelectorAll('.card-highlighted').forEach(card => {
-                            card.classList.remove("card-highlighted");// only do this once server confirms??
+                            card.classList.remove("card-highlighted");
+                            card.style.transform = '';
+                            highlightedCards.delete(card);
                         });
                     });
 
@@ -1003,7 +1005,7 @@
 
                     if (multiplicationCardDealt && id === myId) { // TODO this is also a mess. We should have a separate drawHighlights function
                         // learned: be careful with capitalization
-                        cardDiv.classList.add("card-highlighted");
+                        highlightCard(cardDiv);
                     }
                 }
                 cardDiv.style.color = getColorFromSuit(card.suit);
@@ -1064,6 +1066,22 @@
         // TODO change to game.timer (need one for each game)
         const timer = new CountdownTimer(secondsRemaining * 1000, progressBar, progressBarOverlay);
         timer.start(); // only call once because it call requestAnimationFrame recursively
+    }
+
+    // Single rAF loop drives all highlighted cards from the same clock — perfect sync.
+    const highlightedCards = new Set();
+    (function breatheLoop() {
+        const scale = 1 + 0.1 * Math.sin((performance.now() / 2000) * 2 * Math.PI);
+        highlightedCards.forEach(el => {
+            if (el.isConnected) el.style.transform = `scale(${scale})`;
+            else highlightedCards.delete(el);
+        });
+        requestAnimationFrame(breatheLoop);
+    })();
+
+    function highlightCard(el) {
+        el.classList.add('card-highlighted');
+        highlightedCards.add(el);
     }
 
     function hideProgressBar(){
@@ -1512,7 +1530,7 @@
                     for (let i = 0; i < cards.length - 1; i++) {
                         console.log(cards[i].dataset.value, result.lowCard);
                         if (Number(cards[i].dataset.value) === result.lowCard) {
-                            cards[i].classList.add('card-highlighted');
+                            highlightCard(cards[i]);
                         }
                     }
                 }
@@ -1521,7 +1539,7 @@
                     for (let i = 0; i < cards.length - 1; i++) {
                         console.log(cards[i].dataset.value, result.highCard);
                         if (Number(cards[i].dataset.value) === result.highCard) {
-                            cards[i].classList.add('card-highlighted');
+                            highlightCard(cards[i]);
                         }
                     }
                 }
