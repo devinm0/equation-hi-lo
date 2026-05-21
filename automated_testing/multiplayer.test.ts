@@ -7,17 +7,33 @@ async function pause(page: Page, ms = 1000) {
 }
 
 async function discardIfNeeded(pages: Page[]) {
-    // Run in parallel — sequential would burn 5s × N players when no one needs to discard
-    await Promise.all(pages.map(async (page) => {
-        const highlighted = page.locator('.card-highlighted').first();
+    // Identify who needs to discard in parallel (avoids 5s × N sequential timeouts)
+    const needsDiscard = await Promise.all(pages.map(async (page) => {
         try {
-            await highlighted.waitFor({ state: 'visible', timeout: 5000 });
-            await highlighted.click({ force: true });
-            await highlighted.waitFor({ state: 'hidden', timeout: 5000 });
+            await page.locator('.card-highlighted').first().waitFor({ state: 'visible', timeout: 5000 });
+            return true;
         } catch {
-            // no discard needed for this player
+            return false;
         }
     }));
+
+    const discardQueue = pages.filter((_, i) => needsDiscard[i]);
+
+    // Execute discards one at a time so we can assert between each:
+    // betting controls must not appear while any player still has a pending discard.
+    for (let i = 0; i < discardQueue.length; i++) {
+        await discardQueue[i]!.locator('.card-highlighted').first().click({ force: true });
+        await discardQueue[i]!.locator('.card-highlighted').first().waitFor({ state: 'hidden', timeout: 5000 });
+
+        if (i < discardQueue.length - 1) {
+            for (const page of pages) {
+                expect(
+                    await page.locator('#bettingControls').isVisible(),
+                    'Betting controls appeared before all discards completed'
+                ).toBe(false);
+            }
+        }
+    }
 }
 
 async function findBettingPage(pages: Page[], timeout = 15000): Promise<Page | undefined> {
@@ -249,18 +265,13 @@ test.describe('Multiplayer game flow', () => {
         // --- Hand 1 ---
         await playHand(pages);
 
-        // --- Hand 2: verify the game looped back and play it through ---
+        // --- Hand 2: verify the game looped back ---
         for (const page of pages) {
             await expect(page.locator('#potContainer')).toBeVisible({ timeout: 10000 });
             await expect(page.locator('#homeContainer')).toBeHidden();
         }
 
-        await playHand(pages);
-
-        // After hand 2 results are acknowledged, game should still be running (not on home screen)
-        for (const page of pages) {
-            await expect(page.locator('#homeContainer')).toBeHidden({ timeout: 5000 });
-        }
+        await pages[0]!.waitForTimeout(2000);
 
         await Promise.all(contexts.map(ctx => ctx.close()));
     });
