@@ -1,41 +1,83 @@
 import { test, expect, Browser, BrowserContext, Page } from '@playwright/test';
 
-// Launches a 3-player game and pauses at first betting so you can play manually.
-// Run with: npx playwright test sandbox --headed
+// Sandbox tests for manual play — run with: npx playwright test --config sandbox.config.ts --headed
 
 test.setTimeout(600000); // 10 minutes
 
-const NUM_PLAYERS = 3;
-
-async function setupPlayers(browser: Browser): Promise<{ pages: Page[]; contexts: BrowserContext[] }> {
+async function setupPlayers(browser: Browser, numPlayers: number): Promise<{ pages: Page[]; contexts: BrowserContext[] }> {
     const contexts = await Promise.all(
-        [...Array(NUM_PLAYERS)].map(() => browser.newContext())
+        [...Array(numPlayers)].map(() => browser.newContext())
     );
     const pages = await Promise.all(contexts.map(ctx => ctx.newPage()));
     await Promise.all(pages.map(page => page.goto('/')));
 
     const windowW = 430;
     const windowH = 475;
-    await Promise.all(pages.map(async (page, i) => {
-        try {
-            const client = await page.context().newCDPSession(page);
-            const { windowId } = await (client as any).send('Browser.getWindowForTarget');
-            await (client as any).send('Browser.setWindowBounds', {
+    const cols = Math.ceil(Math.sqrt(numPlayers));
+    try {
+        const cdp = await browser.newBrowserCDPSession();
+        for (const [i, page] of pages.entries()) {
+            const pageSession = await page.context().newCDPSession(page);
+            const { targetInfo } = await (pageSession as any).send('Target.getTargetInfo');
+            const { windowId } = await (cdp as any).send('Browser.getWindowForTarget', { targetId: targetInfo.targetId });
+            await (cdp as any).send('Browser.setWindowBounds', {
                 windowId,
-                bounds: { left: i * windowW, top: 0, width: windowW, height: windowH },
+                bounds: {
+                    left: (i % cols) * windowW,
+                    top: Math.floor(i / cols) * windowH,
+                    width: windowW,
+                    height: windowH,
+                },
             });
-        } catch {}
-    }));
+            await pageSession.detach();
+        }
+        await cdp.detach();
+    } catch (e) {
+        console.warn('Window positioning failed:', e);
+    }
 
     return { pages, contexts };
 }
 
-test('sandbox: 3-player game, pause at first betting', async ({ browser }) => {
-    const { pages, contexts } = await setupPlayers(browser);
+test('sandbox: 10-player lobby, pause before game starts', async ({ browser }) => {
+    const numPlayers = 10;
+    const { pages, contexts } = await setupPlayers(browser, numPlayers);
     const [hostPage, ...playerPages] = pages as [Page, ...Page[]];
 
     // Host creates room
     await hostPage.click('#createButton');
+    await expect(hostPage.locator('#roomCodeContainer')).toContainText(/[A-Z0-9]{4}/);
+    const roomCodeText = await hostPage.locator('#roomCodeContainer').innerText();
+    const roomCode = roomCodeText.split(' ')[1];
+
+    await hostPage.fill('#nameInput', 'Host');
+    await hostPage.click('#submitNameButton');
+
+    // Other players join
+    for (const [i, page] of playerPages.entries()) {
+        await page.fill('#roomCodeInput', roomCode!);
+        await page.click('#enterRoomButton');
+        await page.fill('#nameInput', `Player${i + 1}`);
+        await page.click('#submitNameButton');
+    }
+
+    await expect(hostPage.locator('#startButton')).toBeEnabled({ timeout: 5000 });
+
+    console.log(`\n🎮 Lobby ready — room code: ${roomCode}\n   All ${numPlayers} players joined. Start the game manually. Close windows when done.\n`);
+
+    // Hold open until all windows are closed
+    await Promise.all(pages.map(page => page.waitForEvent('close', { timeout: 600000 }).catch(() => {})));
+
+    await Promise.all(contexts.map(ctx => ctx.close()));
+});
+
+test('sandbox: 3-player game, pause at first betting', async ({ browser }) => {
+    const { pages, contexts } = await setupPlayers(browser, 3);
+    const [hostPage, ...playerPages] = pages as [Page, ...Page[]];
+
+    // Host creates room
+    await hostPage.click('#createButton');
+    await expect(hostPage.locator('#roomCodeContainer')).toContainText(/[A-Z0-9]{4}/);
     const roomCodeText = await hostPage.locator('#roomCodeContainer').innerText();
     const roomCode = roomCodeText.split(' ')[1];
 

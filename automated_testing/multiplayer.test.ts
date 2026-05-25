@@ -198,11 +198,13 @@ async function setupPlayers(browser: Browser): Promise<{ pages: Page[]; contexts
     const windowW = 430;
     const windowH = 475;
     const cols = 3;
-    await Promise.all(pages.map(async (page, i) => {
-        try {
-            const client = await page.context().newCDPSession(page);
-            const { windowId } = await (client as any).send('Browser.getWindowForTarget');
-            await (client as any).send('Browser.setWindowBounds', {
+    try {
+        const cdp = await browser.newBrowserCDPSession();
+        for (const [i, page] of pages.entries()) {
+            const pageSession = await page.context().newCDPSession(page);
+            const { targetInfo } = await (pageSession as any).send('Target.getTargetInfo');
+            const { windowId } = await (cdp as any).send('Browser.getWindowForTarget', { targetId: targetInfo.targetId });
+            await (cdp as any).send('Browser.setWindowBounds', {
                 windowId,
                 bounds: {
                     left: (i % cols) * windowW,
@@ -211,10 +213,12 @@ async function setupPlayers(browser: Browser): Promise<{ pages: Page[]; contexts
                     height: windowH,
                 },
             });
-        } catch {
-            // headless or non-Chromium — skip positioning
+            await pageSession.detach();
         }
-    }));
+        await cdp.detach();
+    } catch (e) {
+        console.warn('Window positioning failed (headless or non-Chromium):', e);
+    }
 
     return { pages, contexts };
 }

@@ -1099,13 +1099,13 @@
     function drawPlayer(id, color, username, hostId) {
         let lobbyPlayerListItem = document.getElementById("lobbyPlayerListItem-" + id);
         if (lobbyPlayerListItem !== null) {
-            lobbyPlayerListItem.innerHTML = `<p>${username}</p>` + (hostId === id ? ' (Host)' : '') + (id === myId ? ' (You)' : ''); // injection
+            lobbyPlayerListItem.innerHTML = `<span>${username}</span>` + (hostId === id ? ' (Host)' : '') + (id === myId ? ' (You)' : ''); // injection
         } else {
             let lobbyPlayerListContainer = document.getElementById("lobbyPlayerListContainer");
             const div = document.createElement("div");
             div.id = "lobbyPlayerListItem-" + id;
             div.className = "lobbyPlayerListItem";
-            div.innerHTML = `<p>${username}</p>` + (hostId === id ? ' (Host)' : '') + (id === myId ? ' (You)' : ''); // injection
+            div.innerHTML = `<span>${username}</span>` + (hostId === id ? ' (Host)' : '') + (id === myId ? ' (You)' : ''); // injection
             div.style.color = color;
             lobbyPlayerListContainer.appendChild(div);
         }
