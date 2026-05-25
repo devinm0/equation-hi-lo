@@ -1,32 +1,51 @@
-import { test, expect, Browser, BrowserContext, Page } from '@playwright/test';
+import { test, expect, Browser, BrowserContext, Page, devices } from '@playwright/test';
 
 // Sandbox tests for manual play — run with: npx playwright test --config sandbox.config.ts --headed
 
 test.setTimeout(600000); // 10 minutes
 
+// 10 distinct iPhone models (13+), one per player slot — covers all major viewport sizes
+const IPHONE_DEVICES = [
+    devices['iPhone 13 Mini'],       // 375×812  (smallest)
+    devices['iPhone 13'],            // 390×844
+    devices['iPhone 13 Pro'],        // 390×844
+    devices['iPhone 13 Pro Max'],    // 428×926
+    devices['iPhone 14'],            // 390×844
+    devices['iPhone 14 Plus'],       // 428×926
+    devices['iPhone 14 Pro'],        // 393×852
+    devices['iPhone 14 Pro Max'],    // 430×932
+    devices['iPhone 15 Pro'],        // 393×852
+    devices['iPhone 15 Pro Max'],    // 430×932  (largest)
+];
+
 async function setupPlayers(browser: Browser, numPlayers: number): Promise<{ pages: Page[]; contexts: BrowserContext[] }> {
     const contexts = await Promise.all(
-        [...Array(numPlayers)].map(() => browser.newContext())
+        [...Array(numPlayers)].map((_, i) =>
+            browser.newContext(i < IPHONE_DEVICES.length ? IPHONE_DEVICES[i] : {})
+        )
     );
     const pages = await Promise.all(contexts.map(ctx => ctx.newPage()));
     await Promise.all(pages.map(page => page.goto('/')));
 
-    const windowW = 430;
-    const windowH = 475;
+    const colW = 430;
+    const colH = 500;
     const cols = Math.ceil(Math.sqrt(numPlayers));
     try {
         const cdp = await browser.newBrowserCDPSession();
         for (const [i, page] of pages.entries()) {
+            const device = i < IPHONE_DEVICES.length ? IPHONE_DEVICES[i] : undefined;
+            const w = device?.viewport?.width ?? 390;
+            const h = device?.viewport?.height ?? 844;
             const pageSession = await page.context().newCDPSession(page);
             const { targetInfo } = await (pageSession as any).send('Target.getTargetInfo');
             const { windowId } = await (cdp as any).send('Browser.getWindowForTarget', { targetId: targetInfo.targetId });
             await (cdp as any).send('Browser.setWindowBounds', {
                 windowId,
                 bounds: {
-                    left: (i % cols) * windowW,
-                    top: Math.floor(i / cols) * windowH,
-                    width: windowW,
-                    height: windowH,
+                    left: (i % cols) * colW,
+                    top: Math.floor(i / cols) * colH,
+                    width: w,
+                    height: h,
                 },
             });
             await pageSession.detach();
