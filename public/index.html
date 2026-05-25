@@ -237,6 +237,7 @@
     const socket = new WebSocket(`${protocol}//${window.location.host}`);
     const handDivs = new Map(); // map of divs, one for each player
     const handDivsList = []; // ordered list of divs, so that we can draw the user's hand last
+    const hiloSelectingSet = new Set(); // player IDs that haven't yet submitted hi/lo selection
     const lobbyPlayerDivs = {}; // list of nametags basically, for game lobby. one per player
 
     const EXPIRATION_TIME = 1000 * 60 * 60 * 24;  // 1 day in milliseconds
@@ -325,6 +326,7 @@
         }
 
         case "begin-hand": {
+            hiloSelectingSet.clear();
             showPlayingLayout();
             showNotification("Beginning hand " + (msg.handNumber + 1));
  
@@ -398,6 +400,23 @@
             break;
         } 
         
+        case "hi-lo-selection-commenced": {
+            hiloSelectingSet.clear();
+            msg.pendingPlayerIds.forEach(id => {
+                hiloSelectingSet.add(id);
+                const span = document.getElementById("hilo-selecting-" + id);
+                if (span) span.classList.remove("hidden");
+            });
+            break;
+        }
+
+        case "player-selected-hilo": {
+            hiloSelectingSet.delete(msg.id);
+            const span = document.getElementById("hilo-selecting-" + msg.id);
+            if (span) span.classList.add("hidden");
+            break;
+        }
+
         case "first-round-betting-commenced": {
             showNotification("First round betting has commenced.");  
 
@@ -947,6 +966,12 @@
         }
         nameSpan.innerHTML = '<p>' + nameSpanContents + '</p>';
         nameDiv.appendChild(nameSpan);
+
+        const hiloSelectingSpan = document.createElement("span");
+        hiloSelectingSpan.id = "hilo-selecting-" + id;
+        hiloSelectingSpan.textContent = " (selecting...)";
+        if (!hiloSelectingSet.has(id)) hiloSelectingSpan.classList.add("hidden");
+        nameDiv.appendChild(hiloSelectingSpan);
 
         drawCards(handDivs.get(id), id, hand, folded, multiplicationCardDealt, handLengthBeforeThisDeal);
     }

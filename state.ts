@@ -151,6 +151,16 @@ export interface PlayerDiscardedMessage {
     value: string;
 }
 
+export interface PlayerSelectedHiLoMessage {
+    type: "player-selected-hilo";
+    id: string;
+}
+
+export interface HiLoSelectionCommencedMessage {
+    type: "hi-lo-selection-commenced";
+    pendingPlayerIds: string[];
+}
+
 export interface GameStartedMessage {
     type: "game-started";
 }
@@ -219,6 +229,8 @@ export type ServerMessage =
     | CommenceEquationFormingMessage
     | EndBettingRoundMessage
     | PlayerDiscardedMessage
+    | PlayerSelectedHiLoMessage
+    | HiLoSelectionCommencedMessage
     | GameStartedMessage
     | PlayerLeftMessage
     | PlayerJoinedMessage

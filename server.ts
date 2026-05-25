@@ -376,10 +376,11 @@ wss.on("connection", (ws: ExtendedWebSocket) => { // LEARN pass in extended
 
             // TODO (putting this in random place so I see it later) - test every number of automatically folded players during equation forming
             case "hi-lo-selected": {
-                // TODO need some game phase check here
                 console.log(clientMsg.userId, clientMsg.username, clientMsg.choices, clientMsg.otherEquationResult, clientMsg.order);
                 const player = players.get(ws.userId);
                 if (!player || player.equationResult == null) return;
+                const game = games.get(player.roomCode);
+                if (!game || game.phase !== GamePhase.HILOSELECTION) return;
 
                 player.choices = clientMsg.choices;
 
@@ -411,8 +412,10 @@ wss.on("connection", (ws: ExtendedWebSocket) => { // LEARN pass in extended
                     }
 
                 }
-                const game = games.get(player.roomCode);
-                if (!game) { console.log("game should not be null"); return; }
+                sendSocketMessageToEveryClientInRoom(game.roomCode, {
+                    type: "player-selected-hilo",
+                    id: player.id,
+                });
 
                 if (nonFoldedAndNotOutPlayers(game).every(player => player.choices.length > 0)) {
                     game.phase = GamePhase.RESULTVIEWING;
@@ -600,15 +603,20 @@ function enterRoom(game: Game, clientMsg: CreateMessage | EnterMessage, ws: Exte
                 advanceToNextPlayersTurn(game, game.toCall - rejoiningPlayer.stake);
                 break;
             case GamePhase.HILOSELECTION:
-                // have to send this so the player sees hands after submitting their selection,
-                // while waiting for other players to select
                 playersInRoom(game.roomCode).forEach(player => {
                     notifyPlayerOfNewlyDealtCards(player, rejoiningPlayer, false);
                 });
 
-                ws.send(JSON.stringify({ 
-                    type: "hi-lo-selection"
+                ws.send(JSON.stringify({
+                    type: "hi-lo-selection-commenced",
+                    pendingPlayerIds: nonFoldedAndNotOutPlayers(game)
+                        .filter(p => p.choices.length === 0)
+                        .map(p => p.id),
                 }));
+
+                if (rejoiningPlayer.choices.length === 0) {
+                    ws.send(JSON.stringify({ type: "hi-lo-selection" }));
+                }
                 break;
             case GamePhase.RESULTVIEWING:
                 // TODO rewrite index.html to only use msg.results, not hiWinner or loWinner
@@ -1197,9 +1205,15 @@ function getSecondsLeft(game: Game) {
 
 function commenceHiLoSelection(game: Game) {
     game.phase = GamePhase.HILOSELECTION;
-    
-    sendSocketMessageToNonFoldedAndNotOutPlayers(game, { 
-        type: "hi-lo-selection", 
+
+    const pendingPlayerIds = nonFoldedAndNotOutPlayers(game).map(p => p.id);
+    sendSocketMessageToEveryClientInRoom(game.roomCode, {
+        type: "hi-lo-selection-commenced",
+        pendingPlayerIds,
+    });
+
+    sendSocketMessageToNonFoldedAndNotOutPlayers(game, {
+        type: "hi-lo-selection",
     });
 }
 
