@@ -137,7 +137,7 @@ sudo apt install -y nodejs nginx certbot python3-certbot-nginx
 sudo npm install -g pm2
 
 git clone <repo>
-cd "Equation Hi Lo"
+cd equation-hi-lo
 npm ci --omit=dev
 npm run build
 
@@ -167,7 +167,7 @@ Keypair file: `equation-hi-lo-keypair.pem` (in repo root, gitignored).
 
 After pulling and building on EC2:
 ```bash
-git pull && npm run build && pm2 restart all
+cd equation-hi-lo && git pull && npm run build && pm2 restart all
 ```
 
 ## Rate Limiting
