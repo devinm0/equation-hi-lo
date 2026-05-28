@@ -1,4 +1,4 @@
-import { defineConfig, devices } from '@playwright/test';
+import { defineConfig } from '@playwright/test';
 
 export default defineConfig({
   testDir: './automated_testing',
@@ -6,7 +6,10 @@ export default defineConfig({
   timeout: 120000,
   use: {
     baseURL: 'http://localhost:8080',
-    ...devices['iPhone 15 Pro'],
+    browserName: 'chromium',
+    isMobile: true,
+    hasTouch: true,
+    viewport: { width: 393, height: 852 }, // default; overridden per-context in tests
   },
   webServer: {
     command: 'GAME_MODE=debug npm start',

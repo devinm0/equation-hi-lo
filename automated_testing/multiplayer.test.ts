@@ -1,16 +1,30 @@
-import { test, expect, Browser, BrowserContext, Page } from '@playwright/test';
+import { test, expect, Browser, BrowserContext, Page, devices } from '@playwright/test';
 
-const NUM_PLAYERS = 5;
+const NUM_PLAYERS = 10;
+
+// One distinct iPhone model per player — covers all major viewport sizes (13+)
+const IPHONE_DEVICES = [
+    devices['iPhone 13 Mini'],       // 375×812
+    devices['iPhone 13'],            // 390×844
+    devices['iPhone 13 Pro'],        // 390×844
+    devices['iPhone 13 Pro Max'],    // 428×926
+    devices['iPhone 14'],            // 390×844
+    devices['iPhone 14 Plus'],       // 428×926
+    devices['iPhone 14 Pro'],        // 393×852
+    devices['iPhone 14 Pro Max'],    // 430×932
+    devices['iPhone 15 Pro'],        // 393×852
+    devices['iPhone 15 Pro Max'],    // 430×932
+];
 
 async function pause(page: Page, ms = 1000) {
     if (!process.env.CI) await page.waitForTimeout(ms);
 }
 
 async function discardIfNeeded(pages: Page[]) {
-    // Identify who needs to discard in parallel (avoids 5s × N sequential timeouts)
+    // Identify who needs to discard in parallel (avoids N sequential timeouts)
     const needsDiscard = await Promise.all(pages.map(async (page) => {
         try {
-            await page.locator('.card-highlighted').first().waitFor({ state: 'visible', timeout: 5000 });
+            await page.locator('.card-highlighted').first().waitFor({ state: 'visible', timeout: 10000 });
             return true;
         } catch {
             return false;
@@ -23,7 +37,7 @@ async function discardIfNeeded(pages: Page[]) {
     // betting controls must not appear while any player still has a pending discard.
     for (let i = 0; i < discardQueue.length; i++) {
         await discardQueue[i]!.locator('.card-highlighted').first().click({ force: true });
-        await discardQueue[i]!.locator('.card-highlighted').first().waitFor({ state: 'hidden', timeout: 5000 });
+        await discardQueue[i]!.locator('.card-highlighted').first().waitFor({ state: 'hidden', timeout: 10000 });
 
         if (i < discardQueue.length - 1) {
             for (const page of pages) {
@@ -36,7 +50,7 @@ async function discardIfNeeded(pages: Page[]) {
     }
 }
 
-async function findBettingPage(pages: Page[], timeout = 15000): Promise<Page | undefined> {
+async function findBettingPage(pages: Page[], timeout = 30000): Promise<Page | undefined> {
     try {
         return await Promise.any(
             pages.map(async (page) => {
@@ -110,7 +124,7 @@ async function doEquationForming(pages: Page[]) {
 
         await pause(page);
         await lockButton.click();
-        await expect(lockButton).toBeHidden({ timeout: 3000 });
+        await expect(lockButton).toBeHidden({ timeout: 8000 });
     }));
 }
 
@@ -118,7 +132,7 @@ async function doHiLoSelection(pages: Page[]) {
     await Promise.all(pages.map(async (page) => {
         const modal = page.locator('#choiceModal');
         try {
-            await modal.waitFor({ state: 'visible', timeout: 10000 });
+            await modal.waitFor({ state: 'visible', timeout: 20000 });
         } catch {
             return; // folded player — modal not shown
         }
@@ -133,7 +147,7 @@ async function acknowledgeResults(pages: Page[]) {
     await Promise.all(pages.map(async (page) => {
         const button = page.locator('#confirmResults');
         try {
-            await button.waitFor({ state: 'visible', timeout: 15000 });
+            await button.waitFor({ state: 'visible', timeout: 30000 });
         } catch {
             return; // out player — no button shown
         }
@@ -157,9 +171,9 @@ async function playHand(pages: Page[]) {
 
     await doEquationForming(pages);
 
-    // Second round betting — player 1 raises, players 2-4 call, player 5 folds
+    // Second round betting — player 1 raises, players 2-9 call, player 10 folds
     await pause(pages[0]!);
-    await runBettingRound(pages, ['raise', 'call', 'call', 'call', 'fold']);
+    await runBettingRound(pages, ['raise', 'call', 'call', 'call', 'call', 'call', 'call', 'call', 'call', 'fold']);
 
     await pause(pages[0]!);
     await doHiLoSelection(pages);
@@ -170,7 +184,9 @@ async function playHand(pages: Page[]) {
 
 async function setupPlayers(browser: Browser): Promise<{ pages: Page[]; contexts: BrowserContext[] }> {
     const contexts = await Promise.all(
-        [...Array(NUM_PLAYERS)].map(() => browser.newContext())
+        [...Array(NUM_PLAYERS)].map((_, i) =>
+            browser.newContext(i < IPHONE_DEVICES.length ? IPHONE_DEVICES[i]! : {})
+        )
     );
     const pages = await Promise.all(contexts.map(ctx => ctx.newPage()));
     await Promise.all(pages.map(page => page.goto('/')));
@@ -194,23 +210,26 @@ async function setupPlayers(browser: Browser): Promise<{ pages: Page[]; contexts
         })));
     }
 
-    // Position windows in a 3-column grid so none overlap (Chromium headed only)
-    const windowW = 430;
-    const windowH = 475;
-    const cols = 3;
+    // Position windows in a grid so none overlap (Chromium headed only)
+    const colW = 450;
+    const colH = 520;
+    const cols = Math.ceil(Math.sqrt(NUM_PLAYERS));
     try {
         const cdp = await browser.newBrowserCDPSession();
         for (const [i, page] of pages.entries()) {
+            const device = i < IPHONE_DEVICES.length ? IPHONE_DEVICES[i] : undefined;
+            const w = device?.viewport?.width ?? 390;
+            const h = device?.viewport?.height ?? 844;
             const pageSession = await page.context().newCDPSession(page);
             const { targetInfo } = await (pageSession as any).send('Target.getTargetInfo');
             const { windowId } = await (cdp as any).send('Browser.getWindowForTarget', { targetId: targetInfo.targetId });
             await (cdp as any).send('Browser.setWindowBounds', {
                 windowId,
                 bounds: {
-                    left: (i % cols) * windowW,
-                    top: Math.floor(i / cols) * windowH,
-                    width: windowW,
-                    height: windowH,
+                    left: (i % cols) * colW,
+                    top: Math.floor(i / cols) * colH,
+                    width: w,
+                    height: h,
                 },
             });
             await pageSession.detach();
@@ -225,7 +244,7 @@ async function setupPlayers(browser: Browser): Promise<{ pages: Page[]; contexts
 
 test.describe('Multiplayer game flow', () => {
     test('two full hands: lobby → hand 1 → hand 2', async ({ browser }) => {
-        test.setTimeout(300000); // 5 minutes for two full hands in debug mode
+        test.setTimeout(600000); // 10 minutes for two full hands with 10 players
         const { pages, contexts } = await setupPlayers(browser);
         const [hostPage, ...playerPages] = pages as [Page, ...Page[]];
 
