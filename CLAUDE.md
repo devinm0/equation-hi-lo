@@ -157,6 +157,19 @@ Do NOT use AWS ElastiCache — it is not free tier.
 ### DNS
 Point the domain's A record to the EC2 Elastic IP at your registrar (Cloudflare, Namecheap, etc.) — this is independent of which AWS account the instance lives on.
 
+## SSH Access
+
+```bash
+ssh -i equation-hi-lo-keypair.pem ubuntu@equationhi.lol
+```
+
+Keypair file: `equation-hi-lo-keypair.pem` (in repo root, gitignored).
+
+After pulling and building on EC2:
+```bash
+git pull && npm run build && pm2 restart all
+```
+
 ## Rate Limiting
 
 Server enforces 20 WebSocket messages per 10-second window per client. Heartbeat ping every ~34s to detect disconnects.
