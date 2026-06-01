@@ -197,7 +197,7 @@ export interface HiLoSelectionMessage {
 
 export interface KickedMessage {
     type: "kicked";
-    id: string;
+    userId: string;
     color: string;
     username: string;
     hand: Card[];

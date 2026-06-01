@@ -342,8 +342,7 @@
             drawHand(msg.id, msg.color, msg.username, msg.hand, msg.multiplicationCardDealt);
         
             if (msg.chipCount !== undefined) {
-                // this should be msg.id I guess. originally I was only using the deal message for myself
-                // updateChipStack(msg.chipCount, document.getElementById("chipStacksContainer-" + msg.id));
+                updateChipStack(msg.chipCount, document.getElementById("chipStacksContainer-" + msg.id));
             }
             // TODO 5/20
             // need the same bool to only do this with alert.
@@ -458,7 +457,7 @@
 
             drawHand(msg.id, msg.color, msg.username, msg.hand, false, true);
             // }, 50 * hand.length + 300 );
-            // updateChipStack(msg.chipCount, document.getElementById("chipStacksContainer-" + msg.id), null, true);
+            updateChipStack(msg.chipCount, document.getElementById("chipStacksContainer-" + msg.id), null, true);
 
             break;
         }
@@ -468,8 +467,8 @@
 
             showNotification(msg.username + " is out.");
 
-            drawHand(msg.id, msg.color, msg.username, msg.hand, false, false, true);
-            // updateChipStack(msg.chipCount, document.getElementById("chipStacksContainer-" + msg.id), null, true);
+            drawHand(msg.userId, msg.color, msg.username, msg.hand, false, false, true);
+            updateChipStack(msg.chipCount, document.getElementById("chipStacksContainer-" + msg.userId), null, true);
 
             break;
         }
@@ -477,7 +476,7 @@
         case "player-reordered-hand": {
             // no new cards are dealt, so we need this special message to make everyone redraw the reordered hands
             drawHand(msg.id, msg.color, msg.username, msg.hand, false, false);
-            // updateChipStack(msg.chipCount, document.getElementById("chipStacksContainer-" + msg.id));
+            updateChipStack(msg.chipCount, document.getElementById("chipStacksContainer-" + msg.id));
 
             break;
         }
@@ -487,7 +486,7 @@
             sounds.play(msg.betType);
 
             showNotification(msg.username + " bet " + msg.betAmount);
-            // updateChipStack(msg.chipCount, document.getElementById("chipStacksContainer-" + msg.id));
+            updateChipStack(msg.chipCount, document.getElementById("chipStacksContainer-" + msg.id));
             updatePot(msg.pot);
 
             break;
@@ -1274,6 +1273,7 @@
     let chipCount = 0;
 
     function updateChipStack(newCount, containerToUpdate, differential, folded = false) {
+        if (!containerToUpdate) return;
         chipCount = newCount;
 
         // Clear all previous stacks and any previous overlay
@@ -1443,9 +1443,10 @@
             }
             if (result.out !== true && result.folded !== true) {
 
-                // updateChipStack(result.chipCount, document.getElementById("chipStacksContainer-" + result.id), result.chipDifferential);
+                updateChipStack(result.chipCount, document.getElementById("chipStacksContainer-" + result.id), result.chipDifferential);
 
                 let nameDiv = document.getElementById("handLabel-" + result.id);
+                if (!nameDiv) return;
                 nameDiv.style.color = result.color;
                 console.log(nameDiv);
                 let loOptionDiv = document.getElementById("low-symbol-" + result.id);

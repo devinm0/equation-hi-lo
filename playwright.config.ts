@@ -15,5 +15,7 @@ export default defineConfig({
     command: 'GAME_MODE=debug npm start',
     port: 8080,
     reuseExistingServer: !process.env.CI,
+    stdout: 'pipe',
+    stderr: 'pipe',
   },
 });

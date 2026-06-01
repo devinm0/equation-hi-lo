@@ -657,6 +657,7 @@ body.show-home-bg .grid-container {
     font-weight: bold;
     margin: 10px;
     min-width: 100px;
+    max-width: 320px;
     padding: 6px 16px;
     font-size: 20px;
     border: none;

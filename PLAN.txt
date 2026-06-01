@@ -156,3 +156,27 @@ Backend split plan (server.ts → src/)
       Currently: each card element is appended individually, causing one reflow per card.
       With 5 players × 4-5 cards = 20-25 sequential reflows on deal.
       Fix: build each hand into a DocumentFragment, then append once per hand container.
+
+  ---
+  TODO
+
+  T2. Show swing-bet second equation forming state to other players (optional, low priority)
+      Currently other players see "(selecting...)" the entire time a swing player is both
+      picking lo/hi/swing AND forming their second equation — indistinguishable.
+      Fix: introduce a new phase or sub-state after HILOSELECTION where swing players are
+      known (server broadcasts who swung), then show "(forming second equation...)" for those
+      players until they confirm. Requires: server broadcasting swing choices before the second
+      equation is submitted, and a new message type for when the second equation is locked in.
+
+  T3. E2E test: two simultaneous games do not interact
+      Spin up 2 separate rooms (6 players total, 3 per room) and run both games
+      concurrently. Verify that game state (hands, bets, turn order, results) never
+      bleeds across rooms — guards against bugs like the endEquationForming global
+      players.forEach which would process players from other rooms.
+
+  T1. Add HILOSELECTION phase timer
+      commenceHiLoSelection currently has no setTimeout. If a swing player never confirms
+      their second equation, the game stalls indefinitely. Add a timer (same EQUATION_DURATION
+      constant, or a dedicated HI_LO_DURATION) that fires when HILOSELECTION times out.
+      When it fires: fold any player whose choices.length === 0, then call determineWinners
+      with whoever remains. Mirror the pattern used in endEquationForming.

@@ -142,6 +142,9 @@ wss.on("connection", (ws: ExtendedWebSocket) => { // LEARN pass in extended
                 const game = games.get(player.roomCode);
                 if (!game) return;
 
+                if (game.phase !== GamePhase.FIRSTDEAL && game.phase !== GamePhase.SECONDDEAL) return;
+                if (!player.needToDiscard) return;
+
                 sendSocketMessageToEveryClientInRoom(game.roomCode, {
                     type: "player-discarded",
                     id: clientMsg.userId,
@@ -264,6 +267,9 @@ wss.on("connection", (ws: ExtendedWebSocket) => { // LEARN pass in extended
 
                 if (clientMsg.userId !== game.currentTurnPlayerId) return;
 
+                if (typeof clientMsg.betAmount !== 'number' || !isFinite(clientMsg.betAmount)
+                    || clientMsg.betAmount < 0 || clientMsg.betAmount > justPlayedPlayer.chipCount) return;
+
                 justPlayedPlayer.turnTakenThisRound = true;
                 justPlayedPlayer.stake += clientMsg.betAmount;
                 justPlayedPlayer.contribution += clientMsg.betAmount;
@@ -301,7 +307,16 @@ wss.on("connection", (ws: ExtendedWebSocket) => { // LEARN pass in extended
                 if (game.phase !== GamePhase.EQUATIONFORMING) {
                     return;
                 }
-                player.hand = clientMsg.order.map(i => player.hand[i]!);
+
+                const order: unknown[] = clientMsg.order;
+                if (!Array.isArray(order) || order.length !== player.hand.length) return;
+                const seen = new Set<number>();
+                for (const i of order) {
+                    const idx = Number(i);
+                    if (!Number.isInteger(idx) || idx < 0 || idx >= player.hand.length || seen.has(idx)) return;
+                    seen.add(idx);
+                }
+                player.hand = order.map(i => player.hand[Number(i)]!);
                 
                 // let everyone else know I've moved my cards, so they can see the order.
                 wss.clients.forEach((c) => {
@@ -382,7 +397,10 @@ wss.on("connection", (ws: ExtendedWebSocket) => { // LEARN pass in extended
                 const game = games.get(player.roomCode);
                 if (!game || game.phase !== GamePhase.HILOSELECTION) return;
 
-                player.choices = clientMsg.choices;
+                const choices: unknown[] = clientMsg.choices;
+                if (!Array.isArray(choices) || choices.length === 0) return;
+                if (!choices.every(c => c === 'low' || c === 'high')) return;
+                player.choices = choices as string[];
 
                 if (player.choices.includes("low") && !player.choices.includes("high")) {
                     player.lowHand = player.hand;
@@ -391,13 +409,27 @@ wss.on("connection", (ws: ExtendedWebSocket) => { // LEARN pass in extended
                     player.highHand = player.hand;
                     player.highEquationResult = player.equationResult;
                 } else if (player.choices.includes("low") && player.choices.includes("high")) {
-                    if (!clientMsg.otherEquationResult || !clientMsg.order) {
-                        console.log("if swing betting chosen, there should be a second equation");
+                    if (!clientMsg.order) {
+                        console.log("swing betting requires a second card order");
                         return;
                     }
-                    player.otherEquationResult = clientMsg.otherEquationResult;
-                    player.otherHand = clientMsg.order.map(i => player.hand[i]!); // is this gonna be reordered? do I need to copy?
-                    
+
+                    const swingOrder: unknown[] = clientMsg.order;
+                    if (!Array.isArray(swingOrder) || swingOrder.length !== player.hand.length) return;
+                    const swingSeen = new Set<number>();
+                    for (const i of swingOrder) {
+                        if (typeof i !== 'number' || i < 0 || i >= player.hand.length || swingSeen.has(i)) return;
+                        swingSeen.add(i);
+                    }
+                    player.otherHand = swingOrder.map(i => player.hand[Number(i)]!);
+
+                    try {
+                        player.otherEquationResult = applyOps(player.otherHand);
+                    } catch {
+                        return;
+                    }
+                    if (!isFinite(player.otherEquationResult!)) return;
+
                     // this shouldn't be true. What if their results are 21, and 23. They might want to choose 21 as high equation, and 23 as low (even though they could have just kept 21 for both)
                     if (player.otherEquationResult < player.equationResult) {
                         player.lowEquationResult = player.otherEquationResult;
@@ -862,6 +894,7 @@ function endHand(game: Game) {
     console.log("endHand");
     playersInRoom(game.roomCode).forEach(player => { console.log(player.username, "chipCount:", player.chipCount); });
 
+    clearTimeout(game.endEquationFormingTimeout);
     clearHands(game.roomCode, playersInRoom(game.roomCode));
     game.maxRaiseReached = false;
     game.handNumber += 1;
@@ -869,9 +902,9 @@ function endHand(game: Game) {
 
     playersInRoom(game.roomCode).forEach(player => { // refactor to this.players() which is a function
         if (player.chipCount === 0) {
-            sendSocketMessageToEveryClientInRoom(game.roomCode, { 
+            sendSocketMessageToEveryClientInRoom(game.roomCode, {
                 type: "kicked",
-                id: player.id,
+                userId: player.id,
                 color: player.color!,
                 username: player.username!,
                 hand: player.hand,
@@ -1076,6 +1109,10 @@ function commenceFirstRoundBetting(game: Game) {
         type: "first-round-betting-commenced",
     });
 
+    const currentPlayer = players.get(game.currentTurnPlayerId!);
+    if (!currentPlayer || currentPlayer.out || currentPlayer.foldedThisTurn) {
+        game.currentTurnPlayerId = findNextPlayerTurn(game);
+    }
     advanceToNextPlayersTurn(game, 1); // TODO change to anteAmount (and then modify as game goes on)
 }
 
@@ -1152,7 +1189,7 @@ function commenceEquationForming(game: Game) {
 }
 
 function endEquationForming(game: Game) {
-    players.forEach(player => {
+    nonFoldedAndNotOutPlayers(game).forEach(player => {
         try {
             player.equationResult = applyOps(player.hand);
 
