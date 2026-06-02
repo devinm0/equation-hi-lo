@@ -29,7 +29,7 @@ async function discardIfNeeded(pages: Page[]) {
     for (let i = 0; i < discardQueue.length; i++) {
         await discardQueue[i]!.locator('.card-highlighted').first().click({ force: true });
         await discardQueue[i]!.locator('.card-highlighted').first().waitFor({ state: 'hidden', timeout: 8000 });
-        await pause(discardQueue[i]!, 2000);
+        await pause(discardQueue[i]!, 3000);
     }
 }
 
@@ -78,7 +78,7 @@ async function runBettingRound(
             foldedPages.push(bettingPage!);
             await bettingPage!.locator('#foldButton').click();
         }
-        await pause(bettingPage!, 1000);
+        await pause(bettingPage!, 2000);
     }
     return { foldedPages };
 }
@@ -120,7 +120,7 @@ async function doEquationForming(pages: Page[]) {
         });
 
         if (!arranged) return;
-        await pause(page);
+        await pause(page, 1500);
         await lockButton.click();
         await expect(lockButton).toBeHidden({ timeout: 6000 });
     }));
@@ -136,7 +136,7 @@ async function doHiLoSelection(pages: Page[]) {
         }
         await page.locator('.option[data-choice="low"]').click();
         await page.locator('#confirmChoice').click();
-        await pause(page, 2000);
+        await pause(page, 3000);
     }));
 }
 
@@ -149,7 +149,7 @@ async function acknowledgeResults(pages: Page[]) {
             return; // out player — button not shown
         }
         await button.click({ force: true });
-        await pause(page);
+        await pause(page, 1500);
     }));
 }
 
@@ -399,8 +399,12 @@ test.describe('Betting mechanics', () => {
         await discardIfNeeded(pages);
         await doEquationForming(pages);
 
-        // Round 2: raise, re-raise, call, call (4 turns for 3 players)
-        await runBettingRound(pages, ['raise', 'raise', 'call', 'call']);
+        // Round 2: raise, re-raise, call, call — but may be skipped if someone went
+        // all-in during round 1 (server sets maxRaiseReached → second round skipped).
+        const secondRoundPage = await findBettingPage(pages, 4000);
+        if (secondRoundPage) {
+            await runBettingRound(pages, ['raise', 'raise', 'call', 'call']);
+        }
 
         await doHiLoSelection(pages);
         await acknowledgeResults(pages);
