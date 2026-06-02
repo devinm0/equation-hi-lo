@@ -4,6 +4,7 @@ export default defineConfig({
   testDir: './automated_testing',
   testIgnore: '**/sandbox.test.ts',
   timeout: 120000,
+  workers: 1,
   use: {
     baseURL: 'http://localhost:8080',
     browserName: 'chromium',

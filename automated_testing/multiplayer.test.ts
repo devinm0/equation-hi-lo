@@ -171,9 +171,13 @@ async function playHand(pages: Page[]) {
 
     await doEquationForming(pages);
 
-    // Second round betting — player 1 raises, players 2-9 call, player 10 folds
+    // Second round betting — player 1 raises, players 2-9 call, player 10 folds.
+    // May be skipped if maxRaiseReached was set during first-round betting (all-in).
     await pause(pages[0]!);
-    await runBettingRound(pages, ['raise', 'call', 'call', 'call', 'call', 'call', 'call', 'call', 'call', 'fold']);
+    const secondRoundPage = await findBettingPage(pages, 4000);
+    if (secondRoundPage) {
+        await runBettingRound(pages, ['raise', 'call', 'call', 'call', 'call', 'call', 'call', 'call', 'call', 'fold']);
+    }
 
     await pause(pages[0]!);
     await doHiLoSelection(pages);
