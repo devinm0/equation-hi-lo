@@ -2,7 +2,8 @@
 // import { sum } from '../sum';
 import { OperatorCard, Suit, NumberCard, GamePhase } from '../enums.js';
 import { Game, Player, Card } from '../public/classes.js';
-import { getHandToSendFromHand, findLowestCard, findHighestCard, findLoWinner, findHiWinner, determineWinnersInternal } from '../server.js';
+import { getHandToSendFromHand } from '../game/notify.js';
+import { findLowestCard, findHighestCard, findLoWinner, findHiWinner, determineWinnersInternal } from '../server.js';
 
 test
 .each([

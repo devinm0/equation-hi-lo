@@ -17,6 +17,12 @@ import {
     sendSocketMessageToNonFoldedAndNotOutPlayers,
     sendSocketMessageToFoldedOrOutPlayers,
 } from './ws/broadcast.js';
+import {
+    getHandToSendFromHand,
+    sendSocketMessageThatPlayerFolded,
+    notifyPlayerOfNewlyDealtCards,
+    notifyAllPlayersOfNewlyDealtCards,
+} from './game/notify.js';
 import express from "express";
 import http from "http";
 import { WebSocketServer } from 'ws';
@@ -929,28 +935,6 @@ function endHand(game: Game) {
     initializeHand(game);
 }
 
-function sendSocketMessageThatPlayerFolded(roomCode: string, foldedUserId: string) {
-    const foldedPlayer = players.get(foldedUserId);
-    if (!foldedPlayer) return false;
-    
-    wss.clients.forEach((c) => {
-        const client = c as ExtendedWebSocket; // TODO better to have Map then I guess?
-        let handToSend = getHandToSendFromHand(foldedPlayer.hand, client.userId === foldedUserId);
-        
-        if (/*client !== ws && */client.readyState === WebSocket.OPEN && players.get(client.userId)?.roomCode === roomCode) {
-            client.send(JSON.stringify({
-                type: "player-folded",
-                id: foldedUserId,
-                color: foldedPlayer.color!,
-                username: foldedPlayer.username,
-                hand: handToSend,
-                chipCount: foldedPlayer.chipCount
-            }));
-        }
-    })
-}
-
-
 function initializeHand(game: Game) { // means start a hand of play
     console.log("Initializing hand.");
 
@@ -1028,76 +1012,6 @@ function endBettingRound(game: Game) {
         player.turnTakenThisRound = false;
         player.stake = 0;
     }
-}
-
-interface DealPayload {
-    type: "deal";
-    id: string;
-    color: string; // remove this and don't have color come through each time? what about players rejoining though...
-    username: string;
-    chipCount: number;
-    multiplicationCardDealt: boolean;
-    hand?: Card[];
-}
-
-function notifyPlayerOfNewlyDealtCards(playerDealtTo: Player, playerNotifying: Player, multiplicationCardDealt = false) {
-    wss.clients.forEach((c) => {
-        const client = c as ExtendedWebSocket; // TODO better to have Map then I guess?
-
-        if (client.userId === playerNotifying.id) {
-            let payload: DealPayload = {
-                type: "deal",
-                id: playerDealtTo.id,
-                color: playerDealtTo.color!,
-                username: playerDealtTo.username!,
-                chipCount: playerDealtTo.chipCount,
-                multiplicationCardDealt: multiplicationCardDealt,
-            };
-            if (playerNotifying.id == playerDealtTo.id) {
-                payload.hand = playerDealtTo.hand;
-                // only the player who is dealt a multiplication card gets prompted to discard 
-            } else {
-                // hide the hidden card. NOTE [...hand] only works if contains primitives
-                let handToSend = getHandToSendFromHand(playerDealtTo.hand, playerNotifying.id === playerDealtTo.id);
-                payload.hand = handToSend
-            }
-
-            if (client.readyState === WebSocket.OPEN) {
-                client.send(JSON.stringify(payload));
-            }
-        }
-    });
-}
-
-// TODO test that only the player who is dealt a multiplication card gets prompted to discard
-// TODO test that card is hidden from each other player
-// TODO test that a player knows which one of their cards is hidden
-function notifyAllPlayersOfNewlyDealtCards(roomCode: string, player: Player, multiplicationCardDealt = false) {
-    wss.clients.forEach((c) => {
-        const client = c as ExtendedWebSocket; // TODO better to have Map then I guess?
-        if (players.get(client.userId)?.roomCode === roomCode) { // just change to client.userId in room map?
-            let payload: DealPayload = {
-                type: "deal",
-                color: player.color!,
-                id: player.id,
-                username: player.username!,
-                chipCount: player.chipCount,
-                multiplicationCardDealt: multiplicationCardDealt
-            };
-            if (client.userId == player.id) {
-                payload.hand = player.hand;
-                // only the player who is dealt a multiplication card gets prompted to discard 
-            } else {
-                // hide the hidden card. NOTE [...hand] only works if contains primitives
-                let handToSend = getHandToSendFromHand(player.hand, client.userId === player.id);
-                payload.hand = handToSend
-            }
-
-            if (client.readyState === WebSocket.OPEN) {
-                client.send(JSON.stringify(payload));
-            }
-        }
-    });
 }
 
 function commenceFirstRoundBetting(game: Game) {
@@ -1792,20 +1706,6 @@ applyOps tests: one valid and one invalid. and one with divide by zero
 
 
 
-export function getHandToSendFromHand(hand: Card[], revealHiddenCard: boolean) {
-    let handToSend = JSON.parse(JSON.stringify(hand));
-
-    for (let i = 0; i < handToSend.length; i++) {
-        if (handToSend[i].hidden === true) {
-            if (!revealHiddenCard) {
-                // hide the card if the user is not the owner of the card
-                handToSend[i] = new Card(true);
-            }
-        }
-    }
-
-    return handToSend;
-}
 
 
 const heartbeatInterval = setInterval(function ping() {
