@@ -23,6 +23,19 @@ import {
     notifyPlayerOfNewlyDealtCards,
     notifyAllPlayersOfNewlyDealtCards,
 } from './game/notify.js';
+import {
+    playersInRoom,
+    playersInRoomEntries,
+    activePlayersInRoom,
+    nonFoldedAndNotOutPlayers,
+} from './game/rooms.js';
+import {
+    playersThatNeedToDiscard,
+    dealOperatorCards,
+    dealFirstHiddenCardToEachPlayer,
+    dealTwoOpenCardsToEachPlayer,
+    dealLastOpenCardToEachPlayer,
+} from './game/deal.js';
 import express from "express";
 import http from "http";
 import { WebSocketServer } from 'ws';
@@ -749,10 +762,6 @@ function fold(foldedPlayer: Player, manual: Boolean, game: Game) {
     }
 }
 
-function nonFoldedAndNotOutPlayers(game: Game){
-    return [...(activePlayersInRoom(game.roomCode).filter(player => player.foldedThisTurn !== true))];
-}
-
 function endRoundOrProceedToNextPlayer(game: Game, justPlayedPlayer: Player) {
     if (bettingRoundIsComplete(game)) {
         endBettingRound(game);
@@ -794,106 +803,6 @@ function clearHands(roomCode: string, playersInThisRoom: Player[]) {
 
         notifyAllPlayersOfNewlyDealtCards(roomCode, player);
     })
-}
-
-function dealOperatorCards(roomCode: string, playersInThisRoom: Player[]) {
-    playersInThisRoom.forEach(player => { // change players in room to be just the values. then modify logic everywhere
-        player.hand.push(new Card(false, OperatorCard.ADD, Suit.OPERATOR));
-        player.hand.push(new Card(false, OperatorCard.DIVIDE, Suit.OPERATOR));
-        player.hand.push(new Card(false, OperatorCard.SUBTRACT, Suit.OPERATOR));
-
-        notifyAllPlayersOfNewlyDealtCards(roomCode, player);
-    })
-}
-
-function dealFirstHiddenCardToEachPlayer(game: Game, players: Player[]) {
-    if (game.deck.length === 0) {
-        throw Error("Deck has run out of cards.");
-    }
-    players.forEach(player => {
-        for (let i = 0; i < game.deck.length; i++) {
-            const card = game.deck[i];
-
-            // cannot be operator card
-            if (card!.suit !== Suit.OPERATOR) {
-                // Remove the card and give it to player
-                player.hand.push(game.deck.splice(i, 1)[0]!); // TODO what if we literally run out of cards
-                // set hidden to true, so when message is sent to other players it's obfuscated
-                player.hand[player.hand.length - 1]!.hidden = true;
-                break; // having to index here is so trash omg
-            }
-        }
-
-        notifyAllPlayersOfNewlyDealtCards(game.roomCode, player);
-    });
-}
-
-
-// TODO write tests for these
-// that two operators cannot be dealt
-// that number count is now 3 if there's a root
-
-function dealTwoOpenCardsToEachPlayer(game: Game, players: Player[]) {
-    if (!game) return;
-    players.forEach(player => { 
-        // first card can be any card
-        const draw = drawFromDeck(game.deck);
-
-        player.hand.push(draw);
-    
-        // technically should put returned cards at the bottom, but the math should be the same
-        let draw2;
-        // can't have both open cards be operators according to game rules.
-        if (draw.suit === Suit.OPERATOR) {
-            draw2 = drawNumberCardFromDeck(game.deck);
-        } else {
-            draw2 = drawFromDeck(game.deck);
-        }
-        player.hand.push(draw2);
-
-        if (draw.value === OperatorCard.ROOT || draw2.value === OperatorCard.ROOT) { // push another number
-            const draw3 = drawNumberCardFromDeck(game.deck); // TODO change this to deck.drawNumberCard()
-
-            player.hand.push(draw3);
-        }
-
-        if (draw.value === OperatorCard.MULTIPLY || draw2.value === OperatorCard.MULTIPLY) { // expect one more person to discard before advancing game state
-            player.needToDiscard = true;
-        }
-
-        notifyAllPlayersOfNewlyDealtCards(game.roomCode, player, player.needToDiscard); // magic bool parameters are bad. just call notifyOfFirstOpenDeal
-
-        console.log("dealt 2 open cards to " + player.username);
-        printHand(player.hand);
-    });
-
-    return playersThatNeedToDiscard(game.roomCode).length;
-}
-
-function dealLastOpenCardToEachPlayer(game: Game) {
-    game.phase = GamePhase.SECONDDEAL;
-
-    // can't wanna deal to folded players
-    nonFoldedAndNotOutPlayers(game).forEach(player => {    
-        const draw = drawFromDeck(game.deck);
-        if (!draw) return;
-        player.hand.push(draw);
-    
-        if (draw.value === OperatorCard.ROOT) {
-            let draw2 = drawNumberCardFromDeck(game.deck);
-            if (!draw2) return;
-            player.hand.push(draw2);
-        }
-
-
-        if (draw.value === OperatorCard.MULTIPLY) { // expect one more person to discard before advancing game state
-            player.needToDiscard = true;
-        }
-
-        notifyAllPlayersOfNewlyDealtCards(game.roomCode, player, player.needToDiscard);
-    });
-
-    return playersThatNeedToDiscard(game.roomCode).length;
 }
 
 function endHand(game: Game) {
@@ -995,13 +904,6 @@ function initializeHand(game: Game) { // means start a hand of play
     }
 }
 
-function playersInRoom(roomCode: string) { return [...players.values()].filter(player => player.roomCode === roomCode) };
-
-function playersInRoomEntries(roomCode: string) { return [...players].filter(([id, player]) => player.roomCode === roomCode) }; 
-
-function playersThatNeedToDiscard(roomCode: string) { return playersInRoom(roomCode).filter(player => player.needToDiscard === true) };
-
-function activePlayersInRoom(roomCode: string) { return playersInRoom(roomCode).filter(player => player.out === false) };
 
 function endBettingRound(game: Game) {
     sendSocketMessageToEveryClientInRoom(game.roomCode, { type: "end-betting-round", round: game.phase });
