@@ -18,7 +18,9 @@ async function pause(page: Page, ms = 500) {
 async function discardIfNeeded(pages: Page[]) {
     const needsDiscard = await Promise.all(pages.map(async (page) => {
         try {
-            await page.locator('.card-highlighted').first().waitFor({ state: 'visible', timeout: 2000 });
+            // 10s (not 2s): the discard highlight can render a few seconds after the deal
+            // — a 2s window intermittently missed it, stalling the hand at second deal.
+            await page.locator('.card-highlighted').first().waitFor({ state: 'visible', timeout: 10000 });
             return true;
         } catch {
             return false;
@@ -146,17 +148,22 @@ async function doHiLoSelection(pages: Page[]) {
     }));
 }
 
-async function acknowledgeResults(pages: Page[]) {
-    await Promise.all(pages.map(async (page) => {
+// Returns the number of pages that actually saw (and acknowledged) the results modal.
+// A stalled hand never reaches results, so callers can assert on this to fail loudly
+// instead of silently passing.
+async function acknowledgeResults(pages: Page[]): Promise<number> {
+    const acked = await Promise.all(pages.map(async (page) => {
         const button = page.locator('#confirmResults');
         try {
             await button.waitFor({ state: 'visible', timeout: 20000 });
         } catch {
-            return; // out player — button not shown
+            return false; // out player — button not shown, or hand stalled before results
         }
         await button.click({ force: true });
         await pause(page, 1500);
+        return true;
     }));
+    return acked.filter(Boolean).length;
 }
 
 // Creates contexts + pages with WS trackers attached before navigation.
@@ -416,7 +423,12 @@ test.describe('Betting mechanics', () => {
         }
 
         await doHiLoSelection(pages);
-        await acknowledgeResults(pages);
+        const acked = await acknowledgeResults(pages);
+
+        // All 3 players reach results (nobody folds in this test). If the hand stalled
+        // (e.g. a missed discard at second deal), this is < 3 and the test fails instead
+        // of silently passing.
+        expect(acked, 'all 3 players must reach the results screen (hand completed)').toBe(NUM_PLAYERS);
 
         // No player's chip count should have gone negative
         expect(chipTracker.min, 'chip counts must stay non-negative').toBeGreaterThanOrEqual(0);

@@ -267,7 +267,9 @@ test.describe('Multiplayer game flow', () => {
         // Host creates a room
         await hostPage.click('#createButton');
         await expect(hostPage.locator('#uiContainer')).not.toHaveClass(/hidden/);
-        await expect(hostPage.locator('#roomCodeContainer')).toBeVisible();
+        // Wait for the room code itself to arrive (WS round-trip) before reading it —
+        // not just for the container to be visible, which shows "Room Code:" first.
+        await expect(hostPage.locator('#roomCodeContainer')).toContainText(/[A-Z0-9]{4}/);
 
         const roomCodeText = await hostPage.locator('#roomCodeContainer').innerText();
         const roomCode = roomCodeText.split(' ')[1];
