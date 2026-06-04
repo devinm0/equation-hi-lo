@@ -200,3 +200,14 @@ Backend split plan (server.ts → src/)
       results with a red blink + notification at both equation lock-in and swing second
       equation. This T4 is the deeper fix so an all-zeros player isn't stuck unable to
       form ANY valid equation in the first place.)
+
+  T5. Hi/Lo selection: animate the chosen token(s) upward
+      When a player picks hi or lo (or both for swing), the chosen set of tokens should
+      animate upward to visually indicate the selection (vs. just toggling a class).
+
+  T6. Clean up notifications (too cluttered, no smooth reflow)
+      Too many notifications stack up and clutter the view. Also, when some of them
+      disappear, the remaining ones don't animate smoothly upward to fill the gap — they
+      jump. Fix: cap the number of concurrent notifications (and/or dedupe/coalesce
+      repeats), and animate the stack reflow (e.g. transform/transition on position) so
+      surviving notifications slide up smoothly when one above them is removed.
