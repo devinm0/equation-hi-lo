@@ -5,3 +5,6 @@ equation-hi-lo-keypair.pem
 launch.json
 dist/
 .env
+# Playwright test artifacts
+test-results/
+playwright-report/

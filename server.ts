@@ -1,7 +1,7 @@
 import { OperatorCard, Suit, NumberCard } from './enums.js';
 import { printDeck, printHand, logRoomsAndPlayers } from './debug/print.js';
 import { generateDeck, drawNumberCardFromDeck, drawFromDeck } from './game/deck.js';
-import { findNextKeyWithWrap, removeWhitespace } from './public/utilities.js';
+import { removeWhitespace } from './public/utilities.js';
 import {
     games, players, emojis, RATE_LIMIT, INTERVAL, EQUATION_DURATION,
     ExtendedWebSocket, ClientMessage, ServerMessage,
@@ -25,7 +25,6 @@ import {
 } from './game/notify.js';
 import {
     playersInRoom,
-    playersInRoomEntries,
     activePlayersInRoom,
     nonFoldedAndNotOutPlayers,
 } from './game/rooms.js';
@@ -36,6 +35,11 @@ import {
     dealTwoOpenCardsToEachPlayer,
     dealLastOpenCardToEachPlayer,
 } from './game/deal.js';
+import {
+    findNextPlayerTurn,
+    bettingRoundIsComplete,
+    advanceToNextPlayersTurn,
+} from './game/betting.js';
 import express from "express";
 import http from "http";
 import { WebSocketServer } from 'ws';
@@ -942,50 +946,6 @@ function commenceSecondRoundBetting(game: Game) {
     // We can change this implementation later to always follow left of the dealer
     game.currentTurnPlayerId = findNextPlayerTurn(game); // TODO we should be passing player id into advanceToNextPlayersTurn
     advanceToNextPlayersTurn(game, 0); // no ante to match on the second round
-}
-
-function advanceToNextPlayersTurn(game: Game, toCall: number) { // should take a parameter here
-    console.log("Advancing to next player's turn, with id:", game.currentTurnPlayerId);
-    // Player A bets 10 and then has 20 chips. Player B has 30 chips. Max bet is still 30, not 20. 
-    // So add the 10 and 20 to get 30. (Add chips PLUS the chips they have in this round)
-    const nonFoldedPlayerChipCounts = nonFoldedAndNotOutPlayers(game).map(player => player.chipCount + player.stake);
-        // if I raised 9 when I ahd 15, so i have 6 left. This will make the max Bet 15, when it should be 6
-        // but in the other scenario, if I don't add the player stakes, the next 15 player will think max bet is 6 when it should be 15
-    const maxStake = Math.min(...nonFoldedPlayerChipCounts);
-    
-    // modify this so that we don't trust the client?
-    // but technically we do because only currentTurnPlayer can send a betting message.
-    wss.clients.forEach((c) => {
-        const client = c as ExtendedWebSocket; // TODO better to have Map then I guess?
-        if (/*client !== ws && */client.readyState === WebSocket.OPEN && players.get(client.userId)?.roomCode === game.roomCode) { // TODO refactor to room.clients.forEach
-            // something like game.player.forEach ({ wss.clients[player.userId]. send whatever}
-          client.send(JSON.stringify({
-            type: "next-turn",
-            toCall: toCall, // change to game.toCall and remove second parameter to this method
-            maxBet: maxStake - players.get(game.currentTurnPlayerId!)!.stake, // need to resubtract player stake here I think
-            currentTurnPlayerId: game.currentTurnPlayerId,
-            username: players.get(game.currentTurnPlayerId!)!.username,
-            playerChipCount: players.get(client.userId)!.chipCount
-            // pot: pot
-          }));
-        }
-        });
-}
-
-function findNextPlayerTurn(game: Game): string {
-    return findNextKeyWithWrap<Player>(playersInRoomEntries(game.roomCode), 
-        game.currentTurnPlayerId!, v => v.foldedThisTurn !== true && v.out !== true);
-}
-
-function bettingRoundIsComplete(game: Game) {
-    const playerBetAmounts = nonFoldedAndNotOutPlayers(game).map(player => player.stake);
-    const setOfBets = new Set(playerBetAmounts);
-    // bets are all equal AND active players have all bet at least once, then betting round is complete
-    if (setOfBets.size === 1 && nonFoldedAndNotOutPlayers(game).every(player => player.turnTakenThisRound === true)){ 
-        return true;
-    }
-
-    return false;
 }
 
 function commenceEquationForming(game: Game) {
