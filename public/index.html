@@ -548,10 +548,7 @@
                     // Leaving this equationResult calculation as a guard from submitting a malformed one early
                     let equationResult;
                     const cards = handDivs.get(myId).querySelectorAll('.card');
-                    try {
-                        equationResult = applyOps(cards);
-                        console.log(equationResult);
-                    } catch (e) {
+                    const blinkRed = (message) => {
                         cards.forEach(card => {
                             card.classList.remove('blink-red');
 
@@ -562,7 +559,20 @@
                             }, 1200)
                         });
 
-                        showNotification("Malformed equation, try again.", "red", 5000);
+                        showNotification(message, "red", 5000);
+                    };
+                    try {
+                        equationResult = applyOps(cards);
+                        console.log(equationResult);
+                    } catch (e) {
+                        blinkRed("Malformed equation, try again.");
+                        return;
+                    }
+                    // applyOps returns Infinity/NaN (without throwing) for division by zero,
+                    // which the server rejects via isFinite. Reject it here too so the player
+                    // is told why instead of being silently auto-folded.
+                    if (!isFinite(equationResult)) {
+                        blinkRed("Equation must be a real number (no division by zero).");
                         return;
                     }
                     submitHandOrder();
@@ -608,10 +618,7 @@
                         confirmOtherEquationFormedButton.onclick = () => {
                             let equationResult;
                             const cards = handDivs.get(myId).querySelectorAll('.card');
-                            try {
-                                equationResult = applyOps(cards);
-                                console.log(equationResult);
-                            } catch (e) {
+                            const blinkRed = (message) => {
                                 cards.forEach(card => {
                                     card.classList.remove('blink-red');
 
@@ -622,10 +629,21 @@
                                     }, 1200)
                                 });
 
-                                showNotification("Malformed equation, try again.", "red", 5000);
+                                showNotification(message, "red", 5000);
+                            };
+                            try {
+                                equationResult = applyOps(cards);
+                                console.log(equationResult);
+                            } catch (e) {
+                                blinkRed("Malformed equation, try again.");
                                 return;
                             }
-                            
+                            // Server rejects non-finite (div-by-zero) results via isFinite; mirror that here.
+                            if (!isFinite(equationResult)) {
+                                blinkRed("Equation must be a real number (no division by zero).");
+                                return;
+                            }
+
                             const data = {
                                 type: "hi-lo-selected",
                                 userId: myId,

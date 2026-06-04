@@ -57,6 +57,10 @@ async function runBettingRound(
         if (!bettingPage && action === 'fold') break;
         expect(bettingPage, `no player had betting controls for action '${action}'`).toBeDefined();
 
+        // Pause BEFORE acting so the betting controls are visible long enough to watch
+        // in headed mode, instead of being clicked the instant they appear.
+        await pause(bettingPage!, 2000);
+
         if (action === 'raise') {
             await bettingPage!.evaluate(() => {
                 const slider = document.getElementById('betSlider') as HTMLInputElement;
@@ -78,8 +82,10 @@ async function runBettingRound(
             foldedPages.push(bettingPage!);
             await bettingPage!.locator('#foldButton').click();
         }
-        await pause(bettingPage!, 2000);
     }
+    // Sync buffer: let the server complete the betting round and deal/transition to the
+    // next phase (e.g. last-card deal + discard highlight) before the next test step runs.
+    if (pages[0]) await pause(pages[0], 2000);
     return { foldedPages };
 }
 
@@ -136,7 +142,7 @@ async function doHiLoSelection(pages: Page[]) {
         }
         await page.locator('.option[data-choice="low"]').click();
         await page.locator('#confirmChoice').click();
-        await pause(page, 3000);
+        await pause(page, 2000);
     }));
 }
 
@@ -330,6 +336,9 @@ test.describe('Betting mechanics', () => {
                     displayedMax: (document.getElementById('sliderMax') as HTMLElement).textContent ?? '',
                 }));
             }
+
+            // Observe the controls before acting (headed mode).
+            await pause(bettingPage!, 2000);
 
             const callBtn = bettingPage!.locator('#callRaiseButton');
             if (await callBtn.isVisible()) {

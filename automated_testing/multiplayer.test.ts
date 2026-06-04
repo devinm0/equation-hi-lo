@@ -69,6 +69,10 @@ async function runBettingRound(pages: Page[], actions: Array<'call' | 'raise' | 
         if (!bettingPage && action === 'fold') break;
         expect(bettingPage, `no player had betting controls for action '${action}'`).toBeDefined();
 
+        // Pause BEFORE acting so the betting controls are visible to watch in headed mode,
+        // instead of being clicked the instant they appear.
+        await pause(bettingPage!, 1000);
+
         if (action === 'raise') {
             await bettingPage!.evaluate(() => {
                 const slider = document.getElementById('betSlider') as HTMLInputElement;
@@ -82,6 +86,9 @@ async function runBettingRound(pages: Page[], actions: Array<'call' | 'raise' | 
             await bettingPage!.locator('#foldButton').click();
         }
     }
+    // Sync buffer: let the server complete the round and deal/transition to the next phase
+    // (e.g. last-card deal + discard highlight) before the next test step runs.
+    if (pages[0]) await pause(pages[0], 2000);
 }
 
 async function doEquationForming(pages: Page[]) {

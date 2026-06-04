@@ -180,3 +180,23 @@ Backend split plan (server.ts → src/)
       constant, or a dedicated HI_LO_DURATION) that fires when HILOSELECTION times out.
       When it fires: fold any player whose choices.length === 0, then call determineWinners
       with whoever remains. Mirror the pattern used in endEquationForming.
+
+  T4. Redeal number cards when a player is dealt an unformable hand (all zeros)
+      Every player is always dealt +, −, ÷, and a complete 4-number equation forces all
+      three operators to be used. So ÷ is unavoidable. If a player holds at least one
+      non-zero number they can place it as the divisor and stay finite. But if ALL of a
+      player's number cards are 0 (there are exactly four 0 cards in the deck, one per
+      suit), every arrangement forces 0 ÷ 0 = NaN → fails the server's isFinite check in
+      endEquationForming → the player is auto-folded with no valid play available.
+      Fix: during the deal, detect when a player's number cards are all 0 and redeal one
+      of them (swap a 0 back into the deck for a fresh number card). Likely belongs in
+      game/deal.ts after the last open card is dealt, checking each player's number cards.
+      Rigged E2E test needed: force a deck (or a deal) where one player gets all zeros and
+      assert they receive a non-zero number after the redeal, so they can form a finite
+      equation. Will require a test hook to seed/rig the deck (generateDeck currently
+      shuffles randomly with no seed) — add a debug-only deck injection path.
+
+      (Client-side div-by-zero lock-in is now guarded: index.html rejects non-finite
+      results with a red blink + notification at both equation lock-in and swing second
+      equation. This T4 is the deeper fix so an all-zeros player isn't stuck unable to
+      form ANY valid equation in the first place.)
