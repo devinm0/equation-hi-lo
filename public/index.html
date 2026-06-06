@@ -227,6 +227,7 @@
     import { NumberCard, OperatorCard, Suit, GamePhase } from './enums.js';
     import { SoundManager } from './sounds.js';
     import CountdownTimer from "./timer.js";
+    import { evaluateTokens } from './equation-core.js';
         
     const progressBar = document.getElementById("progressBar");
     const progressBarOverlay = document.getElementById("progressBarOverlay");
@@ -346,8 +347,8 @@
             }
             // TODO 5/20
             // need the same bool to only do this with alert.
-            const highlightedCards = document.querySelectorAll('.card-highlighted');
-            highlightedCards.forEach(card => {
+            const highlightedCardEls = document.querySelectorAll('.card-highlighted');
+            highlightedCardEls.forEach(card => {
                 // have a guard clause here but might be better to KNOW that I'll only call this once
                 if (!card.classList.contains('listener-added')) {
                     card.addEventListener('click', function() {
@@ -359,7 +360,9 @@
                             username: myName
                         };
                         socket.send(JSON.stringify(data));
-                        // remove the highlight from ALL cards
+                        // remove the highlight from ALL cards. highlightedCards here is the
+                        // module-level rAF Set (line ~1114), NOT this NodeList — deleting from
+                        // the Set stops the shared highlight animation loop for discarded cards.
                         document.querySelectorAll('.card-highlighted').forEach(card => {
                             card.classList.remove("card-highlighted");
                             card.style.transform = '';
@@ -1342,10 +1345,13 @@
 
     // for now, just trust the client. eventually we'll have to send "card order" because even esnding the hand
     // is untrustable. and then the server can order the cards and apply operators
+    // Browser-side adapter: convert card <div>s into tokens, then evaluate with the SHARED
+    // core (equation-core.js) — the exact same evaluator the server uses. This keeps client
+    // and server perfectly in sync (no more "looks finite on the client, NaN on the server").
+    // Returns NaN/Infinity for division-by-zero (callers check isFinite); throws on malformed.
     function applyOps(cardElements) {
         const tokens = [];
 
-        // Convert each card <div> into a token (number or operator)
         for (const card of cardElements) {
             const value = card.dataset.value;
             if (!value) continue;
@@ -1353,53 +1359,29 @@
             const val = value.trim();
 
             if (!isNaN(val)) {
-                tokens.push(Number(val));
+                tokens.push({ kind: "number", value: Number(val) });
             } else if (val === '√') {
-                tokens.push('sqrt'); // use keyword for safe eval later
+                tokens.push({ kind: "sqrt" });
             } else if (val === '+') {
-                tokens.push('+');
+                tokens.push({ kind: "op", value: '+' });
             } else if (val === '-' || val === '−') {
-                tokens.push('-');
+                tokens.push({ kind: "op", value: '-' });
             } else if (val === '÷' || val === '/') {
-                tokens.push('/');
+                tokens.push({ kind: "op", value: '/' });
             } else if (val === '*' || val === '×') {
-                tokens.push('*');
+                tokens.push({ kind: "op", value: '*' });
             } else {
                 console.warn('Unhandled token:', val);
             }
         }
 
-        console.log(tokens);
-        // Convert tokens into evaluable expression string
-        const expr = [];
-        for (let i = 0; i < tokens.length; i++) {
-            const tok = tokens[i];
-
-            if (tok === 'sqrt') {
-                // Check next token is a number
-                const next = tokens[i + 1];
-                if (typeof next === 'number') {
-                    expr.push(`Math.sqrt(${next})`);
-                    i++; // skip next token
-                } else {
-                    throw new Error("√ must be followed by a number");
-                }
-            } else {
-                expr.push(tok);
-            }
-        }
-
-        // Join into string and evaluate
-        const exprStr = expr.join(' ');
-        try {
-            const result = Function(`"use strict"; return (${exprStr})`)();
-            if (!isFinite(result)) throw new Error(`Non-finite result: ${result}`);
-            return result;
-        } catch (e) {
-            console.error("Invalid expression:", exprStr);
-            throw e;
-        }
+        return evaluateTokens(tokens);
     }
+
+    // Exposed for E2E tests: lets the test evaluate a candidate card arrangement with the
+    // real client evaluator (so it can rearrange until the result is finite, avoiding
+    // accidental 0/0 -> NaN equations that would get the player auto-folded on timeout).
+    window.applyOps = applyOps;
 
     let selectedChoices = new Set();
 

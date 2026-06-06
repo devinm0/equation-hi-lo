@@ -3,7 +3,44 @@
 import { OperatorCard, Suit, NumberCard, GamePhase } from '../enums.js';
 import { Game, Player, Card } from '../public/classes.js';
 import { getHandToSendFromHand } from '../game/notify.js';
-import { findLowestCard, findHighestCard, findLoWinner, findHiWinner, determineWinnersInternal } from '../server.js';
+import { findLowestCard, findHighestCard, findLoWinner, findHiWinner, determineWinnersInternal } from '../game/results.js';
+import { evaluateTokens, Token } from '../equation-core.js';
+
+// Regression tests for the shared equation evaluator. The √ cases guard the bug where
+// unary √ was applied to a whole sub-expression (√(9/6-10) -> NaN) instead of just its
+// operand ((√9)/6-10 -> -9.5), which made the server disagree with the client.
+describe('evaluateTokens', () => {
+    const n = (value: number): Token => ({ kind: 'number', value });
+    const op = (value: '+' | '-' | '*' | '/'): Token => ({ kind: 'op', value });
+    const sqrt: Token = { kind: 'sqrt' };
+
+    test('√ binds to its operand, not the rest of the expression', () => {
+        // √0 + √9 / 6 - 10  =  0 + 3/6 - 10  =  -9.5
+        expect(evaluateTokens([sqrt, n(0), op('+'), sqrt, n(9), op('/'), n(6), op('-'), n(10)])).toBeCloseTo(-9.5);
+    });
+
+    test('√9 / 6 = 0.5 (not √(9/6))', () => {
+        expect(evaluateTokens([sqrt, n(9), op('/'), n(6)])).toBeCloseTo(0.5);
+    });
+
+    test('chained √√16 = 2', () => {
+        expect(evaluateTokens([sqrt, sqrt, n(16)])).toBeCloseTo(2);
+    });
+
+    test('multiplication precedence: 2 + 3 * 4 = 14', () => {
+        expect(evaluateTokens([n(2), op('+'), n(3), op('*'), n(4)])).toBe(14);
+    });
+
+    test('division by zero is non-finite', () => {
+        expect(Number.isFinite(evaluateTokens([n(1), op('/'), n(0)]))).toBe(false);
+        expect(Number.isFinite(evaluateTokens([n(0), op('/'), n(0)]))).toBe(false);
+    });
+
+    test('malformed expression throws', () => {
+        expect(() => evaluateTokens([n(1), op('+')])).toThrow();
+        expect(() => evaluateTokens([n(1), n(2)])).toThrow();
+    });
+});
 
 test
 .each([
