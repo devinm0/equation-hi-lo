@@ -104,32 +104,58 @@ Backend split plan (server.ts → src/)
   3. Backend handler extraction by phase — one file at a time, ordered leaf-first to avoid circular imports.
      Run npm test + npm run test:e2e after each sub-step.
 
-     3a. ✅ debug/print.ts       — printDeck, printHand, printCard, logRoomsAndPlayers (done in step 2)
-     3b. game/deck.ts            — generateDeck, drawNumberCardFromDeck, drawFromDeck
-     3c. ws/broadcast.ts         — sendSocketMessageToEveryClientInRoom, sendSocketMessageToFolded/NonFolded
-     3d. game/notify.ts          — notifyAllPlayersOfNewlyDealtCards, notifyPlayerOfNewlyDealtCards,
-                                    sendSocketMessageThatPlayerFolded
-     3e. game/deal.ts            — dealOperatorCards, dealFirstHiddenCardToEachPlayer,
-                                    dealTwoOpenCardsToEachPlayer, dealLastOpenCardToEachPlayer,
-                                    playersThatNeedToDiscard
-     3f. game/rooms.ts           — enterRoom, playersInRoom helpers (activePlayers, nonFolded, etc.),
-                                    roomCleanupInterval logic
-     3g. game/betting.ts         — commenceFirstRoundBetting, commenceSecondRoundBetting,
-                                    advanceToNextPlayersTurn, endBettingRound, bettingRoundIsComplete,
-                                    fold, checkIfOneRemainingPlayerOrMaxRaiseReached...
-     3h. game/equation.ts        — commenceEquationForming, endEquationForming, applyOps,
-                                    operatorFromCard, isNumberCard, Token types
-     3i. game/selection.ts       — commenceHiLoSelection
-     3j. game/reveal.ts          — revealHiddenCards, distributePotToOnlyRemainingPlayer,
-                                    returnChipsToAllPlayers, endHand
-     3k. game/lifecycle.ts       — initializeHand, generateDeck wiring, phase transitions
+     ARCHITECTURE DECISION (supersedes the original per-file plan below):
+     The split is "leaf modules + ONE orchestrator". Leaf modules contain only PURE
+     functions that never assign game.phase or decide the next phase; they are imported BY
+     lifecycle and never import it. game/lifecycle.ts is the single home for the whole phase
+     state machine — all the mutually-recursive transition functions live there together
+     (intra-file recursion is fine; the only thing ESM can't do is an import cycle, and there
+     is none because no leaf imports lifecycle). Consequences:
+       - game/selection.ts dissolved: commenceHiLoSelection is a phase transition -> lifecycle.
+       - reveal.ts became results.ts and holds only the PURE parts (revealHiddenCards +
+         winner-determination helpers). distributePotToOnlyRemainingPlayer / returnChipsTo... /
+         determineWinners (message wrapper) call endHand -> orchestration -> lifecycle.
+       - betting.ts / equation.ts got only their pure parts; their commence*/end* transition
+         functions stayed in server.ts awaiting lifecycle.
+
+     DONE:
+     3a. ✅ debug/print.ts       — printDeck, printHand, printCard, logRoomsAndPlayers
+     3b. ✅ game/deck.ts         — generateDeck, drawNumberCardFromDeck, drawFromDeck
+     3c. ✅ ws/broadcast.ts      — sendSocketMessageToEveryClientInRoom, ...Folded/NonFolded
+     3d. ✅ game/notify.ts       — notifyAll/PlayerOfNewlyDealtCards, sendSocketMessageThatPlayerFolded,
+                                    getHandToSendFromHand
+     3e. ✅ game/deal.ts         — dealOperatorCards, dealFirst/Two/LastOpen..., playersThatNeedToDiscard
+     3f. ✅ game/rooms.ts        — playersInRoom / playersInRoomEntries / activePlayersInRoom /
+                                    nonFoldedAndNotOutPlayers  (enterRoom + roomCleanup NOT yet moved)
+     3g. ✅ game/betting.ts      — PURE ONLY: findNextPlayerTurn, bettingRoundIsComplete,
+                                    advanceToNextPlayersTurn  (commence*/endBetting/fold stayed for lifecycle)
+     3h. ✅ game/equation.ts     — PURE ONLY: applyOps adapter -> shared equation-core.ts (evaluateTokens).
+                                    commence/endEquationForming stayed for lifecycle.
+     3i/3j. ✅ game/results.ts   — revealHiddenCards + findLowest/HighestCard, findLo/HiWinner,
+                                    determineWinnersInternal (all pure). (was reveal.ts + selection.ts)
+
+     >>> NEXT: 3k. game/lifecycle.ts — THE ORCHESTRATOR. Move every phase-transition / "what
+         happens next" function still in server.ts into it:
+           endBettingRound, commenceFirstRoundBetting, commenceSecondRoundBetting,
+           commenceEquationForming, endEquationForming, commenceHiLoSelection,
+           checkIfOneRemainingPlayerOrMaxRaiseReached..., endRoundOrProceedToNextPlayer,
+           fold (whole thing — it's mostly orchestration), returnChipsToAllPlayers,
+           distributePotToOnlyRemainingPlayer, determineWinners (message wrapper),
+           getSecondsLeft, clearHands, endHand, initializeHand.
+         It imports freely from rooms/deck/deal/notify/betting/equation/results/broadcast.
+         Run npm test + npm run test:e2e after. Watch for the fold <-> endRoundOrProceed <->
+         commenceEquationForming <-> endEquationForming cycle — fine intra-file.
+
+     THEN:
      3l. ws/handlers/lifecycle.ts — create, enter, join, start, leave, refresh message handlers
      3m. ws/handlers/betting.ts   — bet-placed, fold message handlers
      3n. ws/handlers/cards.ts     — discard, hand-order message handlers
      3o. ws/handlers/flow.ts      — lock-in, hi-lo-selected, acknowledge-hand-results handlers
      3p. ws/router.ts             — switch on clientMsg.type, dispatches to handlers
      3q. intervals.ts             — heartbeat + room cleanup intervals, move out of server.ts
-     3r. Update __tests__/tests.ts imports to point at new module locations
+     3r. enterRoom + room cleanup  — move out of server.ts (into game/rooms.ts or lifecycle)
+     3s. __tests__/tests.ts        — imports already point at game/results.js + equation-core.js;
+                                     update again as more moves out of server.ts
   4. Frontend state.ts extraction — pull out shared variables and localStorage.
   5. Frontend UI extraction — split app.ts by message-handler case, one section at a time.
 
