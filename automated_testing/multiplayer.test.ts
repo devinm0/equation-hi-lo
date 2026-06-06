@@ -1,6 +1,6 @@
 import { test, expect, Browser, BrowserContext, Page, devices } from '@playwright/test';
 import { attachBrowserLogging } from './_logging.js';
-import { doEquationForming } from './_helpers.js';
+import { doEquationForming, discardIfNeeded } from './_helpers.js';
 
 const NUM_PLAYERS = 10;
 
@@ -20,36 +20,6 @@ const IPHONE_DEVICES = [
 
 async function pause(page: Page, ms = 1000) {
     if (!process.env.CI) await page.waitForTimeout(ms);
-}
-
-async function discardIfNeeded(pages: Page[]) {
-    // Identify who needs to discard in parallel (avoids N sequential timeouts)
-    const needsDiscard = await Promise.all(pages.map(async (page) => {
-        try {
-            await page.locator('.card-highlighted').first().waitFor({ state: 'visible', timeout: 10000 });
-            return true;
-        } catch {
-            return false;
-        }
-    }));
-
-    const discardQueue = pages.filter((_, i) => needsDiscard[i]);
-
-    // Execute discards one at a time so we can assert between each:
-    // betting controls must not appear while any player still has a pending discard.
-    for (let i = 0; i < discardQueue.length; i++) {
-        await discardQueue[i]!.locator('.card-highlighted').first().click({ force: true });
-        await discardQueue[i]!.locator('.card-highlighted').first().waitFor({ state: 'hidden', timeout: 10000 });
-
-        if (i < discardQueue.length - 1) {
-            for (const page of pages) {
-                expect(
-                    await page.locator('#bettingControls').isVisible(),
-                    'Betting controls appeared before all discards completed'
-                ).toBe(false);
-            }
-        }
-    }
 }
 
 async function findBettingPage(pages: Page[], timeout = 30000): Promise<Page | undefined> {

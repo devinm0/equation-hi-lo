@@ -1,6 +1,6 @@
 import { test, expect, Browser, BrowserContext, Page, devices } from '@playwright/test';
 import { attachBrowserLogging } from './_logging.js';
-import { doEquationForming } from './_helpers.js';
+import { doEquationForming, discardIfNeeded } from './_helpers.js';
 
 // 3 players with distinct iPhone viewports
 const PLAYER_DEVICES = [
@@ -15,26 +15,6 @@ const STARTING_CHIPS = 25;
 
 async function pause(page: Page, ms = 500) {
     if (!process.env.CI) await page.waitForTimeout(ms);
-}
-
-async function discardIfNeeded(pages: Page[]) {
-    const needsDiscard = await Promise.all(pages.map(async (page) => {
-        try {
-            // 10s (not 2s): the discard highlight can render a few seconds after the deal
-            // — a 2s window intermittently missed it, stalling the hand at second deal.
-            await page.locator('.card-highlighted').first().waitFor({ state: 'visible', timeout: 10000 });
-            return true;
-        } catch {
-            return false;
-        }
-    }));
-
-    const discardQueue = pages.filter((_, i) => needsDiscard[i]);
-    for (let i = 0; i < discardQueue.length; i++) {
-        await discardQueue[i]!.locator('.card-highlighted').first().click({ force: true });
-        await discardQueue[i]!.locator('.card-highlighted').first().waitFor({ state: 'hidden', timeout: 8000 });
-        await pause(discardQueue[i]!, 3000);
-    }
 }
 
 async function findBettingPage(pages: Page[], timeout = 20000): Promise<Page | undefined> {

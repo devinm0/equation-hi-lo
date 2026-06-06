@@ -6,6 +6,30 @@ async function pause(page: Page, ms: number) {
     if (!process.env.CI) await page.waitForTimeout(ms);
 }
 
+// Discard the highlighted (multiply) card for any player who must, then return.
+//
+// A multiply-card discard highlight renders within a second or two of the deal, and the
+// callers always run this right after a deal that has been given a sync buffer to land, so
+// a short detection window is both reliable and fast. Non-discarding players wait out the
+// window once (in parallel), not 10s.
+export async function discardIfNeeded(pages: Page[]) {
+    const needsDiscard = await Promise.all(pages.map(async (page) => {
+        try {
+            await page.locator('.card-highlighted').first().waitFor({ state: 'visible', timeout: 3000 });
+            return true;
+        } catch {
+            return false;
+        }
+    }));
+
+    const discardQueue = pages.filter((_, i) => needsDiscard[i]);
+    for (const page of discardQueue) {
+        await page.locator('.card-highlighted').first().click({ force: true });
+        await page.locator('.card-highlighted').first().waitFor({ state: 'hidden', timeout: 8000 });
+        await pause(page, 1500);
+    }
+}
+
 // Arrange each non-folded player's cards into a VALID, FINITE equation and lock it in.
 //
 // Crucially this searches number orderings with the real client evaluator (window.applyOps)
