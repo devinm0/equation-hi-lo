@@ -134,20 +134,23 @@ Backend split plan (server.ts → src/)
      3i/3j. ✅ game/results.ts   — revealHiddenCards + findLowest/HighestCard, findLo/HiWinner,
                                     determineWinnersInternal (all pure). (was reveal.ts + selection.ts)
 
-     >>> NEXT: 3k. game/lifecycle.ts — THE ORCHESTRATOR. Move every phase-transition / "what
-         happens next" function still in server.ts into it:
+     3k. ✅ game/lifecycle.ts — THE ORCHESTRATOR. Moved every phase-transition / "what
+         happens next" function out of server.ts into it:
            endBettingRound, commenceFirstRoundBetting, commenceSecondRoundBetting,
            commenceEquationForming, endEquationForming, commenceHiLoSelection,
            checkIfOneRemainingPlayerOrMaxRaiseReached..., endRoundOrProceedToNextPlayer,
            fold (whole thing — it's mostly orchestration), returnChipsToAllPlayers,
            distributePotToOnlyRemainingPlayer, determineWinners (message wrapper),
            getSecondsLeft, clearHands, endHand, initializeHand.
-         It imports freely from rooms/deck/deal/notify/betting/equation/results/broadcast.
-         Run npm test + npm run test:e2e after. Watch for the fold <-> endRoundOrProceed <->
-         commenceEquationForming <-> endEquationForming cycle — fine intra-file.
+         Imports freely from rooms/deck/deal/notify/betting/equation/results/broadcast; no
+         leaf imports lifecycle so there's no cycle. server.ts now imports the orchestrator
+         entry points (fold, endRoundOrProceedToNextPlayer, endHand, initializeHand,
+         commenceFirstRoundBetting, commenceEquationForming, endEquationForming,
+         getSecondsLeft, determineWinners) + revealHiddenCards still from results.
+         server.ts: 1282 -> 736 lines. 30 unit + 3 E2E pass.
 
      THEN:
-     3l. ws/handlers/lifecycle.ts — create, enter, join, start, leave, refresh message handlers
+     >>> NEXT: 3l. ws/handlers/lifecycle.ts — create, enter, join, start, leave, refresh message handlers
      3m. ws/handlers/betting.ts   — bet-placed, fold message handlers
      3n. ws/handlers/cards.ts     — discard, hand-order message handlers
      3o. ws/handlers/flow.ts      — lock-in, hi-lo-selected, acknowledge-hand-results handlers
