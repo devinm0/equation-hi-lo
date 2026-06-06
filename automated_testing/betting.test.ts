@@ -1,4 +1,6 @@
 import { test, expect, Browser, BrowserContext, Page, devices } from '@playwright/test';
+import { attachBrowserLogging } from './_logging.js';
+import { doEquationForming } from './_helpers.js';
 
 // 3 players with distinct iPhone viewports
 const PLAYER_DEVICES = [
@@ -91,49 +93,6 @@ async function runBettingRound(
     return { foldedPages };
 }
 
-async function doEquationForming(pages: Page[]) {
-    await Promise.all(pages.map(async (page) => {
-        const lockButton = page.locator('#confirmEquationFormed');
-        try {
-            await lockButton.waitFor({ state: 'visible', timeout: 25000 });
-        } catch {
-            return; // folded/out player — no lock button
-        }
-
-        const arranged = await page.evaluate(() => {
-            const myHand = document.querySelector('.my-hand')!;
-            const allCards = Array.from(myHand.querySelectorAll('.card')) as HTMLElement[];
-
-            const numCards = allCards.filter(c => c.classList.contains('number-card'));
-            const rootCards = allCards.filter(c => c.classList.contains('operator-card') && c.dataset.value === '√');
-            const binaryOpCards = allCards.filter(c => c.classList.contains('operator-card') && c.dataset.value !== '√');
-
-            if (numCards.length !== binaryOpCards.length + 1) return false;
-
-            const divIdx = binaryOpCards.findIndex(c => c.dataset.value === '÷');
-            if (divIdx !== -1 && numCards[divIdx + 1]?.dataset.value === '0') {
-                const swapIdx = numCards.findIndex((c, i) => i !== divIdx + 1 && c.dataset.value !== '0');
-                if (swapIdx !== -1)
-                    [numCards[swapIdx], numCards[divIdx + 1]] = [numCards[divIdx + 1]!, numCards[swapIdx]!];
-            }
-
-            const ordered: HTMLElement[] = [];
-            for (let i = 0; i < numCards.length; i++) {
-                if (i < rootCards.length) ordered.push(rootCards[i]!);
-                ordered.push(numCards[i]!);
-                if (i < binaryOpCards.length) ordered.push(binaryOpCards[i]!);
-            }
-            ordered.forEach(card => myHand.appendChild(card));
-            return true;
-        });
-
-        if (!arranged) return;
-        await pause(page, 1500);
-        await lockButton.click();
-        await expect(lockButton).toBeHidden({ timeout: 6000 });
-    }));
-}
-
 async function doHiLoSelection(pages: Page[]) {
     await Promise.all(pages.map(async (page) => {
         const modal = page.locator('#choiceModal');
@@ -175,8 +134,9 @@ async function setupPlayers(
     const contexts = await Promise.all(PLAYER_DEVICES.map(device => browser.newContext(device)));
     const pages: Page[] = [];
     const eliminatedPromises: Promise<void>[] = [];
-    for (const ctx of contexts) {
+    for (const [idx, ctx] of contexts.entries()) {
         const page = await ctx.newPage();
+        attachBrowserLogging(page, `player${idx}`);
         let resolveEliminated!: () => void;
         eliminatedPromises.push(new Promise<void>(res => { resolveEliminated = res; }));
         let myId: string | null = null;
