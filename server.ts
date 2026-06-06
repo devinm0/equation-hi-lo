@@ -828,7 +828,10 @@ function endHand(game: Game) {
     game.results = [];
 
     playersInRoom(game.roomCode).forEach(player => { // refactor to this.players() which is a function
-        if (player.chipCount === 0) {
+        // Only fire "kicked" the hand a player is NEWLY eliminated. Without the !player.out
+        // guard, an already-out player (still at 0 chips) gets re-kicked every endHand, which
+        // replays the elimination sound on every hand.
+        if (player.chipCount === 0 && !player.out) {
             sendSocketMessageToEveryClientInRoom(game.roomCode, {
                 type: "kicked",
                 userId: player.id,
