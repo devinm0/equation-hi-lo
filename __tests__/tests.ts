@@ -5,6 +5,7 @@ import { Game, Player, Card } from '../public/classes.js';
 import { getHandToSendFromHand } from '../game/notify.js';
 import { findLowestCard, findHighestCard, findLoWinner, findHiWinner, determineWinnersInternal } from '../game/results.js';
 import { evaluateTokens, Token } from '../equation-core.js';
+import { applyOps } from '../game/equation.js';
 
 // Regression tests for the shared equation evaluator. The √ cases guard the bug where
 // unary √ was applied to a whole sub-expression (√(9/6-10) -> NaN) instead of just its
@@ -39,6 +40,138 @@ describe('evaluateTokens', () => {
     test('malformed expression throws', () => {
         expect(() => evaluateTokens([n(1), op('+')])).toThrow();
         expect(() => evaluateTokens([n(1), n(2)])).toThrow();
+    });
+});
+
+// Exhaustive PEMDAS coverage for the server-side adapter applyOps(), which converts dealt
+// Card objects into tokens and evaluates them with the shared core. These exercise operator
+// precedence (× ÷ before + −), left-to-right associativity for equal precedence, the unary
+// √ binding rule, mixed chains, fractional/zero results, and validation errors — all through
+// the same path the server uses to score a real hand.
+describe('applyOps PEMDAS', () => {
+    const N   = (v: number, suit: Suit = Suit.BRONZE): Card => new Card(false, v as NumberCard, suit);
+    const ADD = (): Card => new Card(false, OperatorCard.ADD, Suit.OPERATOR);
+    const SUB = (): Card => new Card(false, OperatorCard.SUBTRACT, Suit.OPERATOR);
+    const MUL = (): Card => new Card(false, OperatorCard.MULTIPLY, Suit.OPERATOR);
+    const DIV = (): Card => new Card(false, OperatorCard.DIVIDE, Suit.OPERATOR);
+    const RT  = (): Card => new Card(false, OperatorCard.ROOT, Suit.OPERATOR);
+    const HID = (): Card => new Card(true); // hidden card has null value
+
+    describe('each operator in isolation', () => {
+        test.each<[string, Card[], number]>([
+            ['addition',       [N(3), ADD(), N(4)],       7],
+            ['subtraction',    [N(7), SUB(), N(2)],       5],
+            ['multiplication', [N(6), MUL(), N(7)],      42],
+            ['division',       [N(8), DIV(), N(2)],       4],
+            ['square root',    [RT(), N(9)],              3],
+            ['single number',  [N(5)],                    5],
+        ])('%s', (_label, cards, expected) => {
+            expect(applyOps(cards)).toBe(expected);
+        });
+    });
+
+    describe('multiplication/division bind tighter than addition/subtraction', () => {
+        test.each<[string, Card[], number]>([
+            ['2 + 3 × 4 = 14',       [N(2), ADD(), N(3), MUL(), N(4)],            14],
+            ['2 × 3 + 4 = 10',       [N(2), MUL(), N(3), ADD(), N(4)],            10],
+            ['10 − 2 × 3 = 4',       [N(10), SUB(), N(2), MUL(), N(3)],            4],
+            ['2 × 3 − 4 = 2',        [N(2), MUL(), N(3), SUB(), N(4)],             2],
+            ['6 + 8 ÷ 2 = 10',       [N(6), ADD(), N(8), DIV(), N(2)],            10],
+            ['8 ÷ 2 + 6 = 10',       [N(8), DIV(), N(2), ADD(), N(6)],            10],
+            ['10 − 8 ÷ 2 = 6',       [N(10), SUB(), N(8), DIV(), N(2)],            6],
+            ['1 + 2 × 3 + 4 = 11',   [N(1), ADD(), N(2), MUL(), N(3), ADD(), N(4)], 11],
+            ['2 × 3 + 4 × 5 = 26',   [N(2), MUL(), N(3), ADD(), N(4), MUL(), N(5)], 26],
+        ])('%s', (_label, cards, expected) => {
+            expect(applyOps(cards)).toBe(expected);
+        });
+    });
+
+    // Number cards only range 0–10, so equal-precedence × ÷ chains stay within range.
+    describe('equal-precedence operators evaluate left to right', () => {
+        test.each<[string, Card[], number]>([
+            ['10 − 3 − 2 = 5',           [N(10), SUB(), N(3), SUB(), N(2)],  5],
+            ['10 − 3 + 2 = 9',           [N(10), SUB(), N(3), ADD(), N(2)],  9],
+            ['8 ÷ 4 ÷ 2 = 1',            [N(8), DIV(), N(4), DIV(), N(2)],   1],
+            ['6 × 2 ÷ 4 = 3',            [N(6), MUL(), N(2), DIV(), N(4)],   3],
+            ['2 ÷ 4 × 8 = 4 (not 2÷32)', [N(2), DIV(), N(4), MUL(), N(8)],   4],
+        ])('%s', (_label, cards, expected) => {
+            expect(applyOps(cards)).toBeCloseTo(expected);
+        });
+    });
+
+    describe('√ is unary, exponent-level, and binds only to the next number', () => {
+        test.each<[string, Card[], number]>([
+            ['√9 + 1 = 4',  [RT(), N(9), ADD(), N(1)],       4],
+            ['1 + √9 = 4',  [N(1), ADD(), RT(), N(9)],       4],
+            ['√9 × 2 = 6',  [RT(), N(9), MUL(), N(2)],       6],
+            ['10 − √9 = 7', [N(10), SUB(), RT(), N(9)],      7],
+            ['√4 + √9 = 5', [RT(), N(4), ADD(), RT(), N(9)], 5],
+        ])('%s', (_label, cards, expected) => {
+            expect(applyOps(cards)).toBe(expected);
+        });
+
+        test('√9 ÷ 6 = 0.5, NOT √(9 ÷ 6) (regression guard)', () => {
+            expect(applyOps([RT(), N(9), DIV(), N(6)])).toBeCloseTo(0.5);
+        });
+        test('chained roots: √√9 ≈ 1.732', () => {
+            expect(applyOps([RT(), RT(), N(9)])).toBeCloseTo(Math.sqrt(3));
+        });
+    });
+
+    describe('comprehensive mixed-precedence chains', () => {
+        test('2 + 3 × 4 − 6 ÷ 2 = 11', () => {
+            expect(applyOps([N(2), ADD(), N(3), MUL(), N(4), SUB(), N(6), DIV(), N(2)])).toBe(11);
+        });
+        test('√9 + 2 × 5 − 8 ÷ 4 = 11', () => {
+            expect(applyOps([RT(), N(9), ADD(), N(2), MUL(), N(5), SUB(), N(8), DIV(), N(4)])).toBe(11);
+        });
+        test('10 ÷ 5 + 3 × 2 − √4 = 6', () => {
+            expect(applyOps([N(10), DIV(), N(5), ADD(), N(3), MUL(), N(2), SUB(), RT(), N(4)])).toBe(6);
+        });
+    });
+
+    describe('fractional and zero results', () => {
+        test.each<[string, Card[], number]>([
+            ['1 ÷ 4 = 0.25', [N(1), DIV(), N(4)], 0.25],
+            ['5 ÷ 2 = 2.5',  [N(5), DIV(), N(2)], 2.5],
+            ['0 ÷ 5 = 0',    [N(0), DIV(), N(5)], 0],
+            ['0 × 9 = 0',    [N(0), MUL(), N(9)], 0],
+        ])('%s', (_label, cards, expected) => {
+            expect(applyOps(cards)).toBeCloseTo(expected);
+        });
+    });
+
+    describe('division by zero is non-finite', () => {
+        test('5 ÷ 0 is not finite', () => {
+            expect(Number.isFinite(applyOps([N(5), DIV(), N(0)]))).toBe(false);
+        });
+        test('0 ÷ 0 is NaN', () => {
+            expect(Number.isNaN(applyOps([N(0), DIV(), N(0)]))).toBe(true);
+        });
+    });
+
+    describe('hidden cards (null value) are skipped', () => {
+        test('a hidden card between tokens does not affect the result', () => {
+            expect(applyOps([N(3), HID(), ADD(), N(4)])).toBe(7);
+        });
+    });
+
+    describe('invalid expressions throw', () => {
+        test('two consecutive numbers', () => {
+            expect(() => applyOps([N(3), N(4)])).toThrow();
+        });
+        test('trailing operator', () => {
+            expect(() => applyOps([N(3), ADD()])).toThrow();
+        });
+        test('leading binary operator', () => {
+            expect(() => applyOps([ADD(), N(3)])).toThrow();
+        });
+        test('√ immediately after a number', () => {
+            expect(() => applyOps([N(9), RT()])).toThrow();
+        });
+        test('empty hand', () => {
+            expect(() => applyOps([])).toThrow();
+        });
     });
 });
 

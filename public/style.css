@@ -1045,3 +1045,333 @@ body.show-home-bg .grid-container {
         transform: translate(calc(-50% - 20px + 50vw), calc(50% + 30px - 50vh));
     }
 }
+/* ---------- How to Play: help button, rules modal & graphics ---------- */
+#helpButton {
+    position: fixed;
+    top: 16px;
+    right: 16px;
+    width: 44px;
+    height: 44px;
+    border-radius: 50%;
+    border: 2px solid rgba(255, 255, 255, 0.8);
+    background: rgba(73, 102, 96, 0.84);
+    color: white;
+    font-size: 24px;
+    font-weight: bold;
+    font-family: 'Arial', sans-serif;
+    cursor: pointer;
+    z-index: 9000;
+    box-shadow: 3px 3px rgba(0, 0, 0, 0.3);
+    line-height: 1;
+}
+
+#helpButton:hover {
+    background: rgba(101, 214, 255, 0.7);
+}
+
+#homeFooter {
+    margin-top: 28px;
+    text-align: center;
+    color: rgba(255, 255, 255, 0.85);
+    font-size: 0.95em;
+}
+
+#homeFooter a {
+    color: rgba(255, 255, 255, 0.85);
+    text-decoration: underline;
+    margin: 0 8px;
+}
+
+#homeFooter a:hover {
+    color: #65d6ff;
+}
+
+/* The rules modal is wider and scrollable, unlike the small hi/lo modal. */
+.rules-modal {
+    max-width: 540px;
+    max-height: 88vh;
+    overflow-y: auto;
+    text-align: left;
+    position: relative;
+}
+
+.rules-close {
+    position: absolute;
+    top: 10px;
+    right: 14px;
+    background: transparent;
+    border: none;
+    color: white;
+    font-size: 30px;
+    line-height: 1;
+    cursor: pointer;
+    padding: 0;
+}
+
+.rules-section {
+    margin-bottom: 22px;
+}
+
+.rules-section h3 {
+    color: #b6f0e4;
+    margin-bottom: 6px;
+}
+
+.rules-section p {
+    line-height: 1.45;
+}
+
+.rule-list {
+    line-height: 1.45;
+    padding-left: 20px;
+    margin: 6px 0;
+}
+
+.rule-list li {
+    margin-bottom: 6px;
+}
+
+.rule-graphic {
+    background: rgba(0, 0, 0, 0.18);
+    border-radius: 12px;
+    padding: 16px 12px;
+    margin-top: 12px;
+}
+
+.rule-equation {
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    flex-wrap: wrap;
+    gap: 6px;
+}
+
+.rule-equals {
+    font-size: 30px;
+    font-weight: bold;
+    color: white;
+    margin: 0 4px;
+}
+
+.rule-result {
+    width: 56px;
+    height: 56px;
+    border-radius: 50%;
+    background: #65d6ff;
+    color: black;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    font-weight: bold;
+    font-size: 26px;
+    box-shadow: 3px 3px rgba(0, 0, 0, 0.3);
+}
+
+.rule-caption {
+    text-align: center;
+    font-size: 0.85em;
+    color: rgba(255, 255, 255, 0.8);
+    margin: 12px 0 0;
+}
+
+.rule-numberline {
+    display: flex;
+    align-items: center;
+    gap: 10px;
+}
+
+.rule-target {
+    display: flex;
+    flex-direction: column;
+    align-items: center;
+    gap: 4px;
+    font-size: 0.8em;
+    flex-shrink: 0;
+}
+
+.rule-track {
+    position: relative;
+    flex: 1;
+    height: 4px;
+    background: linear-gradient(to right, #65d6ff, #555, #f0c14b);
+    border-radius: 2px;
+    margin: 18px 4px 0;
+}
+
+.rule-marker {
+    position: absolute;
+    top: -16px;
+    transform: translateX(-50%);
+    width: 30px;
+    height: 30px;
+    border-radius: 50%;
+    background: white;
+    color: black;
+    font-weight: bold;
+    font-size: 14px;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    box-shadow: 2px 2px rgba(0, 0, 0, 0.3);
+}
+
+.rule-marker-alt {
+    background: rgba(255, 255, 255, 0.45);
+}
+
+/* Example cards in the rules modal (.eg-*) deliberately DO NOT reuse the live game's
+   .card / .operator-card / .card-highlighted / .option classes — the game JS and the E2E
+   tests query those globally (querySelectorAll('.card'), '.card-highlighted', '.option'),
+   so reusing them would sweep these decorative examples into real equation/discard logic.
+   These rules replicate the real card look (incl. the number-vs-operator baseline) instead. */
+.eg-card {
+    width: 46px;
+    height: 69px;
+    font-size: 48px;
+    border-radius: 8px;
+    background-color: rgb(251, 251, 250);
+    box-shadow: 3px 3px rgba(0, 0, 0, 0.3);
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    font-weight: bold;
+    font-family: "Zen Old Mincho", serif;
+    color: black;
+    margin: 3px;
+    user-select: none;
+    overflow: hidden;
+    position: relative;
+}
+
+.eg-card.eg-op {
+    font-family: 'Arial', sans-serif;
+    font-weight: 100;
+    font-size: 50px;
+    color: rgb(40, 40, 40);
+}
+
+/* Matches the live game's .single-digit nudge so the number baseline lines up with operators. */
+.eg-single-digit {
+    transform: translateY(-4%);
+}
+
+.eg-card.eg-highlight {
+    background-color: rgb(252, 252, 170);
+    box-shadow: 3px 3px rgba(255, 215, 0, 0.9);
+}
+
+/* Root example cards hold a drawn <canvas> (like real √ cards) that fills the whole face. */
+.eg-card.eg-root {
+    background-color: transparent;
+}
+
+/* Tie-break examples: cardA > cardB */
+.eg-tie {
+    display: flex;
+    align-items: center;
+    gap: 10px;
+    margin: 10px 0;
+}
+
+.eg-tie-label {
+    min-width: 88px;
+    font-size: 0.82em;
+    color: rgba(255, 255, 255, 0.9);
+    text-align: right;
+}
+
+.eg-gt {
+    font-size: 28px;
+    font-weight: bold;
+    color: #65d6ff;
+}
+
+/* Newly dealt cards in the deal examples (the √ and its extra number) */
+.rule-new {
+    outline: 3px solid #65d6ff;
+    outline-offset: 2px;
+}
+
+/* Looping rejection flash for the invalid-equation (divide-by-zero) example */
+.rule-equation.rule-reject .eg-card {
+    animation: blink 1.1s ease infinite;
+}
+
+.rule-result.rule-reject {
+    background: #eb4b4b;
+    color: white;
+}
+
+/* Hi/Lo selection example */
+.eg-options {
+    display: flex;
+    justify-content: space-around;
+    margin: 8px 0 4px;
+}
+
+.eg-choice {
+    display: flex;
+    flex-direction: column;
+    align-items: center;
+    gap: 10px;
+    padding: 12px 18px;
+    border-radius: 14px;
+    user-select: none;
+}
+
+.eg-choice p {
+    margin: 0;
+}
+
+.eg-choice.eg-selected {
+    background-color: rgba(101, 214, 255, 0.5);
+}
+
+.eg-low-symbol,
+.eg-high-symbol {
+    width: 64px;
+    height: 64px;
+    font-size: 30px;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    font-weight: bold;
+    box-shadow: 3px 3px rgba(0, 0, 0, 0.3);
+}
+
+.eg-low-symbol {
+    background: white;
+    color: black;
+    border-radius: 50%;
+}
+
+.eg-high-symbol {
+    width: 52px;
+    height: 52px;
+    background: black;
+    color: white;
+    border-radius: 8px;
+    transform: rotate(45deg);
+}
+
+.eg-high-symbol-span {
+    transform: rotate(-45deg);
+}
+
+/* Mini Low/High markers on the number line (colors set inline in markup) */
+.eg-mini-symbol {
+    width: 34px;
+    height: 34px;
+    font-size: 14px;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    font-weight: bold;
+    box-shadow: 2px 2px rgba(0, 0, 0, 0.3);
+}
+
+@media (max-width: 800px) {
+    .eg-card { width: 38px; height: 57px; font-size: 40px; }
+    .eg-card.eg-op { font-size: 42px; }
+    .rule-result { width: 48px; height: 48px; font-size: 22px; }
+}
