@@ -250,3 +250,47 @@ Backend split plan (server.ts → src/)
       jump. Fix: cap the number of concurrent notifications (and/or dedupe/coalesce
       repeats), and animate the stack reflow (e.g. transform/transition on position) so
       surviving notifications slide up smoothly when one above them is removed.
+
+  T7. Winner-logic test coverage gaps (remaining after the determineWinners /
+      computePotDistribution work)
+      Covered now (unit, __tests__/tests.ts): pure-low win, pure-high win, split pot,
+      swing sweep vs lo+hi betters, two swing betters splitting sides + a hi better
+      (neither sweeps -> hi better takes the whole pot), all-swing-no-sweep forfeit, plus
+      even/odd pot split and the swing-only tie cases (high-only, low-only, both).
+      Still UNCOVERED:
+        - swing-better ties WITH pure lo/hi betters present (the existing tie tests only
+          tie swing-vs-swing).
+        - isLoContender / isHiContender highlighting across BOTH swing and non-swing tied
+          players in the same hand (see the "TEST add this" note by determineWinnersInternal
+          in game/results.ts).
+      E2E note: the live results-page winner verification (assertResultsPageWinners in
+      automated_testing/_helpers.ts) runs on every results screen, every hand, in every
+      spec — but the current specs all bet LOW (doHiLoSelection always clicks low), so only
+      the low-winner path is actually exercised end-to-end. The high / split / swing-sweep
+      branches are implemented and ready, but need a spec that bets high/swing to exercise
+      them live.
+
+  ADSENSE / AD IMPLEMENTATION STATUS
+      Goal: show a Google AdSense banner and get the site approved. Auto-approval fails
+      because the SPA serves little static, crawlable content for the reviewer.
+
+      Done:
+        - Responsive banner ad unit added to the home screen in public/index.html
+          (data-ad-client ca-pub-8735848760963536). The adsbygoogle loader is in <head>.
+        - How-to-Play modal: static (crawlable even while hidden), full rules + graphics,
+          opened via the "?" button / footer link. Provides the substantial static content
+          the AdSense reviewer needs on a SPA.
+        - public/privacy.html created and linked from the home footer; discloses
+          localStorage usage and Google AdSense third-party cookies (required for approval).
+
+      Remaining:
+        1. Replace data-ad-slot="REPLACE_WITH_YOUR_AD_SLOT_ID" in index.html with a real
+           10-digit ad-unit slot id from the AdSense dashboard (Ads -> By ad unit ->
+           Display ads). Until then the unit never fills, even once approved.
+        2. Deploy so the LIVE site (equationhi.lol) serves the rules + privacy content,
+           then request / resubmit AdSense review (the reviewer crawls the live site, not
+           local).
+        3. Confirm equationhi.lol is listed and shows "Ready" under AdSense -> Sites.
+        4. (Optional but recommended) add public/ads.txt containing:
+             google.com, pub-8735848760963536, DIRECT, f08c47fec0942fa0
+        5. After approval, verify the banner renders on a phone on the home screen.
