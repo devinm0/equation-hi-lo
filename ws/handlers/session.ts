@@ -200,11 +200,18 @@ function enterRoom(game: Game, clientMsg: CreateMessage | EnterMessage, ws: Exte
             logRoomsAndPlayers();
         }
     } else { // gamephase is not lobby
+        const rejoiningPlayer = players.get(ws.userId); // can use ws if not gamephase bc must be true
+
+        // Only existing members of this room can re-enter once the game is in progress.
+        // A brand-new client (no player record, or one for a different room) is rejected
+        // rather than left on a blank screen.
+        if (!rejoiningPlayer || rejoiningPlayer.roomCode !== game.roomCode) {
+            ws.send(JSON.stringify({ type: "room-join-reject", reason: "in-progress" }));
+            return;
+        }
+
         // TODO what makes this a "rejoin"? I should have that word, that's what I expected.
         ws.send(JSON.stringify({ type: "room-entered", roomCode: game.roomCode, hostId: game.hostId, joined: true, inProgress: true }));
-
-        const rejoiningPlayer = players.get(ws.userId); // can use ws if not gamephase bc must be true
-        if (!rejoiningPlayer) return;
 
         // send game state
         switch (game.phase) {

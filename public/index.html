@@ -702,7 +702,9 @@
         
         case "room-join-reject": { // TODO rename to room-enter-reject
             const error = document.getElementById("roomCodeError");
-            const text = msg.reason === "full" ? "Room is full." : "Room code does not exist.";
+            const text = msg.reason === "full" ? "Room is full."
+                : msg.reason === "in-progress" ? "Game already in progress."
+                : "Room code does not exist.";
             console.log(text);
             error.textContent = text;
 
