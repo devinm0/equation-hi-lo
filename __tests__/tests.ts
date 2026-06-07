@@ -3,7 +3,7 @@
 import { OperatorCard, Suit, NumberCard, GamePhase } from '../enums.js';
 import { Game, Player, Card } from '../public/classes.js';
 import { getHandToSendFromHand } from '../game/notify.js';
-import { findLowestCard, findHighestCard, findLoWinner, findHiWinner, determineWinnersInternal } from '../game/results.js';
+import { findLowestCard, findHighestCard, findLoWinner, findHiWinner, determineWinnersInternal, computePotDistribution } from '../game/results.js';
 import { evaluateTokens, Token } from '../equation-core.js';
 import { applyOps } from '../game/equation.js';
 
@@ -505,40 +505,12 @@ test
 
 // TODO if suits are equal, throw error. impossible for there to be duplicate cards
 
-// one winning swing better, several low betters 
-// one losing swing better, several low betters
-
-// two swing betters (one winning), several low betters
-// two swing betters (both losing), several low betters
-
-// one winning swing better, several hi betters
-// one losing swing better, several hi betters
-
-// two swing betters (one winning), several hi betters
-// two swing betters (both losing), several hi betters
-
-// one winning swing better, hi and lo betters
-// one winning swing better, hi better
-// one winning swing better, hi betters
-// one winning swing better, lo better
-// one winning swing better, lo betters
-// one losing swing better, hi and lo betters. won the lo bet technically
-// one losing swing better, hi and lo betters. won the hi bet technically
-// one losing swing better, hi and lo betters. totally lost
-
-// two losing swing betters, hi and lo betters. each won the lo and hi bet technically
-// two losing swing betters, hi and lo betters. one won the lo bet technically
-// two losing swing betters, hi and lo betters. each won the hi bet technically
-// two losing swing betters, hi and lo betters. each won the hi bet technically 
-
-// two swing betters, one wins X
-// three swing betters, one wins X
-// two losing swing betters (hi and lo split) X
-// three losing swing betters (hi and lo split) X
-
-// TIES for each of the above - swing betters tie on just high, just low, and both
-
-////////// test if chips get returned
+// Covered below / in the new describe blocks: pure low win, pure high win, split pot,
+// a swing better sweeping vs lo+hi betters, two swing betters splitting sides + a hi better
+// (neither sweeps -> hi better takes the pot), all-swing-no-sweep forfeit, and the
+// swing-only tie cases (high-only, low-only, both). Still uncovered:
+//   - swing-better ties WITH lo/hi betters present (above only tie swing-vs-swing)
+//   - isLoContender / isHiContender highlighting across swing AND non-swing tied players
 
 test
 .each([
@@ -692,6 +664,167 @@ test
     //         expect(player.isHiContender).not.toBe(true);
     //     }
     // });
+});
+
+// The test.each block above only ever passes all-swing tables. These cover the mixed
+// tables that drive the real pot distribution in lifecycle.ts: pure low/high winners,
+// split pots, a swing sweep, and the key rule the user asked about — if no swing better
+// wins BOTH sides, swing betters get nothing and the pot falls to the pure lo/hi winners.
+describe('determineWinnersInternal — mixed lo / hi / swing tables', () => {
+    const handWith = (value: NumberCard, suit: Suit = Suit.BRONZE): Card[] => [
+        new Card(false, value, suit),
+        new Card(false, OperatorCard.ADD, Suit.OPERATOR),
+        new Card(false, NumberCard.ONE, Suit.STONE),
+    ];
+
+    const makePlayer = (id: string, choices: string[], lowResult: number, highResult: number): Player => {
+        const p = new Player(id, "room", "color");
+        p.choices = choices;
+        p.lowEquationResult = lowResult;
+        p.highEquationResult = highResult;
+        p.hand = handWith(NumberCard.TWO);
+        return p;
+    };
+
+    test('pure low betters: closest to 1 wins, no high winner', () => {
+        const loA = makePlayer("loA", ["low"], 1, 1);
+        const loB = makePlayer("loB", ["low"], 3, 3);
+        const { loWinner, hiWinner, swingBetterWon } = determineWinnersInternal([loA, loB]);
+        expect(swingBetterWon).toBe(false);
+        expect(loWinner!.id).toBe("loA");
+        expect(hiWinner).toBeNull(); // distribution: loWinner takes the whole pot
+    });
+
+    test('pure high betters: closest to 20 wins, no low winner', () => {
+        const hiA = makePlayer("hiA", ["high"], 20, 20);
+        const hiB = makePlayer("hiB", ["high"], 14, 14);
+        const { loWinner, hiWinner, swingBetterWon } = determineWinnersInternal([hiA, hiB]);
+        expect(swingBetterWon).toBe(false);
+        expect(hiWinner!.id).toBe("hiA");
+        expect(loWinner).toBeNull(); // distribution: hiWinner takes the whole pot
+    });
+
+    test('split pot: a low better and a high better each take a side', () => {
+        const loA = makePlayer("loA", ["low"], 1, 1);
+        const loB = makePlayer("loB", ["low"], 4, 4);
+        const hiA = makePlayer("hiA", ["high"], 20, 20);
+        const hiB = makePlayer("hiB", ["high"], 13, 13);
+        const { loWinner, hiWinner, swingBetterWon } = determineWinnersInternal([loA, loB, hiA, hiB]);
+        expect(swingBetterWon).toBe(false);
+        // Both non-null => lifecycle.ts splits the pot 50/50 between these two.
+        expect(loWinner!.id).toBe("loA");
+        expect(hiWinner!.id).toBe("hiA");
+    });
+
+    test('one swing better sweeps both sides against lo and hi betters', () => {
+        const swing = makePlayer("swing", ["low", "high"], 1, 20); // closest to BOTH 1 and 20
+        const lo = makePlayer("lo", ["low"], 3, 3);
+        const hi = makePlayer("hi", ["high"], 16, 16);
+        const { loWinnerIncludingSwingBetters, hiWinnerIncludingSwingBetters,
+                loWinnerOfSwingBetters, hiWinnerOfSwingBetters, swingBetterWon } =
+            determineWinnersInternal([swing, lo, hi]);
+        expect(swingBetterWon).toBe(true);
+        expect(loWinnerOfSwingBetters!.id).toBe("swing");
+        expect(hiWinnerOfSwingBetters!.id).toBe("swing");
+        expect(loWinnerIncludingSwingBetters!.id).toBe("swing");
+        expect(hiWinnerIncludingSwingBetters!.id).toBe("swing");
+    });
+
+    test('two swing betters split sides (neither sweeps) + one high better => entire pot to the high better', () => {
+        // swingHi wins the HIGH side among swing betters but loses to the pure high better.
+        // swingLo wins the LOW side among swing betters. Neither swing better wins BOTH,
+        // so no swing sweep; with no pure low better, the pure high better takes everything.
+        const swingHi = makePlayer("swingHi", ["low", "high"], 6, 18); // good high, bad low
+        const swingLo = makePlayer("swingLo", ["low", "high"], 1, 9);  // good low, bad high
+        const hiBetter = makePlayer("hiBetter", ["high"], 99, 20);     // closest to 20 overall
+
+        const { loWinner, hiWinner,
+                loWinnerIncludingSwingBetters, hiWinnerIncludingSwingBetters,
+                loWinnerOfSwingBetters, hiWinnerOfSwingBetters, swingBetterWon } =
+            determineWinnersInternal([swingHi, swingLo, hiBetter]);
+
+        // No swing better won both sides.
+        expect(swingBetterWon).toBe(false);
+
+        // Among swing betters, each won exactly one side.
+        expect(hiWinnerOfSwingBetters!.id).toBe("swingHi");
+        expect(loWinnerOfSwingBetters!.id).toBe("swingLo");
+
+        // The pure high better beats the swing betters on the high side overall,
+        // while the low side (incl. swing) is still the low-leaning swing better.
+        expect(hiWinnerIncludingSwingBetters!.id).toBe("hiBetter");
+        expect(loWinnerIncludingSwingBetters!.id).toBe("swingLo");
+
+        // Distribution (lifecycle.ts) uses the PURE-side winners when there's no swing sweep:
+        // no pure low better => loWinner null; pure high better => hiWinner. With loWinner
+        // null and hiWinner set, the high better takes the WHOLE pot.
+        expect(loWinner).toBeNull();
+        expect(hiWinner!.id).toBe("hiBetter");
+    });
+});
+
+// Pure pot-payout decision extracted from determineWinners. Drives the chip math the E2E
+// chip-conservation check verifies, so it is worth covering each branch directly.
+describe('computePotDistribution (pure pot payout)', () => {
+    const handWith = (value: NumberCard): Card[] => [
+        new Card(false, value, Suit.BRONZE),
+        new Card(false, OperatorCard.ADD, Suit.OPERATOR),
+        new Card(false, NumberCard.ONE, Suit.STONE),
+    ];
+    const makeP = (id: string, choices: string[], low: number, high: number): Player => {
+        const p = new Player(id, "room", "color");
+        p.username = id;
+        p.choices = choices;
+        p.lowEquationResult = low;
+        p.highEquationResult = high;
+        p.hand = handWith(NumberCard.TWO);
+        return p;
+    };
+    const distribute = (players: Player[], pot: number) =>
+        computePotDistribution(determineWinnersInternal(players), pot);
+
+    test('swing sweep: winner takes the whole pot', () => {
+        const players = [makeP("swing", ["low", "high"], 1, 20), makeP("lo", ["low"], 3, 3), makeP("hi", ["high"], 15, 15)];
+        const { deltas, nobodyWon, message } = distribute(players, 30);
+        expect(nobodyWon).toBe(false);
+        expect(deltas.get("swing")).toBe(30);
+        expect(deltas.size).toBe(1);
+        expect(message).toContain("swing");
+    });
+
+    test('split pot (even): low and high winners each get half', () => {
+        const { deltas, nobodyWon } = distribute([makeP("lo", ["low"], 1, 1), makeP("hi", ["high"], 20, 20)], 30);
+        expect(nobodyWon).toBe(false);
+        expect(deltas.get("lo")).toBe(15);
+        expect(deltas.get("hi")).toBe(15);
+    });
+
+    test('split pot (odd): the odd chip is discarded (credited total = pot − 1)', () => {
+        const { deltas } = distribute([makeP("lo", ["low"], 1, 1), makeP("hi", ["high"], 20, 20)], 31);
+        expect(deltas.get("lo")).toBe(15);
+        expect(deltas.get("hi")).toBe(15);
+        const total = [...deltas.values()].reduce((a, b) => a + b, 0);
+        expect(total).toBe(30); // one chip forfeited so the pot halves evenly
+    });
+
+    test('pure low betters: low winner takes the whole pot', () => {
+        const { deltas } = distribute([makeP("loA", ["low"], 1, 1), makeP("loB", ["low"], 4, 4)], 20);
+        expect(deltas.get("loA")).toBe(20);
+        expect(deltas.size).toBe(1);
+    });
+
+    test('pure high betters: high winner takes the whole pot', () => {
+        const { deltas } = distribute([makeP("hiA", ["high"], 20, 20), makeP("hiB", ["high"], 12, 12)], 20);
+        expect(deltas.get("hiA")).toBe(20);
+        expect(deltas.size).toBe(1);
+    });
+
+    test('only swing betters, none sweep: nobody wins, pot forfeited (chips lost)', () => {
+        // swingHi wins high among swing betters, swingLo wins low — neither wins both.
+        const { deltas, nobodyWon } = distribute([makeP("swingHi", ["low", "high"], 6, 18), makeP("swingLo", ["low", "high"], 1, 9)], 40);
+        expect(nobodyWon).toBe(true);
+        expect(deltas.size).toBe(0); // no chips credited — the pot is lost, by design
+    });
 });
 
 //TODO push this to GitHub for projects

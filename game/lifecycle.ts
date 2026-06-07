@@ -44,6 +44,7 @@ import {
     findLowestCard,
     findHighestCard,
     determineWinnersInternal,
+    computePotDistribution,
 } from './results.js';
 
 export function fold(foldedPlayer: Player, manual: Boolean, game: Game) {
@@ -432,59 +433,25 @@ export function distributePotToOnlyRemainingPlayer(game: Game, onlyRemainingPlay
 
 export function determineWinners(game: Game) { // this is determineWinners and send results. need to decouple
     // TODO change to player.choice = "swing"
+    const outcome = determineWinnersInternal(nonFoldedAndNotOutPlayers(game));
     const {loWinnerIncludingSwingBetters, loWinnerIncludingSwingBettersLowCard,
         hiWinnerIncludingSwingBetters, hiWinnerIncludingSwingBettersHighCard,
-        loWinnerOfSwingBetters, loWinnerOfSwingBettersLowCard, // TODO why are these not used
-        hiWinnerOfSwingBetters, hiWinnerOfSwingBettersHighCard,
         loWinner, loWinnerLowCard,
         hiWinner, hiWinnerHighCard,
-        swingBetterWon} = determineWinnersInternal(nonFoldedAndNotOutPlayers(game));
+        swingBetterWon} = outcome;
 
-    let hiWinnerChipsDelta: number;
-    let loWinnerChipsDelta: number;
-    let message;
-
-    // what if there were no swing betters at all
-
-    // TODO what if everyone swing bets but not one wins both... do chips just get returned?
-    // what about just find winnerAmongSwingBetters
-    // what if someone bets swing and others bet only low. then hiWinner is null
-    if (swingBetterWon) { // TODO rename loSwingWinner...
-        loWinnerOfSwingBetters!.chipCount += game.pot; // TODO refactor to have control flow. "If swing better won, etc"
-        hiWinnerChipsDelta = loWinnerChipsDelta = game.pot;
-        message = loWinnerOfSwingBetters!.username + " won the swing bet.";
-    } else {
-        const potWillSplit = loWinner !== null && hiWinner !== null;
-
-        // TODO right now, if everyone bets swing but no one sweeps, the chips are lost. Should they be returned? Or should it default to normal betting?
-        // like ifAllPlayersBetSwing, potWillSplit should be loWinnerIncludingSwingBetters !== null and hiWinnerIncludingSwingBetters !== null
-
-        // TODO isHiWinner and isLoWinner should be fields on player class I guess
-        // send chips to the winners. if there are both lo and hi betters, split the pot among the winner of each
-        if (potWillSplit) {
-            if (game.pot % 2 !== 0) {
-                game.pot = game.pot - 1 // discard a chip if pot is uneven
-            }
-
-            const splitPot = game.pot / 2;
-            hiWinnerChipsDelta = splitPot;
-            loWinnerChipsDelta = splitPot;
-            hiWinner!.chipCount += splitPot;
-            loWinner.chipCount += splitPot;
-
-            message = hiWinner.username + " won the high bet and " + loWinner.username + " won the low bet.";
-        } else if (loWinner !== null) {
-            loWinner.chipCount += game.pot;
-            loWinnerChipsDelta = game.pot;
-
-            message = loWinner.username + " won the low bet.";
-        } else if (hiWinner !== null) {
-            hiWinner.chipCount += game.pot;
-            hiWinnerChipsDelta = game.pot;
-
-            message = hiWinner.username + " won the high bet.";
-        }
-    }
+    // Pure pot-distribution decision (split out into results.ts so it can be unit-tested).
+    // Returns the chip delta for each winner and the result message. Note: if only swing
+    // betters remained and none swept both sides, nobody wins and the pot is forfeited
+    // (deltas is empty) — that lost-chips behavior is intentional/unchanged.
+    const distribution = computePotDistribution(outcome, game.pot);
+    const byId = new Map(playersInRoom(game.roomCode).map(p => [p.id, p]));
+    distribution.deltas.forEach((delta, id) => {
+        const winner = byId.get(id);
+        if (winner) winner.chipCount += delta;
+    });
+    const message = distribution.message;
+    const chipDeltaFor = (id: string) => distribution.deltas.get(id) ?? 0;
 
     game.pot = 0; // TODO put this inside of endHand??
 
@@ -503,9 +470,7 @@ export function determineWinners(game: Game) { // this is determineWinners and s
             id: player.id,
             color: player.color,
             chipCount: player.chipCount,
-            chipDifferential: swingBetterWon ? player.id === loWinnerOfSwingBetters?.id ? loWinnerChipsDelta : 0 :
-                player.id === hiWinner?.id ? hiWinnerChipsDelta : // todo rename to hiWinnerExcludingSwingBetters
-                player.id === loWinner?.id ? loWinnerChipsDelta : 0,
+            chipDifferential: chipDeltaFor(player.id),
             lowHand: player.lowHand, // TODO adjust for swing
             highHand: player.highHand,
             folded: player.foldedThisTurn,

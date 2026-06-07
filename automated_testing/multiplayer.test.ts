@@ -1,6 +1,6 @@
 import { test, expect, Browser, BrowserContext, Page, devices } from '@playwright/test';
 import { attachBrowserLogging } from './_logging.js';
-import { doEquationForming, discardIfNeeded } from './_helpers.js';
+import { doEquationForming, discardIfNeeded, acknowledgeResults } from './_helpers.js';
 
 const NUM_PLAYERS = 10;
 
@@ -78,18 +78,8 @@ async function doHiLoSelection(pages: Page[]) {
     }));
 }
 
-async function acknowledgeResults(pages: Page[]) {
-    await Promise.all(pages.map(async (page) => {
-        const button = page.locator('#confirmResults');
-        try {
-            await button.waitFor({ state: 'visible', timeout: 30000 });
-        } catch {
-            return; // out player — no button shown
-        }
-        await button.click();
-        await pause(page);
-    }));
-}
+// acknowledgeResults is shared (in _helpers): it verifies the rendered winner on every
+// results screen before dismissing it.
 
 async function playHand(pages: Page[]) {
     // Verify we're in a hand

@@ -1,6 +1,6 @@
 import { test, expect, Browser, BrowserContext, Page, devices } from '@playwright/test';
 import { attachBrowserLogging } from './_logging.js';
-import { doEquationForming, discardIfNeeded } from './_helpers.js';
+import { doEquationForming, discardIfNeeded, acknowledgeResults } from './_helpers.js';
 
 // 3 players with distinct iPhone viewports
 const PLAYER_DEVICES = [
@@ -87,29 +87,15 @@ async function doHiLoSelection(pages: Page[]) {
     }));
 }
 
-// Returns the number of pages that actually saw (and acknowledged) the results modal.
-// A stalled hand never reaches results, so callers can assert on this to fail loudly
-// instead of silently passing.
-async function acknowledgeResults(pages: Page[]): Promise<number> {
-    const acked = await Promise.all(pages.map(async (page) => {
-        const button = page.locator('#confirmResults');
-        try {
-            await button.waitFor({ state: 'visible', timeout: 20000 });
-        } catch {
-            return false; // out player — button not shown, or hand stalled before results
-        }
-        await button.click({ force: true });
-        await pause(page, 1500);
-        return true;
-    }));
-    return acked.filter(Boolean).length;
-}
+// acknowledgeResults is shared (in _helpers): it verifies the rendered winner on every
+// results screen, then dismisses it, and returns how many pages saw the results modal.
 
 // Creates contexts + pages with WS trackers attached before navigation.
 // eliminatedPromises[i] resolves when page i receives a kicked message for its own player id.
 async function setupPlayers(
     browser: Browser,
     chipTracker: { min: number },
+    resultTracker?: { lastResults: any[] },
 ): Promise<{ pages: Page[]; contexts: BrowserContext[]; eliminatedPromises: Promise<void>[] }> {
     const contexts = await Promise.all(PLAYER_DEVICES.map(device => browser.newContext(device)));
     const pages: Page[] = [];
@@ -128,6 +114,11 @@ async function setupPlayers(
                     if (msg.type === 'kicked' && myId && msg.userId === myId) resolveEliminated();
                     if (msg.type === 'next-turn' && typeof msg.playerChipCount === 'number') {
                         chipTracker.min = Math.min(chipTracker.min, msg.playerChipCount);
+                    }
+                    // Capture the showdown chip counts so the test can verify the pot was
+                    // fully distributed (total chips conserved across the hand).
+                    if (msg.type === 'round-result' && Array.isArray(msg.results) && resultTracker) {
+                        resultTracker.lastResults = msg.results;
                     }
                 } catch {}
             });
@@ -345,7 +336,8 @@ test.describe('Betting mechanics', () => {
         test.setTimeout(180000);
 
         const chipTracker = { min: Infinity };
-        const { pages, contexts } = await setupPlayers(browser, chipTracker);
+        const resultTracker = { lastResults: [] as any[] };
+        const { pages, contexts } = await setupPlayers(browser, chipTracker, resultTracker);
 
         await setupRoom(pages);
 
@@ -372,6 +364,16 @@ test.describe('Betting mechanics', () => {
 
         // No player's chip count should have gone negative
         expect(chipTracker.min, 'chip counts must stay non-negative').toBeGreaterThanOrEqual(0);
+
+        // --- Chip distribution: the pot was fully paid out (chips are conserved) ---
+        // Everyone bet low, so a single low winner takes the whole pot. The total chips
+        // across all players after the hand must still equal the starting total — proving
+        // the pot was distributed, not lost or duplicated.
+        expect(resultTracker.lastResults.length, 'round-result chip counts should have been captured').toBe(NUM_PLAYERS);
+        const totalChips = resultTracker.lastResults.reduce((sum, r) => sum + (r.chipCount ?? 0), 0);
+        expect(totalChips, 'pot must be fully distributed (total chips conserved)').toBe(NUM_PLAYERS * STARTING_CHIPS);
+        const winnerGains = resultTracker.lastResults.filter(r => (r.chipDifferential ?? 0) > 0);
+        expect(winnerGains.length, 'exactly one low winner should be credited the pot').toBe(1);
 
         // Game continues normally into hand 2
         for (const page of pages) {

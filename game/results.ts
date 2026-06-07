@@ -152,3 +152,54 @@ export function determineWinnersInternal(notFoldedPlayers: Player[]) { // TODO r
         swingBetterWon
     }; // TODO clean up this return
 }
+
+export interface PotDistribution {
+    // playerId -> chips credited to that player this hand
+    deltas: Map<string, number>;
+    message: string;
+    // True when only swing betters remained and none swept both sides: nobody wins and the
+    // pot is forfeited (chips are lost — this mirrors the existing game behavior).
+    nobodyWon: boolean;
+}
+
+// Pure decision for how the pot is paid out, split out from the determineWinners side effects
+// (chipCount mutation, socket sends, results building) so it can be unit-tested directly.
+// Given the winner determination and the pot size, it returns the chip delta for each winner
+// and the result message — without mutating anything.
+export function computePotDistribution(
+    outcome: ReturnType<typeof determineWinnersInternal>,
+    pot: number
+): PotDistribution {
+    const { swingBetterWon, loWinner, hiWinner, loWinnerOfSwingBetters } = outcome;
+    const deltas = new Map<string, number>();
+
+    if (swingBetterWon) {
+        // A single swing better swept both sides — they take the whole pot.
+        deltas.set(loWinnerOfSwingBetters!.id, pot);
+        return { deltas, message: `${loWinnerOfSwingBetters!.username} won the swing bet.`, nobodyWon: false };
+    }
+
+    const potWillSplit = loWinner !== null && hiWinner !== null;
+    if (potWillSplit) {
+        // Discard a chip if the pot is odd so it halves evenly (the odd chip is lost).
+        const splitPot = (pot % 2 !== 0 ? pot - 1 : pot) / 2;
+        deltas.set(loWinner!.id, splitPot);
+        deltas.set(hiWinner!.id, splitPot);
+        return {
+            deltas,
+            message: `${hiWinner!.username} won the high bet and ${loWinner!.username} won the low bet.`,
+            nobodyWon: false,
+        };
+    }
+    if (loWinner !== null) {
+        deltas.set(loWinner.id, pot);
+        return { deltas, message: `${loWinner.username} won the low bet.`, nobodyWon: false };
+    }
+    if (hiWinner !== null) {
+        deltas.set(hiWinner.id, pot);
+        return { deltas, message: `${hiWinner.username} won the high bet.`, nobodyWon: false };
+    }
+
+    // Only swing betters remained and none swept both sides: nobody wins, pot is forfeited.
+    return { deltas, message: "No one won the bet — the pot is forfeited.", nobodyWon: true };
+}
