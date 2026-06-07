@@ -10,7 +10,8 @@ Backend split plan (server.ts → src/)
       router.ts        — switch on clientMsg.type, dispatches to handlers
       broadcast.ts     — sendSocketMessageToEveryClientInRoom, NonFolded variants
       handlers/
-        lifecycle.ts   — create, enter, join, start, leave, refresh
+        session.ts     — create, enter, join, start, leave, refresh
+                         (named session.ts to avoid colliding with game/lifecycle.ts)
         betting.ts     — bet-placed, fold
         cards.ts       — discard, hand-order
         flow.ts        — lock-in, hi-lo-selected, acknowledge-hand-results
@@ -150,13 +151,22 @@ Backend split plan (server.ts → src/)
          server.ts: 1282 -> 736 lines. 30 unit + 3 E2E pass.
 
      THEN:
-     >>> NEXT: 3l. ws/handlers/lifecycle.ts — create, enter, join, start, leave, refresh message handlers
-     3m. ws/handlers/betting.ts   — bet-placed, fold message handlers
+     3l. ✅ ws/handlers/session.ts — create, enter, join, start, leave, refresh message handlers
+              (named session.ts, NOT lifecycle.ts, to avoid colliding with game/lifecycle.ts
+               the phase-state-machine orchestrator)
+              enterRoom moved here too (the 3r enterRoom move folded in): it's used ONLY by
+              create/enter and could not stay in server.ts (server.ts -> session.ts router cycle)
+              nor go in game/rooms.ts (rooms <-> lifecycle cycle via getSecondsLeft). session.ts
+              is a leaf nobody imports, so it's the safe home. server.ts switch now calls
+              handleCreate/Enter/Refresh/Start/Leave/Join. 30 unit + 3 E2E pass.
+
+     >>> NEXT: 3m. ws/handlers/betting.ts   — bet-placed, fold message handlers
      3n. ws/handlers/cards.ts     — discard, hand-order message handlers
      3o. ws/handlers/flow.ts      — lock-in, hi-lo-selected, acknowledge-hand-results handlers
      3p. ws/router.ts             — switch on clientMsg.type, dispatches to handlers
      3q. intervals.ts             — heartbeat + room cleanup intervals, move out of server.ts
-     3r. enterRoom + room cleanup  — move out of server.ts (into game/rooms.ts or lifecycle)
+     3r. room cleanup  — move out of server.ts (into game/rooms.ts or lifecycle)
+                         (enterRoom already moved — folded into 3l above)
      3s. __tests__/tests.ts        — imports already point at game/results.js + equation-core.js;
                                      update again as more moves out of server.ts
   4. Frontend state.ts extraction — pull out shared variables and localStorage.

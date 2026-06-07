@@ -1,0 +1,301 @@
+import {
+    games, players, emojis,
+    Game, Player, GamePhase,
+    ExtendedWebSocket,
+    CreateMessage, EnterMessage, JoinMessage, StartMessage, LeaveMessage, RefreshMessage,
+} from '../../state.js';
+import { removeWhitespace } from '../../public/utilities.js';
+import { logRoomsAndPlayers } from '../../debug/print.js';
+import { sendSocketMessageToEveryClientInRoom } from '../broadcast.js';
+import { notifyPlayerOfNewlyDealtCards } from '../../game/notify.js';
+import { playersInRoom, nonFoldedAndNotOutPlayers } from '../../game/rooms.js';
+import { advanceToNextPlayersTurn } from '../../game/betting.js';
+import { initializeHand, getSecondsLeft } from '../../game/lifecycle.js';
+
+export function handleCreate(ws: ExtendedWebSocket, clientMsg: CreateMessage) {
+    let game = new Game();
+    games.set(game.roomCode, game);
+    console.log(games);
+    game.currentTurnPlayerId = game.hostId = ws.userId; // no, right? TODO remove concept of hostId?? or add host promotion
+
+    enterRoom(game, clientMsg, ws);
+    console.log(game);
+}
+
+export function handleEnter(ws: ExtendedWebSocket, clientMsg: EnterMessage) { // TODO change to enter, and then just check if game is in lobby phase and if player already exists
+    const game = games.get(clientMsg.roomCode);
+
+    if (!game) {
+        // send room code does not exist message
+        ws.send(JSON.stringify({ type: "room-join-reject" }));
+
+        return;
+    }
+
+    enterRoom(game, clientMsg, ws);
+}
+
+export function handleRefresh(ws: ExtendedWebSocket, clientMsg: RefreshMessage) {
+    ws.userId = clientMsg.userId; // should actually be the same
+    // what about set ws.userId equal to it
+    const player = players.get(clientMsg.userId);
+    if (!player) return;
+
+    ws.send(JSON.stringify({ type: "suggest-room", roomCode: player.roomCode })); // TODO client will say must be players 2 even if the reject reason is client not being host
+}
+
+export function handleStart(ws: ExtendedWebSocket, clientMsg: StartMessage) {
+    const player = players.get(ws.userId);
+
+    if (player?.roomCode == null) {
+        ws.send(JSON.stringify({ type: "reject-start" })); // TODO client will say must be players 2 even if the reject reason is client not being host
+        return;
+    }
+
+    const game = games.get(player.roomCode); // commit message: fixed this
+
+    if (game == null || clientMsg.userId !== game.hostId || players.size < 2) {
+        ws.send(JSON.stringify({ type: "reject-start" })); // TODO client will say must be players 2 even if the reject reason is client not being host
+        return;
+    }
+
+    sendSocketMessageToEveryClientInRoom(game.roomCode, {
+        type: "game-started",
+        // chipCount: players.get(client.userId).chipCount, // TODO have we initialized chip count here
+        // id: client.userId
+    });
+
+    initializeHand(game);
+}
+
+export function handleLeave(ws: ExtendedWebSocket, clientMsg: LeaveMessage) {
+    const player = players.get(clientMsg.userId);
+    if (!player) return;
+    const game = games.get(player.roomCode);
+    if (!game) return;
+
+    if (clientMsg.userId === game.hostId) {
+        // set a new host. if last player, end the game
+    }
+
+    sendSocketMessageToEveryClientInRoom(game.roomCode, { type: "player-left" });
+
+    player.out = true; //ws.userId or userId??
+    // console.log(`User disconnected: ${ws.userId}`);
+}
+
+export function handleJoin(ws: ExtendedWebSocket, clientMsg: JoinMessage) { // TODO change to set Name
+    console.log("join");
+    // if (ws.isHost) { // without this, later players joining become the host
+    //     currentTurnPlayerId = clientMsg.userId; // TODO surely we can set this later? as just the first player in players list?
+    //     hostId = clientMsg.userId; // just use ws.userId here?
+    // }
+    const player = players.get(ws.userId);
+
+    if (player === null || player === undefined) {
+        return;
+    }
+
+    if (player.username != null) {
+        // this player already submitted their username, so this must be a duplicate message
+        return;
+    }
+
+    player.username = player.emoji + " " + removeWhitespace(clientMsg.username);
+    const game = games.get(player.roomCode);
+    if (game == null) {
+        // must be incorrect room code
+        return;
+    }
+
+    console.log(`***** 👩‍💻 ${game.hostId === ws.userId ? 'Host' : 'Player'} joined: ${clientMsg.username} *****`);
+
+    sendSocketMessageToEveryClientInRoom(game.roomCode, {
+        type: "player-joined",
+        id: clientMsg.userId,
+        hostId: game.hostId!,// client.userId === hostId, // this is wrong because it means the host will show everyone joining as host
+        color: player.color!,
+        username: player.username,
+    });
+
+    logRoomsAndPlayers(); // this will be outside game class
+}
+
+function enterRoom(game: Game, clientMsg: CreateMessage | EnterMessage, ws: ExtendedWebSocket) { // TODO  this union is bad
+
+    if (game.phase === GamePhase.LOBBY) {
+        // send a newly connected player the list of all players that have joined thus far
+        // player.username != null is because we don't want to share players that have entered but not submitted name
+        [...players.values()].filter(player => player.roomCode === game.roomCode && player.username != null).forEach(player => {
+            ws.send(JSON.stringify({
+                type: "player-joined",
+                id: player.id,
+                hostId: game.hostId,// client.userId === hostId, // this is wrong because it means the host will show everyone joining as host
+                color: player.color, // what happens if we put user color here?
+                username: player.username,
+            }));
+        });
+
+        const player = players.get(clientMsg.userId);
+
+        console.log(player);
+        if (player && player.roomCode === game.roomCode) {
+            // TODO how to change the flow so we don't have to trust this
+            ws.send(JSON.stringify({ type: "room-entered", roomCode: game.roomCode, hostId: game.hostId, joined: player.username !== null }));
+
+            if (player.roomCode === game.roomCode){
+                ws.userId = clientMsg.userId;
+
+                logRoomsAndPlayers();
+            } else {
+
+            }
+        } else {
+            // more test cases - a player in an existing game can change autofilled room code
+            // to join a different game, thus overwriting and leaving that game
+
+            // either there's no player, or a player for a different game and we are joining a new one
+            // so overwrite it
+            console.log("creating userId but no username yet"); // is this message still right?
+            // if (ws.isHost) { // without this, later players joining become the host
+            //     currentTurnPlayerId = clientMsg.userId; // TODO surely we can set this later? as just the first player in players list?
+            //     hostId = clientMsg.userId; // just use ws.userId here?
+            // }
+
+            console.log(`***** 👩‍💻 ${game.hostId === clientMsg.userId ? 'Host' : 'Player'} joined: ${clientMsg.userId} *****`);
+
+            // TODO THIS for rejoining active rooms
+            // have to reassign userId because what if someone refreshes? have to ignore the init message // TODO rethink this in the context of join/ enter
+            // need to assign ws.userId because it's used to check clientId === id on server
+            ws.userId = clientMsg.userId; // TODO need this??
+
+            let color;
+            let emoji;
+            // assign color and emoji to player
+            while (true) {
+                const index = Math.floor(Math.random() * 12);
+                if (game.usedColors.has(index)) {
+                    continue;
+                } else {
+                    color = `hsl(${index * 30}, 100%, 70%)`;
+                    emoji = emojis[index];
+                    game.usedColors.add(index);
+                    break;
+                }
+            }
+
+            players.set(clientMsg.userId, new Player(clientMsg.userId, game.roomCode, color)); // TODO sanitize clientMsg.username to standards
+            players.get(clientMsg.userId)!.emoji = emoji;
+            ws.send(JSON.stringify({ type: "room-entered", roomCode: game.roomCode, hostId: game.hostId, joined: false, color: color }));
+
+            console.log([...players].filter(([id, player]) => player.roomCode === game.roomCode));
+
+            logRoomsAndPlayers();
+        }
+    } else { // gamephase is not lobby
+        // TODO what makes this a "rejoin"? I should have that word, that's what I expected.
+        ws.send(JSON.stringify({ type: "room-entered", roomCode: game.roomCode, hostId: game.hostId, joined: true, inProgress: true }));
+
+        const rejoiningPlayer = players.get(ws.userId); // can use ws if not gamephase bc must be true
+        if (!rejoiningPlayer) return;
+
+        // send game state
+        switch (game.phase) {
+            case GamePhase.FIRSTDEAL:
+                playersInRoom(game.roomCode).forEach(player => {
+                    notifyPlayerOfNewlyDealtCards(player, rejoiningPlayer, player.needToDiscard);
+                });
+                break;
+            case GamePhase.FIRSTBETTING:
+                playersInRoom(game.roomCode).forEach(player => {
+                    notifyPlayerOfNewlyDealtCards(player, rejoiningPlayer, false);
+                });
+                // test cases
+                // one player needs to discard. refreshes, still needs to discard
+                // one players has discarded. refreshes, still does not need to
+                // one player needs to discard. different player refreshes, they still see player X discarding
+                // two players need to discard. One discards, each refresh and still see correct state
+
+                // player is betting when toCall > 0. refreshes, still sees correct toCall
+                // player is betting when toCall > 0 and their stake > 0. and sees correct
+
+                // actually don't need the commented code... bc for players whose turn it isn't,
+                // it'll just say "player X is betting" so they'll have context on whose turn it is
+                // TODO rename advance to NotifyItIsPlayersTurn (because it might not actually be advancing)
+                // TODO Also if I refresh when toCall was the ante 1, it is now 0. so just implement ante right
+                // if (rejoiningPlayer.id === game.currentTurnPlayerId) {
+                    // TODO need to notify a player if they are betting or not here
+                    advanceToNextPlayersTurn(game, game.toCall - rejoiningPlayer.stake);
+                // }
+                break;
+            case GamePhase.SECONDDEAL:
+                // TODO need to send the pot here as well
+
+                playersInRoom(game.roomCode).forEach(player => {
+                    notifyPlayerOfNewlyDealtCards(player, rejoiningPlayer, player.needToDiscard);
+                });
+                // this happens instantaneously unless there is a discard...
+                break;
+            case GamePhase.EQUATIONFORMING:
+                // need to send whether they've locked, and their card order. and the time left
+                // and everyone else's card order.
+                // TODO players might start refreshing to get the fresh card order, so have it live
+                playersInRoom(game.roomCode).forEach(player => {
+                    notifyPlayerOfNewlyDealtCards(player, rejoiningPlayer, false);
+                });
+                // TODO need to send roomCode as well, it gets lost
+                console.log(getSecondsLeft(game))
+                ws.send(JSON.stringify({
+                    type: "commence-equation-forming",
+                    cannotFormEquation: rejoiningPlayer.equationResult != null,
+                    remainingSeconds: getSecondsLeft(game),
+                    pot: game.pot
+                }));
+                break;
+            case GamePhase.SECONDBETTING:
+                // TODO REALLY need to send the pot here as well
+                playersInRoom(game.roomCode).forEach(player => {
+                    notifyPlayerOfNewlyDealtCards(player, rejoiningPlayer, false);
+                });
+                advanceToNextPlayersTurn(game, game.toCall - rejoiningPlayer.stake);
+                break;
+            case GamePhase.HILOSELECTION:
+                playersInRoom(game.roomCode).forEach(player => {
+                    notifyPlayerOfNewlyDealtCards(player, rejoiningPlayer, false);
+                });
+
+                ws.send(JSON.stringify({
+                    type: "hi-lo-selection-commenced",
+                    pendingPlayerIds: nonFoldedAndNotOutPlayers(game)
+                        .filter(p => p.choices.length === 0)
+                        .map(p => p.id),
+                }));
+
+                if (rejoiningPlayer.choices.length === 0) {
+                    ws.send(JSON.stringify({ type: "hi-lo-selection" }));
+                }
+                break;
+            case GamePhase.RESULTVIEWING:
+                // TODO rewrite index.html to only use msg.results, not hiWinner or loWinner
+                /*
+                sendSocketMessageToEveryClientInRoom(game.roomCode, {
+                    type: "round-result",
+                    message: message!,
+                    loWinner: loWinner,
+                    hiWinner: hiWinner,
+                    results: results
+                });
+                */
+                playersInRoom(game.roomCode).forEach(player => {
+                    notifyPlayerOfNewlyDealtCards(player, rejoiningPlayer, false);
+                });
+
+                ws.send(JSON.stringify({
+                    type: "round-result",
+                    results: game.results
+                }));
+                break;
+        }
+    }
+        console.log("made it to sending game state");
+}
