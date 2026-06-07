@@ -12,6 +12,9 @@ export function setWss(server: WebSocketServer) { wss = server; }
 export const emojis = ['💀','❤️','😎','💩','👽','🧠','🐸','🍄','🪐','🔥','❄️','🍩'];
 export const RATE_LIMIT = 20;
 export const INTERVAL = 10000;
+// Deck has 44 number cards and each player consumes up to 4 in the worst-case
+// shuffle (44 / 4 = 11 hard ceiling). Capped at 10 for a safety margin.
+export const MAX_PLAYERS_PER_ROOM = 10;
 export const EQUATION_DURATION =
     (process.env.GAME_MODE === 'debug' ? 20 : 90) * 1000;
 

@@ -702,11 +702,12 @@
         
         case "room-join-reject": { // TODO rename to room-enter-reject
             const error = document.getElementById("roomCodeError");
-            console.log("Room code does not exist.");
-            error.textContent = "Room code does not exist.";
-  
+            const text = msg.reason === "full" ? "Room is full." : "Room code does not exist.";
+            console.log(text);
+            error.textContent = text;
+
             break;
-        } 
+        }
         
         case "room-entered": {
             if (msg.color) {

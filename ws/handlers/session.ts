@@ -1,5 +1,5 @@
 import {
-    games, players, emojis,
+    games, players, emojis, MAX_PLAYERS_PER_ROOM,
     Game, Player, GamePhase,
     ExtendedWebSocket,
     CreateMessage, EnterMessage, JoinMessage, StartMessage, LeaveMessage, RefreshMessage,
@@ -156,6 +156,13 @@ function enterRoom(game: Game, clientMsg: CreateMessage | EnterMessage, ws: Exte
 
             // either there's no player, or a player for a different game and we are joining a new one
             // so overwrite it
+
+            // reject brand-new players once the room is full (deck can't supply more — see MAX_PLAYERS_PER_ROOM)
+            if (playersInRoom(game.roomCode).length >= MAX_PLAYERS_PER_ROOM) {
+                ws.send(JSON.stringify({ type: "room-join-reject", reason: "full" }));
+                return;
+            }
+
             console.log("creating userId but no username yet"); // is this message still right?
             // if (ws.isHost) { // without this, later players joining become the host
             //     currentTurnPlayerId = clientMsg.userId; // TODO surely we can set this later? as just the first player in players list?
