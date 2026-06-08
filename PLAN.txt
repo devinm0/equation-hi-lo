@@ -270,6 +270,23 @@ Backend split plan (server.ts → src/)
       branches are implemented and ready, but need a spec that bets high/swing to exercise
       them live.
 
+  T8. Allow leaving games cleanly (manual leave)
+      Today handleLeave (ws/handlers/session.ts) only sets player.out = true — it does not
+      remove the player's record, so a leaver who returns to the home page is still suggested
+      (via handleRefresh -> suggest-room) the very room they just left, and cannot cleanly
+      start a fresh game. (Contrast: the new game-over path now fully deletes a room + its
+      players via cleanupGame, so the WINNER is never re-suggested the dead room — see
+      game/rooms.ts cleanupGame, game/lifecycle.ts declareGameOver. This T8 is the same idea
+      for a MID-GAME manual leave, where the rest of the table keeps playing.)
+      Fix: when a player leaves manually mid-game, delete their player record (or mark it so
+      handleRefresh won't suggest the old room) so the same browser can create/join a new game
+      without the stale "Rejoin game in progress" prompt.
+      Also: when a player leaves, their winnings (current chipCount) should probably go INTO
+      THE POT rather than vanish — i.e. fold + forfeit their stack to the pot for the
+      remaining players — instead of silently disappearing from the chip economy. Decide the
+      exact semantics (straight into the live pot? split? only if a hand is in progress?) and
+      mirror the elimination/kicked bookkeeping in game/lifecycle.ts.
+
   ADSENSE / AD IMPLEMENTATION STATUS
       Goal: show a Google AdSense banner and get the site approved. Auto-approval fails
       because the SPA serves little static, crawlable content for the reviewer.

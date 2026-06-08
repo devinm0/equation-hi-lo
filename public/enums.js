@@ -38,6 +38,7 @@ var GamePhase = /* @__PURE__ */ ((GamePhase2) => {
   GamePhase2["SECONDBETTING"] = "second-betting";
   GamePhase2["HILOSELECTION"] = "hi-lo-selection";
   GamePhase2["RESULTVIEWING"] = "result-viewing";
+  GamePhase2["GAMEOVER"] = "game-over";
   return GamePhase2;
 })(GamePhase || {});
 export {

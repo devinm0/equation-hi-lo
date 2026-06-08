@@ -3,14 +3,15 @@ import {
     Game, Player, GamePhase,
     ExtendedWebSocket,
     CreateMessage, EnterMessage, JoinMessage, StartMessage, LeaveMessage, RefreshMessage,
+    AcknowledgeGameOverMessage, DebugForceGameOverMessage,
 } from '../../state.js';
 import { removeWhitespace } from '../../public/utilities.js';
 import { logRoomsAndPlayers } from '../../debug/print.js';
 import { sendSocketMessageToEveryClientInRoom } from '../broadcast.js';
 import { notifyPlayerOfNewlyDealtCards } from '../../game/notify.js';
-import { playersInRoom, nonFoldedAndNotOutPlayers } from '../../game/rooms.js';
+import { playersInRoom, nonFoldedAndNotOutPlayers, cleanupGame } from '../../game/rooms.js';
 import { advanceToNextPlayersTurn } from '../../game/betting.js';
-import { initializeHand, getSecondsLeft } from '../../game/lifecycle.js';
+import { initializeHand, getSecondsLeft, declareGameOver } from '../../game/lifecycle.js';
 
 export function handleCreate(ws: ExtendedWebSocket, clientMsg: CreateMessage) {
     let game = new Game();
@@ -82,6 +83,33 @@ export function handleLeave(ws: ExtendedWebSocket, clientMsg: LeaveMessage) {
 
     player.out = true; //ws.userId or userId??
     // console.log(`User disconnected: ${ws.userId}`);
+}
+
+// The winner clicked "Accept" on the win screen (or their tab fired beforeunload).
+// Tear the whole room down — deletes the game AND every player record — so the same
+// browser can immediately start a fresh game and is never suggested the dead room.
+export function handleAcknowledgeGameOver(ws: ExtendedWebSocket, clientMsg: AcknowledgeGameOverMessage) {
+    const player = players.get(clientMsg.userId);
+    if (!player) return;
+    const game = games.get(player.roomCode);
+    if (!game) return;
+
+    cleanupGame(game);
+}
+
+// Debug-only test hook (ignored unless GAME_MODE=debug): mark everyone but the sender
+// out and end the game with the sender as winner, so E2E can reach game-over
+// deterministically without grinding hands until a real bust.
+export function handleDebugForceGameOver(ws: ExtendedWebSocket, clientMsg: DebugForceGameOverMessage) {
+    if (process.env.GAME_MODE !== 'debug') return;
+
+    const player = players.get(clientMsg.userId);
+    if (!player) return;
+    const game = games.get(player.roomCode);
+    if (!game) return;
+
+    playersInRoom(game.roomCode).forEach(p => { if (p.id !== player.id) p.out = true; });
+    declareGameOver(game, player);
 }
 
 export function handleJoin(ws: ExtendedWebSocket, clientMsg: JoinMessage) { // TODO change to set Name

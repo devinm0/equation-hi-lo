@@ -109,6 +109,19 @@ export interface LeaveMessage {
     userId: string;
 }
 
+export interface AcknowledgeGameOverMessage {
+    type: "acknowledge-game-over";
+    userId: string;
+}
+
+// Debug-only (server honours it solely when GAME_MODE=debug): immediately ends the
+// sender's game with the sender as the lone winner. Lets E2E reach game-over
+// deterministically instead of grinding hands until someone busts.
+export interface DebugForceGameOverMessage {
+    type: "debug-force-game-over";
+    userId: string;
+}
+
 export type ClientMessage =
     CreateMessage
     | StartMessage
@@ -123,6 +136,8 @@ export type ClientMessage =
     | BetMessage
     | AcknowledgeHandResultsMessage
     | LeaveMessage
+    | AcknowledgeGameOverMessage
+    | DebugForceGameOverMessage
 
 export interface BeginHandMessage {
     type: "begin-hand";
@@ -227,8 +242,19 @@ export interface RoundResultMessage {
 
 export interface Result {}
 
+// Sent to everyone in a room when the game ends (all but one player eliminated).
+// chipCount is the winner's whole stack — i.e. their total winnings.
+export interface GameWonMessage {
+    type: "game-won";
+    winnerId: string;
+    username: string;
+    color: string;
+    chipCount: number;
+}
+
 export type ServerMessage =
     BeginHandMessage
+    | GameWonMessage
     | CommenceEquationFormingMessage
     | EndBettingRoundMessage
     | PlayerDiscardedMessage

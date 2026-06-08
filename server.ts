@@ -18,6 +18,8 @@ import {
     handleStart,
     handleLeave,
     handleJoin,
+    handleAcknowledgeGameOver,
+    handleDebugForceGameOver,
 } from './ws/handlers/session.js';
 import {
     getHandToSendFromHand,
@@ -26,6 +28,7 @@ import {
 import {
     activePlayersInRoom,
     nonFoldedAndNotOutPlayers,
+    cleanupGame,
 } from './game/rooms.js';
 import {
     playersThatNeedToDiscard,
@@ -187,6 +190,16 @@ wss.on("connection", (ws: ExtendedWebSocket) => { // LEARN pass in extended
 
             case "leave": {
                 handleLeave(ws, clientMsg);
+                break;
+            }
+
+            case "acknowledge-game-over": {
+                handleAcknowledgeGameOver(ws, clientMsg);
+                break;
+            }
+
+            case "debug-force-game-over": {
+                handleDebugForceGameOver(ws, clientMsg);
                 break;
             }
 
@@ -452,7 +465,7 @@ const heartbeatInterval = setInterval(function ping() {
 const roomCleanupInterval = setInterval(function ping() {
     games.forEach(function each(game) {
         if (Date.now() - game.createdAt > 24 * 60 * 60 * 1000) {
-            games.delete(game.roomCode);
+            cleanupGame(game); // deletes the game AND its player records, not just the game
         }
     });
 }, 24 * 60 * 60 * 1000);

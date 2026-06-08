@@ -197,7 +197,42 @@ export function endHand(game: Game) {
         player.needToDiscard = false;
     })
 
+    // Game-over check: once everyone but one player has been eliminated (0 chips ->
+    // out), there is no one left to play against. End the game instead of dealing a
+    // new hand. The lone survivor is the winner; their whole stack is their winnings.
+    const stillIn = playersInRoom(game.roomCode).filter(player => !player.out);
+    if (stillIn.length <= 1) {
+        declareGameOver(game, stillIn[0] ?? null);
+        return;
+    }
+
     initializeHand(game);
+}
+
+// Broadcast the winner and freeze the game in GAMEOVER. We do NOT delete state here —
+// the clients still need to receive this message (broadcast keys off each player's
+// room record), and the winner's "Accept"/leave is what triggers cleanupGame. The
+// periodic stale-room sweep is the backstop if they never acknowledge.
+export function declareGameOver(game: Game, winner: Player | null): void {
+    clearTimeout(game.endEquationFormingTimeout);
+    game.phase = GamePhase.GAMEOVER;
+
+    // Edge case: a simultaneous bust (e.g. all-swing-no-sweep forfeits the pot) can
+    // leave zero players with chips. Fall back to whoever holds the most so the game
+    // still terminates with a named winner rather than hanging.
+    const champion = winner
+        ?? playersInRoom(game.roomCode).reduce<Player | null>(
+            (best, p) => (best === null || p.chipCount > best.chipCount ? p : best), null);
+
+    if (!champion) return; // empty room — nothing to announce
+
+    sendSocketMessageToEveryClientInRoom(game.roomCode, {
+        type: "game-won",
+        winnerId: champion.id,
+        username: champion.username!,
+        color: champion.color!,
+        chipCount: champion.chipCount,
+    });
 }
 
 export function initializeHand(game: Game) { // means start a hand of play

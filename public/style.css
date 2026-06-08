@@ -839,6 +839,18 @@ body.show-home-bg .grid-container {
     color: white;
 }
 
+/* Win / game-over modal: centre the winner's chipstack-of-stacks in the card. */
+.win-modal #winSubtitle {
+    margin: 4px 0 0;
+    font-size: 0.9em;
+    color: rgba(255, 255, 255, 0.8);
+}
+
+#winChipStacksContainer {
+    margin: 20px auto 8px; /* fit-content flex box -> auto margins centre it in the modal */
+    min-height: 40px;
+}
+
 .options {
   display: flex;
   justify-content: space-around;
@@ -1269,6 +1281,7 @@ body.show-home-bg .grid-container {
 .eg-tie {
     display: flex;
     align-items: center;
+    justify-content: center; /* centre each row in the wide (laptop) modal, not left-pack it */
     gap: 10px;
     margin: 10px 0;
 }

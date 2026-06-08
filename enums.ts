@@ -36,5 +36,6 @@ export enum GamePhase { // LEARN enum syntax is different
   EQUATIONFORMING = "equation-forming",
   SECONDBETTING = "second-betting",
   HILOSELECTION = "hi-lo-selection",
-  RESULTVIEWING = "result-viewing"
+  RESULTVIEWING = "result-viewing",
+  GAMEOVER = "game-over"
 }

@@ -34,6 +34,17 @@
         </div>
     </div>
 
+    <div id="winModal" class="modal-overlay hidden">
+        <div class="modal win-modal">
+            <h2 id="winTitle">You win!</h2>
+            <p id="winSubtitle">Total winnings</p>
+            <div id="winChipStacksContainer" class="chip-stacks-container"></div>
+            <div class="buttons">
+                <button id="confirmGameOver">Accept ✅</button>
+            </div>
+        </div>
+    </div>
+
     <div id="progressBarWrapper" style="display: none;">
         <div id="progressBar" style="display: none;"></div>
         <div id="progressBarOverlay" style="display: none;"></div>
@@ -453,6 +464,7 @@
     let myHand = null; // TODO this needs to be a serialized object
     let sortable = null; // allows for rearranging our hand to form the equation
     let numPlayersJoined = 0;
+    let gameOver = false; // set true when the game-won modal is shown
 
     const rects = document.querySelectorAll('.rect');
     rects.forEach(rect => {
@@ -671,6 +683,26 @@
 
             drawHand(msg.userId, msg.color, msg.username, msg.hand, false, false, true);
             updateChipStack(msg.chipCount, document.getElementById("chipStacksContainer-" + msg.userId), null, true);
+
+            break;
+        }
+
+        case "game-won": {
+            gameOver = true;
+
+            const title = document.getElementById("winTitle");
+            const subtitle = document.getElementById("winSubtitle");
+            if (msg.winnerId === myId) {
+                title.textContent = "You win! 🏆";
+                subtitle.textContent = "Total winnings";
+            } else {
+                title.textContent = msg.username + " wins! 🏆";
+                subtitle.textContent = "Their total winnings";
+            }
+
+            // Render the winner's whole stack as a centered chipstack-of-stacks in the modal.
+            updateChipStack(msg.chipCount, document.getElementById("winChipStacksContainer"));
+            document.getElementById("winModal").classList.remove("hidden");
 
             break;
         }
@@ -1086,6 +1118,27 @@
       alert("You have left the game.");
       location.reload(); // Reload to reset game state
     });
+
+    // Win modal "Accept": tell the server to tear the room down, then return home.
+    // We deliberately KEEP the localStorage userId — the server has deleted the old
+    // room and player records, so the same browser identity simply gets a brand-new
+    // player when it next creates/joins a game (and is never suggested the dead room).
+    document.getElementById('confirmGameOver').addEventListener('click', () => {
+        if (myId) socket.send(JSON.stringify({ type: "acknowledge-game-over", userId: myId }));
+        setTimeout(() => location.reload(), 200); // let the ack flush before the socket closes
+    });
+
+    // If the winner closes/navigates away instead of clicking Accept, still ask the
+    // server to clean up (best-effort; the 24h stale-room sweep is the backstop).
+    window.addEventListener('beforeunload', () => {
+        if (gameOver && myId) {
+            socket.send(JSON.stringify({ type: "acknowledge-game-over", userId: myId }));
+        }
+    });
+
+    // Debug/E2E only: the server ignores this unless GAME_MODE=debug. Lets tests drive
+    // the game straight to game-over without grinding hands until a real bust.
+    window.__forceGameOver = () => socket.send(JSON.stringify({ type: "debug-force-game-over", userId: myId }));
 
     function drawHand(id, color, username, hand, multiplicationCardDealt = false, folded = false, out = false) {
         let isRightHand = false;
