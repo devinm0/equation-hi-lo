@@ -19,6 +19,10 @@ export class Game {
   usedColors: Set<number>;
   equationEndTime: number = 0;
   endEquationFormingTimeout?: NodeJS.Timeout; // TODO make this game.endEquationFormingTimeout
+  // Hi/Lo selection timer — kept SEPARATE from the equation-forming timer above so the
+  // all-locked-in early-exit (which clears endEquationFormingTimeout) can't clobber it.
+  hiLoEndTime: number = 0;
+  hiLoSelectionTimeout?: NodeJS.Timeout;
   results: any[] = []; // TODO type this better
 
   constructor() {

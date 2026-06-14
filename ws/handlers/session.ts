@@ -11,7 +11,8 @@ import { sendSocketMessageToEveryClientInRoom } from '../broadcast.js';
 import { notifyPlayerOfNewlyDealtCards } from '../../game/notify.js';
 import { playersInRoom, nonFoldedAndNotOutPlayers, cleanupGame } from '../../game/rooms.js';
 import { advanceToNextPlayersTurn } from '../../game/betting.js';
-import { initializeHand, getSecondsLeft, declareGameOver } from '../../game/lifecycle.js';
+import { initializeHand, getSecondsLeft, getHiLoSecondsLeft, declareGameOver } from '../../game/lifecycle.js';
+import { HI_LO_DURATION } from '../../state.js';
 
 export function handleCreate(ws: ExtendedWebSocket, clientMsg: CreateMessage) {
     let game = new Game();
@@ -314,7 +315,11 @@ function enterRoom(game: Game, clientMsg: CreateMessage | EnterMessage, ws: Exte
                 }));
 
                 if (rejoiningPlayer.choices.length === 0) {
-                    ws.send(JSON.stringify({ type: "hi-lo-selection" }));
+                    ws.send(JSON.stringify({
+                        type: "hi-lo-selection",
+                        remainingSeconds: getHiLoSecondsLeft(game),
+                        totalSeconds: HI_LO_DURATION / 1000,
+                    }));
                 }
                 break;
             case GamePhase.RESULTVIEWING:

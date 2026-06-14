@@ -465,6 +465,11 @@
     let sortable = null; // allows for rearranging our hand to form the equation
     let numPlayersJoined = 0;
     let gameOver = false; // set true when the game-won modal is shown
+    // The single active progress-bar CountdownTimer (equation forming OR hi/lo). Tracked so we
+    // can stop it before starting a new one — otherwise an orphaned timer keeps its rAF loop
+    // alive and fights the new one over the shared overlay/width (the "flashes 60" bug).
+    let progressBarTimer = null;
+    let hiLoTotalSeconds = 60; // full hi/lo duration (for the progress-bar fraction)
 
     const rects = document.querySelectorAll('.rect');
     rects.forEach(rect => {
@@ -842,6 +847,13 @@
         case "hi-lo-selection": {
             showNotification("Select Hi, Lo, or Swing betting.");
 
+            hiLoTotalSeconds = msg.totalSeconds ?? 60;
+            const hiLoRemaining = msg.remainingSeconds ?? hiLoTotalSeconds;
+            // Same countdown bar as equation forming, floated above the choice modal. It runs
+            // for the whole hi/lo phase (modal pick + any swing second equation), so we don't
+            // restart it when swing is chosen — the bar just keeps going.
+            beginCountdownNotification(hiLoRemaining, hiLoTotalSeconds, true);
+
             openChoiceModal(choices => {
                 if (choices) {
                     if (choices.includes("high") && choices.includes("low")) {
@@ -892,6 +904,7 @@
                             console.log('Player chose:', choices); // e.g., ["low", "high"]
 
                             confirmOtherEquationFormedButton.classList.add('hidden');
+                            hideProgressBar(); // swing second equation submitted; stop the timer bar
                         };
 
                     } else {
@@ -916,6 +929,23 @@
         } 
         
        case "round-result": {
+            // The hand resolved — tear down any hi/lo timer UI still showing (the choice modal
+            // and the floating countdown bar).
+            document.getElementById('choiceModal').classList.add('hidden');
+            hideProgressBar();
+
+            // Anyone still in the selecting set never chose a side and was auto-folded on the
+            // hi/lo timeout — relabel their tag from "(selecting...)" so the results view
+            // explains why they're folded. Kept short so it doesn't wrap onto multiple lines.
+            hiloSelectingSet.forEach(id => {
+                const span = document.getElementById("hilo-selecting-" + id);
+                if (span) {
+                    span.textContent = " (no selection)";
+                    span.classList.remove("hidden");
+                }
+            });
+            hiloSelectingSet.clear();
+
             if (msg.loWinner?.id === myId || msg.hiWinner?.id === myId) {
                 sounds.play("win");
             }
@@ -1392,8 +1422,18 @@
         });
     }
 
-    function beginCountdownNotification(secondsRemaining) {
+    // totalSeconds defaults to 90 (equation forming); the hi/lo phase passes its own total
+    // (60s). asOverlay floats the SAME bar above the choice modal (fixed, higher z-index) so
+    // the countdown is visible while the modal is open. Returns the timer so hi/lo can stop it
+    // early. animationDelay starts the CSS animation partway through when beginning mid-phase
+    // (a rejoin, or a swing player who already spent time in the modal).
+    function beginCountdownNotification(secondsRemaining, totalSeconds = 90, asOverlay = false) {
+        // Stop any prior bar timer first so its rAF loop can't keep writing to the shared
+        // overlay/width alongside the new one.
+        if (progressBarTimer) { progressBarTimer.stop(); progressBarTimer = null; }
+
         let progressBarWrapper = document.getElementById("progressBarWrapper");
+        progressBarWrapper.classList.toggle("timer-overlay", asOverlay);
         progressBarWrapper.style.display = "block";
 
         let progressBarOverlay = document.getElementById("progressBarOverlay");
@@ -1401,13 +1441,15 @@
 
         let progressBar = document.getElementById("progressBar");
         progressBar.style.display = "block";
-        progressBar.style.width = secondsRemaining / 90 * 100 + "%";
+        progressBar.style.width = secondsRemaining / totalSeconds * 100 + "%";
         progressBar.style.borderRadius = "10px";
-        progressBar.style.animationDelay = `-${90 - secondsRemaining}s`;
+        progressBar.style.animationDuration = `${totalSeconds}s`;
+        progressBar.style.animationDelay = `-${totalSeconds - secondsRemaining}s`;
 
         // TODO change to game.timer (need one for each game)
-        const timer = new CountdownTimer(secondsRemaining * 1000, progressBar, progressBarOverlay);
-        timer.start(); // only call once because it call requestAnimationFrame recursively
+        progressBarTimer = new CountdownTimer(secondsRemaining * 1000, progressBar, progressBarOverlay, totalSeconds);
+        progressBarTimer.start(); // only call once because it call requestAnimationFrame recursively
+        return progressBarTimer;
     }
 
     // Single rAF loop drives all highlighted cards from the same clock — perfect sync.
@@ -1427,8 +1469,11 @@
     }
 
     function hideProgressBar(){
+        if (progressBarTimer) { progressBarTimer.stop(); progressBarTimer = null; } // stop the bar's rAF
+
         let progressBarWrapper = document.getElementById("progressBarWrapper");
         progressBarWrapper.style.display = "none";
+        progressBarWrapper.classList.remove("timer-overlay"); // back to in-flow for equation forming
 
         let progressBarOverlay = document.getElementById("progressBarOverlay");
         progressBarOverlay.style.display = "none";
@@ -1687,6 +1732,11 @@
         const options = modal.querySelectorAll('.option');
         const confirmButton = document.getElementById('confirmChoice');
         selectedChoices.clear();
+        // A: reset the button to disabled on every open. Without this it stays enabled from a
+        // previous hand's selection, so reopening the modal (next hand / after a refresh) lets
+        // the user confirm with NOTHING selected -> an empty choices:[] send that the server
+        // silently drops, stranding them unselected and hanging the whole table.
+        confirmButton.disabled = true;
         options.forEach(opt => opt.classList.remove('selected'));
 
         modal.classList.remove('hidden');
@@ -1713,6 +1763,11 @@
         });
 
         confirmButton.onclick = () => {
+            // B: never send an empty selection. If nothing is picked, keep the modal open so
+            // the user gets another chance (the server also ignores empty sends without
+            // locking them out, but this stops the bad send at the source and avoids closing
+            // the modal on them).
+            if (selectedChoices.size === 0) return;
             modal.classList.add('hidden');
             onConfirm(Array.from(selectedChoices));
         };

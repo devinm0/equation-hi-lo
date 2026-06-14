@@ -839,6 +839,18 @@ body.show-home-bg .grid-container {
     color: white;
 }
 
+/* Hi/lo countdown: the SAME bar component as equation forming, floated above the choice
+   modal (which is a full-screen overlay at z-index 10000) so it stays visible while picking. */
+#progressBarWrapper.timer-overlay {
+    position: fixed;
+    top: 0;
+    left: 0;
+    right: 0;
+    width: auto;
+    margin: 8px;
+    z-index: 10001;
+}
+
 /* Win / game-over modal: centre the winner's chipstack-of-stacks in the card. */
 .win-modal #winSubtitle {
     margin: 4px 0 0;

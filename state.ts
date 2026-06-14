@@ -17,6 +17,13 @@ export const INTERVAL = 10000;
 export const MAX_PLAYERS_PER_ROOM = 10;
 export const EQUATION_DURATION =
     (process.env.GAME_MODE === 'debug' ? 20 : 90) * 1000;
+// Hi/Lo selection gets its OWN timer (separate Game field) so a player who never picks a
+// side — closed tab, walked away, lost the modal on a refresh — can't hang the whole table.
+// 60s in production (shorter than equation forming — picking a side is quicker than building
+// an equation); 20s in debug for fast E2E. Because this differs from the 90s equation timer,
+// the client countdown is parameterized by total duration rather than assuming 90.
+export const HI_LO_DURATION =
+    (process.env.GAME_MODE === 'debug' ? 20 : 60) * 1000;
 
 export interface ExtendedWebSocket extends WebSocket {
     isAlive: boolean;
@@ -211,6 +218,8 @@ export interface SecondRoundBettingSkippedMessage {
 
 export interface HiLoSelectionMessage {
     type: "hi-lo-selection";
+    remainingSeconds?: number;
+    totalSeconds?: number;
 }
 
 export interface KickedMessage {

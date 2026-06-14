@@ -35,16 +35,13 @@ import {
 } from './game/deal.js';
 import { applyOps } from './game/equation.js';
 import {
-    revealHiddenCards,
-} from './game/results.js';
-import {
     fold,
     endRoundOrProceedToNextPlayer,
     endHand,
     commenceFirstRoundBetting,
     commenceEquationForming,
     endEquationForming,
-    determineWinners,
+    resolveHiLoSelection,
 } from './game/lifecycle.js';
 import express from "express";
 import http from "http";
@@ -320,10 +317,9 @@ wss.on("connection", (ws: ExtendedWebSocket) => { // LEARN pass in extended
                 // })
 
                 if (nonFoldedAndNotOutPlayers(game).every(player => player.isLockedIn === true)) {
-                    endEquationForming(game); 
-                    clearTimeout(game.endEquationFormingTimeout);
-
-                    // checkIfOneRemainingPlayerOrMaxRaiseReachedOrProceedToSecondRoundBetting(game);
+                    // endEquationForming now clears the equation timer itself (first thing),
+                    // so it's reset before any transition to hi/lo selection arms its own timer.
+                    endEquationForming(game);
                 }
                 break;
             }
@@ -403,11 +399,8 @@ wss.on("connection", (ws: ExtendedWebSocket) => { // LEARN pass in extended
                 });
 
                 if (nonFoldedAndNotOutPlayers(game).every(player => player.choices.length > 0)) {
-                    game.phase = GamePhase.RESULTVIEWING;
-
                     console.log('everyone submitted their hi or lo selections');
-                    revealHiddenCards(game);
-                    determineWinners(game);
+                    resolveHiLoSelection(game); // clears the hi/lo timer, reveals, determines winners
                 }
                 break;
             }

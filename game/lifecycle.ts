@@ -8,7 +8,7 @@
 // is none because every leaf module below is PURE and never imports lifecycle.
 import { WebSocket } from 'ws';
 import {
-    games, players, wss, EQUATION_DURATION,
+    games, players, wss, EQUATION_DURATION, HI_LO_DURATION,
     Game, Player, GamePhase, ExtendedWebSocket,
 } from '../state.js';
 import { printDeck } from '../debug/print.js';
@@ -41,6 +41,7 @@ import {
 } from './betting.js';
 import { applyOps } from './equation.js';
 import {
+    revealHiddenCards,
     findLowestCard,
     findHighestCard,
     determineWinnersInternal,
@@ -163,6 +164,7 @@ export function endHand(game: Game) {
     playersInRoom(game.roomCode).forEach(player => { console.log(player.username, "chipCount:", player.chipCount); });
 
     clearTimeout(game.endEquationFormingTimeout);
+    clearTimeout(game.hiLoSelectionTimeout);
     clearHands(game.roomCode, playersInRoom(game.roomCode));
     game.maxRaiseReached = false;
     game.handNumber += 1;
@@ -215,6 +217,7 @@ export function endHand(game: Game) {
 // periodic stale-room sweep is the backstop if they never acknowledge.
 export function declareGameOver(game: Game, winner: Player | null): void {
     clearTimeout(game.endEquationFormingTimeout);
+    clearTimeout(game.hiLoSelectionTimeout);
     game.phase = GamePhase.GAMEOVER;
 
     // Edge case: a simultaneous bust (e.g. all-swing-no-sweep forfeits the pot) can
@@ -331,6 +334,12 @@ export function commenceEquationForming(game: Game) {
 }
 
 export function endEquationForming(game: Game) {
+    // Always reset the equation timer as the FIRST thing we do when the phase ends, so it's
+    // guaranteed cleared BEFORE any downstream transition (e.g. straight to hi/lo selection,
+    // which then arms its own separate timer). Harmless no-op when we got here via the timer
+    // firing. (Replaces the fragile clear that used to sit in the lock-in handler.)
+    clearTimeout(game.endEquationFormingTimeout);
+
     nonFoldedAndNotOutPlayers(game).forEach(player => {
         try {
             player.equationResult = applyOps(player.hand);
@@ -385,6 +394,14 @@ export function getSecondsLeft(game: Game) {
 export function commenceHiLoSelection(game: Game) {
     game.phase = GamePhase.HILOSELECTION;
 
+    // Arm the hi/lo timer on its OWN field. We clear any prior hi/lo timer first; the
+    // equation-forming timer was already cleared at the top of endEquationForming, so it
+    // cannot fire during this phase. On expiry, endHiLoSelection folds anyone who never
+    // picked a side and resolves the hand — so one unresponsive client can't hang the table.
+    clearTimeout(game.hiLoSelectionTimeout);
+    game.hiLoEndTime = Date.now() + HI_LO_DURATION;
+    game.hiLoSelectionTimeout = setTimeout(() => endHiLoSelection(game), HI_LO_DURATION);
+
     const pendingPlayerIds = nonFoldedAndNotOutPlayers(game).map(p => p.id);
     sendSocketMessageToEveryClientInRoom(game.roomCode, {
         type: "hi-lo-selection-commenced",
@@ -393,7 +410,48 @@ export function commenceHiLoSelection(game: Game) {
 
     sendSocketMessageToNonFoldedAndNotOutPlayers(game, {
         type: "hi-lo-selection",
+        remainingSeconds: getHiLoSecondsLeft(game),
+        totalSeconds: HI_LO_DURATION / 1000,
     });
+}
+
+export function getHiLoSecondsLeft(game: Game) {
+    const msLeft = game.hiLoEndTime - Date.now();
+    return Math.max(0, Math.ceil(msLeft / 1000));
+}
+
+// Fires when the hi/lo timer runs out: fold every still-in player who never chose a side,
+// then resolve the hand with whoever did. Mirrors endEquationForming's auto-fold pattern.
+export function endHiLoSelection(game: Game) {
+    if (game.phase !== GamePhase.HILOSELECTION) return;
+
+    nonFoldedAndNotOutPlayers(game)
+        .filter(player => player.choices.length === 0)
+        .forEach(player => {
+            // Mark folded directly — fold() carries betting/equation-phase orchestration that
+            // doesn't apply here; we only want the "this player is out of the showdown" effect.
+            player.foldedThisTurn = true;
+            player.hand.forEach(card => { card.hidden = true; });
+            sendSocketMessageThatPlayerFolded(player.roomCode, player.id);
+        });
+
+    resolveHiLoSelection(game);
+}
+
+// Shared end-of-hi/lo resolution. Called both when every player has selected (normal path,
+// from the hi-lo-selected handler) and on timeout (after auto-folding the non-selectors).
+export function resolveHiLoSelection(game: Game) {
+    clearTimeout(game.hiLoSelectionTimeout);
+    game.phase = GamePhase.RESULTVIEWING;
+
+    // Everyone timed out without choosing — return contributions, no showdown.
+    if (nonFoldedAndNotOutPlayers(game).length === 0) {
+        returnChipsToAllPlayers(game);
+        return;
+    }
+
+    revealHiddenCards(game);
+    determineWinners(game);
 }
 
 export function returnChipsToAllPlayers(game: Game){

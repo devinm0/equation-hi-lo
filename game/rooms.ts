@@ -6,6 +6,7 @@ import { games, players, Game, Player } from '../state.js';
 // stale-room sweep. Leaf module (imports nothing from lifecycle) so it stays cycle-free.
 export function cleanupGame(game: Game): void {
     clearTimeout(game.endEquationFormingTimeout);
+    clearTimeout(game.hiLoSelectionTimeout);
     playersInRoom(game.roomCode).forEach(player => players.delete(player.id));
     games.delete(game.roomCode);
 }
