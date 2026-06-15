@@ -1,5 +1,5 @@
 import {
-    games, players, emojis, MAX_PLAYERS_PER_ROOM,
+    games, players, emojis, MAX_PLAYERS_PER_ROOM, wss,
     Game, Player, GamePhase,
     ExtendedWebSocket,
     CreateMessage, EnterMessage, JoinMessage, StartMessage, LeaveMessage, RefreshMessage,
@@ -229,6 +229,23 @@ function enterRoom(game: Game, clientMsg: CreateMessage | EnterMessage, ws: Exte
             logRoomsAndPlayers();
         }
     } else { // gamephase is not lobby
+        // Bind this (brand-new) socket to the client's real id so a reconnecting `enter`
+        // finds the existing player record without first needing a `refresh`. Without this,
+        // ws.userId is the fresh server-generated uuid from wss.on("connection") and the
+        // lookup below misses.
+        ws.userId = clientMsg.userId;
+
+        // Latest-connection-wins: kill any other open socket already bound to this id (the
+        // dead pipe we're replacing, or a duplicate). Closes the ~30s window where the old
+        // suspended socket and the new one both receive every broadcast, and means a would-be
+        // hijacker visibly kicks the real player instead of silently co-observing their hand.
+        // NOTE: userId is still an unauthenticated client string — real fix is a session token
+        // issued on join and required on rejoin. Out of scope here.
+        wss.clients.forEach((c) => {
+            const other = c as ExtendedWebSocket;
+            if (other !== ws && other.userId === clientMsg.userId) other.terminate();
+        });
+
         const rejoiningPlayer = players.get(ws.userId); // can use ws if not gamephase bc must be true
 
         // Only existing members of this room can re-enter once the game is in progress.

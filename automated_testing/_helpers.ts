@@ -1,6 +1,6 @@
 // Shared E2E helpers used by every spec, so fixes apply to ALL tests at once
 // (no per-file drift).
-import { expect, Page } from '@playwright/test';
+import { expect, Page, BrowserContext } from '@playwright/test';
 
 // ---------------------------------------------------------------------------
 // Winner verification — reads what's ACTUALLY RENDERED on the results page
@@ -200,6 +200,102 @@ export async function discardIfNeeded(pages: Page[]) {
         await page.locator('.card-highlighted').first().waitFor({ state: 'hidden', timeout: 8000 });
         await pause(page, 1500);
     }
+}
+
+// Like discardIfNeeded, but for EACH player who must discard it also exercises the
+// disconnect-resilience contract. For every such player (works in BOTH the first- and
+// second-deal discard phases) it:
+//   1. drops them BEFORE they discard (force-closes the live socket; setOffline keeps the
+//      backoff retries failing),
+//   2. has them attempt the discard while offline — the click fires but socket.send() throws,
+//      so it never reaches the server (and the local highlight isn't even cleared),
+//   3. reconnects them, and asserts the SERVER re-pushes the still-pending discard requirement:
+//      a fresh `deal` for the player's own hand carrying multiplicationCardDealt. Had the
+//      offline discard registered, needToDiscard would be false and no such deal would replay.
+//   4. only THEN discards for real, which (socket now open) actually reaches the server.
+// The game can't leave the deal phase until this real discard lands, so a dropped discarder
+// blocks progress exactly as in production.
+export async function discardWithReconnect(pages: Page[], contexts: BrowserContext[]) {
+    const needsDiscard = await Promise.all(pages.map(async (page) => {
+        try {
+            await page.locator('.card-highlighted').first().waitFor({ state: 'visible', timeout: 3000 });
+            return true;
+        } catch {
+            return false;
+        }
+    }));
+
+    for (let i = 0; i < pages.length; i++) {
+        if (!needsDiscard[i]) continue;
+        const page = pages[i]!;
+        const ctx = contexts[i]!;
+
+        // This player's persistent id — used to match the `deal` the server replays to THEM.
+        const myId = await page.evaluate(() => localStorage.getItem('userId'));
+
+        // Record replayed discard-requirement deals for this player's OWN hand. page.on
+        // ('websocket') also fires for the reconnect socket, so this catches the post-reconnect
+        // replay. The original deal arrived on the page's first socket, before this listener was
+        // attached, so the count legitimately starts at 0 and any increment is the replay.
+        const ownDiscardDeals: any[] = [];
+        const onWs = (ws: any) => ws.on('framereceived', (f: any) => {
+            try {
+                const m = JSON.parse(f.payload as string);
+                if (m.type === 'deal' && m.id === myId && m.multiplicationCardDealt === true) {
+                    ownDiscardDeals.push(m);
+                }
+            } catch {}
+        });
+        page.on('websocket', onWs);
+
+        await setDanceBanner(page, '⚡ DISCARD PLAYER DISCONNECTED — trying to discard offline', 'red');
+
+        // 1. Drop before discarding.
+        await ctx.setOffline(true);
+        await page.evaluate(() => (window as any).__simulateSocketDrop());
+
+        // 2. Attempt the discard while offline (never reaches the server).
+        await page.locator('.card-highlighted').first().click({ force: true }).catch(() => {});
+        await pause(page, 1500);
+
+        // 3. Reconnect.
+        await ctx.setOffline(false);
+        await page.evaluate(() => document.dispatchEvent(new Event('visibilitychange')));
+
+        // 4. Proof the offline discard never registered: the server replays the requirement.
+        await expect
+            .poll(() => ownDiscardDeals.length, {
+                message: 'server should re-push the discard requirement on reconnect (the offline discard never registered)',
+                timeout: 20000,
+            })
+            .toBeGreaterThan(0);
+        // And the cards highlight again, so the player must discard a second time.
+        await expect(page.locator('.card-highlighted').first()).toBeVisible({ timeout: 10000 });
+
+        await setDanceBanner(page, '✅ RECONNECTED — discarding for real', 'green');
+
+        // 5. Discard for real — socket is open now, so this one reaches the server.
+        await page.locator('.card-highlighted').first().click({ force: true });
+        await page.locator('.card-highlighted').first().waitFor({ state: 'hidden', timeout: 8000 });
+        await pause(page, 1500);
+
+        await page.evaluate(() => document.getElementById('__danceBanner')?.remove());
+        page.off('websocket', onWs);
+    }
+}
+
+async function setDanceBanner(page: Page, text: string, bg: string) {
+    await page.evaluate(({ text, bg }) => {
+        let b = document.getElementById('__danceBanner');
+        if (!b) {
+            b = document.createElement('div');
+            b.id = '__danceBanner';
+            b.style.cssText = 'position:fixed;top:0;left:0;right:0;z-index:99999;color:#fff;font:bold 15px sans-serif;text-align:center;padding:8px';
+            document.body.appendChild(b);
+        }
+        b.textContent = text;
+        b.style.background = bg;
+    }, { text, bg });
 }
 
 // Arrange each non-folded player's cards into a VALID, FINITE equation and lock it in.
