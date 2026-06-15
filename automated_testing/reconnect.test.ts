@@ -1,6 +1,11 @@
 import { test, expect, Page, devices } from '@playwright/test';
 import { attachBrowserLogging } from './_logging.js';
-import { discardWithReconnect } from './_helpers.js';
+import {
+    discardWithReconnect,
+    equationFormingWithReconnect,
+    hiLoSelectionWithReconnect,
+    acknowledgeResults,
+} from './_helpers.js';
 
 // 3 players on distinct iPhone viewports (mirrors betting.test.ts).
 const PLAYER_DEVICES = [
@@ -201,6 +206,28 @@ test.describe('Reconnect after background/foreground', () => {
         await finishBettingRound(pages);
         await pages[0]!.waitForTimeout(2000); // let the second deal land + any discard highlight render
         await discardWithReconnect(pages, contexts);
+
+        // --- EQUATION FORMING: drop one random player mid-forming, have them scramble their cards
+        // offline, reconnect, and assert the cards resort to the server-stored order; then everyone
+        // forms a real equation and locks in. ---
+        await pages[0]!.waitForTimeout(2000); // let equation forming commence + hands render
+        await equationFormingWithReconnect(pages, contexts);
+
+        // --- SECOND betting round (remaining players just call), advancing to HI-LO selection. ---
+        await finishBettingRound(pages);
+        await pages[0]!.waitForTimeout(2000);
+
+        // --- HI-LO SELECTION: drop one random player while the modal is up, have them try to select
+        // offline, reconnect, and assert the modal reappears; then they select for real. ---
+        await hiLoSelectionWithReconnect(pages, contexts);
+
+        // --- The hand plays through to the end normally: every player reaches the results screen
+        // (winner verified by acknowledgeResults), proving the reconnects didn't desync the hand. ---
+        const acked = await acknowledgeResults(pages);
+        expect(acked, 'all 3 players should reach the results screen after the reconnects').toBe(pages.length);
+
+        // And the next hand begins — the game keeps running past the reconnect-laden hand.
+        for (const p of pages) await expect(p.locator('#potContainer')).toBeVisible({ timeout: 10000 });
 
         await Promise.all(contexts.map(ctx => ctx.close()));
     });

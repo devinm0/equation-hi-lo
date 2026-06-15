@@ -298,7 +298,7 @@ async function setDanceBanner(page: Page, text: string, bg: string) {
     }, { text, bg });
 }
 
-// Arrange each non-folded player's cards into a VALID, FINITE equation and lock it in.
+// Arrange ONE player's cards into a VALID, FINITE equation and lock it in.
 //
 // Crucially this searches number orderings with the real client evaluator (window.applyOps)
 // and only locks in an arrangement whose result is finite — so a player is never left with a
@@ -306,70 +306,234 @@ async function setDanceBanner(page: Page, text: string, bg: string) {
 // guard blocks it) and would instead be auto-folded when the 20s equation timer expires,
 // causing spurious folds. If no finite arrangement exists (e.g. an all-zeros hand), the
 // player legitimately can't form an equation and is left to fold.
-export async function doEquationForming(pages: Page[]) {
-    await Promise.all(pages.map(async (page) => {
-        const lockButton = page.locator('#confirmEquationFormed');
-        try {
-            await lockButton.waitFor({ state: 'visible', timeout: 30000 });
-        } catch {
-            return; // folded/out player — no lock button
+export async function formValidEquationAndLockIn(page: Page) {
+    const lockButton = page.locator('#confirmEquationFormed');
+    try {
+        await lockButton.waitFor({ state: 'visible', timeout: 30000 });
+    } catch {
+        return; // folded/out player — no lock button
+    }
+
+    const arranged = await page.evaluate(() => {
+        const myHand = document.querySelector('.my-hand')!;
+        const allCards = Array.from(myHand.querySelectorAll('.card')) as HTMLElement[];
+
+        const numCards = allCards.filter(c => c.classList.contains('number-card'));
+        const rootCards = allCards.filter(c => c.classList.contains('operator-card') && c.dataset.value === '√');
+        const binaryOpCards = allCards.filter(c => c.classList.contains('operator-card') && c.dataset.value !== '√');
+
+        if (numCards.length !== binaryOpCards.length + 1) {
+            console.log('[eq] cannot form equation: numCards', numCards.length, 'binaryOps', binaryOpCards.length);
+            return false;
         }
 
-        const arranged = await page.evaluate(() => {
-            const myHand = document.querySelector('.my-hand')!;
-            const allCards = Array.from(myHand.querySelectorAll('.card')) as HTMLElement[];
-
-            const numCards = allCards.filter(c => c.classList.contains('number-card'));
-            const rootCards = allCards.filter(c => c.classList.contains('operator-card') && c.dataset.value === '√');
-            const binaryOpCards = allCards.filter(c => c.classList.contains('operator-card') && c.dataset.value !== '√');
-
-            if (numCards.length !== binaryOpCards.length + 1) {
-                console.log('[eq] cannot form equation: numCards', numCards.length, 'binaryOps', binaryOpCards.length);
-                return false;
+        // Interleave a number ordering into a valid equation: [√?, num, op, √?, num, op, ..., num]
+        const build = (nums: HTMLElement[]) => {
+            const ordered: HTMLElement[] = [];
+            for (let i = 0; i < nums.length; i++) {
+                if (i < rootCards.length) ordered.push(rootCards[i]!);
+                ordered.push(nums[i]!);
+                if (i < binaryOpCards.length) ordered.push(binaryOpCards[i]!);
             }
+            return ordered;
+        };
 
-            // Interleave a number ordering into a valid equation: [√?, num, op, √?, num, op, ..., num]
-            const build = (nums: HTMLElement[]) => {
-                const ordered: HTMLElement[] = [];
-                for (let i = 0; i < nums.length; i++) {
-                    if (i < rootCards.length) ordered.push(rootCards[i]!);
-                    ordered.push(nums[i]!);
-                    if (i < binaryOpCards.length) ordered.push(binaryOpCards[i]!);
-                }
-                return ordered;
-            };
-
-            const permute = (arr: HTMLElement[]): HTMLElement[][] => {
-                if (arr.length <= 1) return [arr];
-                const out: HTMLElement[][] = [];
-                for (let i = 0; i < arr.length; i++) {
-                    const rest = [...arr.slice(0, i), ...arr.slice(i + 1)];
-                    for (const p of permute(rest)) out.push([arr[i]!, ...p]);
-                }
-                return out;
-            };
-
-            // Try number orderings until the REAL client evaluator returns a finite result.
-            let chosen: HTMLElement[] | null = null;
-            for (const perm of permute(numCards)) {
-                const ordered = build(perm);
-                let result: number;
-                try { result = (window as any).applyOps(ordered); } catch { continue; }
-                if (Number.isFinite(result)) { chosen = ordered; break; }
+        const permute = (arr: HTMLElement[]): HTMLElement[][] => {
+            if (arr.length <= 1) return [arr];
+            const out: HTMLElement[][] = [];
+            for (let i = 0; i < arr.length; i++) {
+                const rest = [...arr.slice(0, i), ...arr.slice(i + 1)];
+                for (const p of permute(rest)) out.push([arr[i]!, ...p]);
             }
+            return out;
+        };
 
-            if (!chosen) {
-                console.log('[eq] no finite arrangement exists for this hand (likely all zeros)');
-                return false;
-            }
+        // Try number orderings until the REAL client evaluator returns a finite result.
+        let chosen: HTMLElement[] | null = null;
+        for (const perm of permute(numCards)) {
+            const ordered = build(perm);
+            let result: number;
+            try { result = (window as any).applyOps(ordered); } catch { continue; }
+            if (Number.isFinite(result)) { chosen = ordered; break; }
+        }
 
-            chosen.forEach(card => myHand.appendChild(card));
-            return true;
-        });
+        if (!chosen) {
+            console.log('[eq] no finite arrangement exists for this hand (likely all zeros)');
+            return false;
+        }
 
-        if (!arranged) return; // no finite arrangement (e.g. all zeros) — player will fold on timeout
-        await pause(page, 1500);
-        await lockButton.click();
-        await expect(lockButton).toBeHidden({ timeout: 8000 });
+        chosen.forEach(card => myHand.appendChild(card));
+        return true;
+    });
+
+    if (!arranged) return; // no finite arrangement (e.g. all zeros) — player will fold on timeout
+    await pause(page, 1500);
+    await lockButton.click();
+    await expect(lockButton).toBeHidden({ timeout: 8000 });
+}
+
+// Arrange each non-folded player's cards into a valid equation and lock it in (parallel).
+export async function doEquationForming(pages: Page[]) {
+    await Promise.all(pages.map(formValidEquationAndLockIn));
+}
+
+// Read the rendered card order of THIS page's own hand (the data-value sequence top-to-bottom).
+// Used to prove the server re-imposes its stored order on reconnect.
+async function readMyHandOrder(page: Page): Promise<string[]> {
+    return await page.evaluate(() => {
+        const myHand = document.querySelector('.my-hand');
+        if (!myHand) return [];
+        return Array.from(myHand.querySelectorAll('.card')).map(c => (c as HTMLElement).dataset.value ?? '');
+    });
+}
+
+// Reorder THIS page's own hand in the DOM to a sequence guaranteed to differ from the current
+// one, and return the new value sequence. Used to simulate a player dragging their cards around
+// while offline. (An equation-forming hand always mixes number and operator cards, so a reverse —
+// or a rotation if the reverse is a palindrome — is always a real change.)
+async function scrambleMyHand(page: Page): Promise<string[]> {
+    return await page.evaluate(() => {
+        const myHand = document.querySelector('.my-hand')!;
+        const cards = Array.from(myHand.querySelectorAll('.card')) as HTMLElement[];
+        const original = cards.map(c => c.dataset.value);
+        let target = cards.slice().reverse();
+        const sameAsOriginal = (arr: HTMLElement[]) => arr.every((c, i) => c.dataset.value === original[i]);
+        if (sameAsOriginal(target) && cards.length > 1) target = [...cards.slice(1), cards[0]!];
+        target.forEach(c => myHand.appendChild(c));
+        return target.map(c => c.dataset.value ?? '');
+    });
+}
+
+// EQUATION-FORMING disconnect contract. Picks one random forming player, drops them, has them
+// scramble their cards offline (the reorder is discarded on the dead socket so the server keeps
+// its stored order), then reconnects. On reconnect the server re-pushes that player's hand in ITS
+// stored order, so the client re-renders and the offline scramble is undone — the cards resort to
+// the server order. The reconnected player THEN arranges a real equation and everyone locks in,
+// proving the rest of the hand plays normally.
+export async function equationFormingWithReconnect(pages: Page[], contexts: BrowserContext[]) {
+    // Players actually forming an equation have the lock button (folded/out players don't).
+    const forming: number[] = [];
+    await Promise.all(pages.map(async (p, i) => {
+        try {
+            await p.locator('#confirmEquationFormed').waitFor({ state: 'visible', timeout: 30000 });
+            forming.push(i);
+        } catch { /* folded/out */ }
     }));
+    forming.sort((a, b) => a - b);
+    expect(forming.length, 'at least 2 players should be forming equations').toBeGreaterThanOrEqual(2);
+
+    const dropIdx = forming[Math.floor(Math.random() * forming.length)]!;
+    const page = pages[dropIdx]!;
+    const ctx = contexts[dropIdx]!;
+    console.log(`[reconnect-test] EQUATION-FORMING drop = player${dropIdx}`);
+
+    // The order the SERVER currently holds for this player (the deal order — they haven't reordered).
+    const serverOrder = await readMyHandOrder(page);
+    expect(serverOrder.length, 'dropped player should have a visible hand').toBeGreaterThan(0);
+
+    await setDanceBanner(page, '⚡ EQUATION-FORMING PLAYER DISCONNECTED — scrambling cards offline', 'red');
+
+    // 1. Drop.
+    await ctx.setOffline(true);
+    await page.evaluate(() => (window as any).__simulateSocketDrop());
+
+    // 2. Move cards around while offline. The reorder never reaches the server (its socket send is
+    //    discarded on a closed connection), so the server keeps its stored order.
+    const scrambledOrder = await scrambleMyHand(page);
+    expect(scrambledOrder, 'offline scramble should differ from the server order').not.toEqual(serverOrder);
+    expect(await readMyHandOrder(page), 'local DOM should show the scrambled order while offline').toEqual(scrambledOrder);
+
+    await pause(page, 2500); // stay offline a beat
+
+    // 3. Reconnect: restore network + fire the foreground signal the client reconnects on.
+    await ctx.setOffline(false);
+    await page.evaluate(() => document.dispatchEvent(new Event('visibilitychange')));
+
+    // 4. The key assertion: on reconnect the server re-pushes the hand in ITS order, so the client
+    //    re-renders and the offline scramble is discarded — the cards resort to the server order.
+    await expect
+        .poll(() => readMyHandOrder(page), {
+            message: 'on reconnect the hand should resort to the server-stored order (offline scramble discarded)',
+            timeout: 15000,
+        })
+        .toEqual(serverOrder);
+
+    await setDanceBanner(page, '✅ RECONNECTED — cards restored to server order; forming for real', 'green');
+
+    // 5. Now everyone (including the reconnected player) arranges a real equation and locks in,
+    //    proving the rest of the hand plays normally after the reconnect.
+    await Promise.all(forming.map(i => formValidEquationAndLockIn(pages[i]!)));
+
+    await page.evaluate(() => document.getElementById('__danceBanner')?.remove());
+}
+
+// Select Low and confirm on the hi/lo modal for one page.
+async function selectLowAndConfirm(page: Page) {
+    await page.locator('.option[data-choice="low"]').click({ force: true });
+    await page.locator('#confirmChoice').click({ force: true });
+    await expect(page.locator('#choiceModal')).toBeHidden({ timeout: 8000 });
+    await pause(page, 1000);
+}
+
+// HI-LO-SELECTION disconnect contract. Every non-folded player should get the choice modal.
+// All but one select normally; the last one is dropped, tries to select while offline (the choice
+// send is discarded on the dead socket, so the server records nothing for them even though the
+// modal closes locally), then reconnects. Because the server still has no selection for them, on
+// reconnect it re-pushes the hi-lo-selection prompt and the modal comes back up — the player then
+// selects for real and the hand resolves.
+export async function hiLoSelectionWithReconnect(pages: Page[], contexts: BrowserContext[]) {
+    const selecting: number[] = [];
+    await Promise.all(pages.map(async (p, i) => {
+        try {
+            await p.locator('#choiceModal').waitFor({ state: 'visible', timeout: 20000 });
+            selecting.push(i);
+        } catch { /* folded/out */ }
+    }));
+    selecting.sort((a, b) => a - b);
+    expect(selecting.length, 'at least 2 players should reach hi/lo selection').toBeGreaterThanOrEqual(2);
+
+    const dropIdx = selecting[Math.floor(Math.random() * selecting.length)]!;
+    const page = pages[dropIdx]!;
+    const ctx = contexts[dropIdx]!;
+    console.log(`[reconnect-test] HI-LO drop = player${dropIdx}`);
+
+    // Everyone EXCEPT the dropped player selects normally first, so only the dropped player is
+    // left pending while they go through the disconnect dance.
+    await Promise.all(selecting.filter(i => i !== dropIdx).map(i => selectLowAndConfirm(pages[i]!)));
+
+    // Sanity: the dropped player's modal is still up before we drop them.
+    await expect(page.locator('#choiceModal')).toBeVisible();
+
+    await setDanceBanner(page, '⚡ HI-LO PLAYER DISCONNECTED — selecting offline', 'red');
+
+    // 1. Drop.
+    await ctx.setOffline(true);
+    await page.evaluate(() => (window as any).__simulateSocketDrop());
+
+    // 2. Try to select while offline. The modal closes locally on confirm, but the choice send is
+    //    discarded on the dead socket, so the server never records a selection for this player.
+    await page.locator('.option[data-choice="low"]').click({ force: true }).catch(() => {});
+    await page.locator('#confirmChoice').click({ force: true }).catch(() => {});
+    await expect(page.locator('#choiceModal'), 'offline confirm dismisses the modal locally').toBeHidden({ timeout: 5000 });
+
+    await pause(page, 2000); // stay offline a beat
+
+    // 3. Reconnect.
+    await ctx.setOffline(false);
+    await page.evaluate(() => document.dispatchEvent(new Event('visibilitychange')));
+
+    // 4. The key assertion: since the server has no selection for this player, on reconnect it
+    //    re-pushes the hi-lo-selection prompt and the modal reappears — no manual reopen.
+    await expect(
+        page.locator('#choiceModal'),
+        'on reconnect the still-unselected player should get the hi/lo modal again',
+    ).toBeVisible({ timeout: 15000 });
+
+    await setDanceBanner(page, '✅ RECONNECTED — modal restored; selecting for real', 'green');
+
+    // 5. The reconnected player selects for real, which (socket open now) reaches the server so the
+    //    hand can resolve.
+    await selectLowAndConfirm(page);
+
+    await page.evaluate(() => document.getElementById('__danceBanner')?.remove());
 }

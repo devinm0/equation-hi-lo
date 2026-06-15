@@ -573,8 +573,11 @@ export function determineWinners(game: Game) { // this is determineWinners and s
             choices: player.choices, // TODO adjust this for swing betting, need to send choices
             lowResult: player.choices.includes('low') ? player.lowEquationResult : null, // TODO how to send right result for each
             highResult: player.choices.includes('high') ? player.highEquationResult : null, // TODO how to send right result for each
-            lowDifference: player.choices.includes('low') && player.lowEquationResult ? Math.abs(player.lowEquationResult - 1) : null, // adjust for swing
-            highDifference: player.choices.includes('high') && player.highEquationResult ? Math.abs(player.highEquationResult - 20) : null, // adjust for swing
+            // NOTE: check `!= null` (not truthiness) — a valid equation result of 0 is falsy, and a
+            // truthiness check here would send difference: null for it, which then crashes the
+            // client's results render (formatNumber(null)). A 0 low result is a strong low hand (diff 1).
+            lowDifference: player.choices.includes('low') && player.lowEquationResult != null ? Math.abs(player.lowEquationResult - 1) : null, // adjust for swing
+            highDifference: player.choices.includes('high') && player.highEquationResult != null ? Math.abs(player.highEquationResult - 20) : null, // adjust for swing
             isHiWinner: swingBetterWon ? player.id === hiWinnerIncludingSwingBetters?.id : player.id === hiWinner?.id, // what if swing one the hi but not the low
             isLoWinner: swingBetterWon ? player.id === loWinnerIncludingSwingBetters?.id : player.id === loWinner?.id,
             loWinnerLowCard: swingBetterWon ? loWinnerIncludingSwingBettersLowCard?.value : loWinnerLowCard?.value,

@@ -2031,6 +2031,12 @@
     }
 
     function formatNumber(num, decimals = 2) {
+        // Guard null/undefined/NaN: without this, num.toFixed() below throws and aborts the
+        // whole results-render loop (displayHandResults), leaving later players — including the
+        // winner — with no crown / hi-lo icon / highlight. Render nothing for a missing value.
+        if (typeof num !== "number" || !Number.isFinite(num)) {
+            return "";
+        }
         if (Number.isInteger(num)) {
             return num.toString();
         }
