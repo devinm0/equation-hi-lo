@@ -11,14 +11,19 @@ import { sendSocketMessageToEveryClientInRoom } from '../broadcast.js';
 import { notifyPlayerOfNewlyDealtCards } from '../../game/notify.js';
 import { playersInRoom, nonFoldedAndNotOutPlayers, cleanupGame } from '../../game/rooms.js';
 import { advanceToNextPlayersTurn } from '../../game/betting.js';
-import { initializeHand, getSecondsLeft, getHiLoSecondsLeft, declareGameOver } from '../../game/lifecycle.js';
+import { initializeHand, getSecondsLeft, getHiLoSecondsLeft, declareGameOver, settlePlayerDeparture } from '../../game/lifecycle.js';
 import { HI_LO_DURATION } from '../../state.js';
 
 export function handleCreate(ws: ExtendedWebSocket, clientMsg: CreateMessage) {
     let game = new Game();
     games.set(game.roomCode, game);
     console.log(games);
-    game.currentTurnPlayerId = game.hostId = ws.userId; // no, right? TODO remove concept of hostId?? or add host promotion
+    // Use the client's persistent id, NOT ws.userId. On a page reload the socket is fresh and
+    // ws.userId is still the throwaway connection uuid (handleRefresh deliberately does NOT bind
+    // it — see that function). enterRoom binds ws.userId = clientMsg.userId and creates the
+    // player record under clientMsg.userId, so the host/turn must reference that same id or the
+    // new room gets a phantom host with no player record (breaks start + turn resolution).
+    game.currentTurnPlayerId = game.hostId = clientMsg.userId; // TODO remove concept of hostId?? or add host promotion
 
     enterRoom(game, clientMsg, ws);
     console.log(game);
@@ -38,8 +43,15 @@ export function handleEnter(ws: ExtendedWebSocket, clientMsg: EnterMessage) { //
 }
 
 export function handleRefresh(ws: ExtendedWebSocket, clientMsg: RefreshMessage) {
-    ws.userId = clientMsg.userId; // should actually be the same
-    // what about set ws.userId equal to it
+    // Do NOT bind ws.userId to the client's real id here. A page reload opens a fresh socket
+    // and the client `refresh`es to ask "am I still in a game?" — but it has NOT yet chosen to
+    // rejoin. If we bound the id now, this socket would match the room-broadcast filter
+    // (players.get(ws.userId)?.roomCode) while the player record still points at the old room,
+    // so the old game's live messages (deals, folds, equation-forming) would stream into a page
+    // that's only showing the home screen / rejoin prompt and render as garbage behind it.
+    // Leaving ws.userId as the throwaway connection uuid (which has no player record) keeps this
+    // socket inert until the user commits: `enter` (Rejoin) and `create` (New Game) both bind
+    // ws.userId themselves in enterRoom and replay the correct state from scratch.
     const player = players.get(clientMsg.userId);
     if (!player) return;
 
@@ -190,6 +202,24 @@ function enterRoom(game: Game, clientMsg: CreateMessage | EnterMessage, ws: Exte
             if (playersInRoom(game.roomCode).length >= MAX_PLAYERS_PER_ROOM) {
                 ws.send(JSON.stringify({ type: "room-join-reject", reason: "full" }));
                 return;
+            }
+
+            // The client is committing to THIS room. If they were still seated in a DIFFERENT
+            // room (they hit "New Game" / entered a new code without leaving), settle that old
+            // room around their departure so its remaining players keep playing. This MUST run
+            // before we overwrite their single global player record just below.
+            const previous = players.get(clientMsg.userId);
+            if (previous && previous.roomCode !== game.roomCode) {
+                const oldGame = games.get(previous.roomCode);
+                if (oldGame) {
+                    settlePlayerDeparture(previous, oldGame);
+                    // If the leaver was the last one in the old room, tear it down so no orphan
+                    // game/timer lingers (cleanupGame also deletes their old record — fine, it's
+                    // recreated for the new room immediately below).
+                    if (playersInRoom(oldGame.roomCode).every(p => p.id === clientMsg.userId)) {
+                        cleanupGame(oldGame);
+                    }
+                }
             }
 
             console.log("creating userId but no username yet"); // is this message still right?

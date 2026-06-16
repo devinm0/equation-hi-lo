@@ -273,7 +273,7 @@ wss.on("connection", (ws: ExtendedWebSocket) => { // LEARN pass in extended
                     const client = c as ExtendedWebSocket; // TODO better to have Map then I guess?
                     let handToSend = getHandToSendFromHand(player.hand, client.userId === clientMsg.userId);
                     
-                    if (/*client !== ws && */client.readyState === WebSocket.OPEN && player.roomCode === player.roomCode) { //some kind of clientsInRoom function
+                    if (client.readyState === WebSocket.OPEN && players.get(client.userId)?.roomCode === player.roomCode) {
                         client.send(JSON.stringify({
                             type: "player-reordered-hand",
                             id: clientMsg.userId,
@@ -304,7 +304,7 @@ wss.on("connection", (ws: ExtendedWebSocket) => { // LEARN pass in extended
                 //     const client = c as ExtendedWebSocket; // TODO better to have Map then I guess?
                 //     let handToSend = getHandToSendFromHand(player.hand, client.userId === clientMsg.userId);
                     
-                //     if (client.userId !== player.id && client.readyState === WebSocket.OPEN && player.roomCode === player.roomCode) { //some kind of clientsInRoom function
+                //     if (client.userId !== player.id && client.readyState === WebSocket.OPEN && players.get(client.userId)?.roomCode === player.roomCode) {
                 //         client.send(JSON.stringify({
                 //             type: "player-locked-in",
                 //             id: clientMsg.userId,

@@ -151,6 +151,92 @@ export function endRoundOrProceedToNextPlayer(game: Game, justPlayedPlayer: Play
     }
 }
 
+// A player is abandoning this room mid-session — they hit "New Game" (or entered a different
+// room code) WITHOUT leaving first. Settle the room around their absence so the REMAINING
+// players keep playing uninterrupted: fold them out of the current hand and push forward any
+// phase that was blocked waiting on them. The caller then repoints this player's single global
+// record at the new room (one Player record per userId), so the old room's dependence on them
+// must be FULLY resolved here, while their record is still present — the turn-advance helpers
+// look players up by id and findNextPlayerTurn requires the start id to still be in the room.
+export function settlePlayerDeparture(player: Player, game: Game): void {
+    // Hand host off to another present seat if the leaver held it (host only gates pre-start
+    // actions, but keep it pointing at a real player).
+    if (game.hostId === player.id) {
+        const heir = playersInRoom(game.roomCode).find(p => p.id !== player.id && !p.out);
+        if (heir) game.hostId = heir.id;
+    }
+
+    // Nothing in-hand to unwind before the game starts or after it is over.
+    if (game.phase === GamePhase.LOBBY || game.phase === GamePhase.GAMEOVER) return;
+
+    const wasTheirTurn = game.currentTurnPlayerId === player.id;
+
+    // Out of THIS hand and every future hand of the (old) room.
+    player.out = true;
+
+    switch (game.phase) {
+        case GamePhase.FIRSTDEAL:
+        case GamePhase.SECONDDEAL: {
+            // Deal phases block on outstanding discards. Drop the leaver's pending discard; if
+            // that cleared the last one, advance exactly as a real discard completion would.
+            player.foldedThisTurn = true;
+            player.needToDiscard = false;
+            if (playersThatNeedToDiscard(game.roomCode).length === 0) {
+                if (game.phase === GamePhase.SECONDDEAL) commenceEquationForming(game);
+                else commenceFirstRoundBetting(game);
+            }
+            break;
+        }
+        case GamePhase.FIRSTBETTING:
+        case GamePhase.SECONDBETTING: {
+            if (wasTheirTurn) {
+                // Folds them, settles a one-player-left pot, and advances the turn off them.
+                fold(player, true, game);
+            } else {
+                // A waiting (non-acting) player left: fold them without disturbing the actor
+                // whose turn it is, but still collapse the hand if they were 2nd-to-last in.
+                player.foldedThisTurn = true;
+                player.hand.forEach(card => { card.hidden = true; });
+                sendSocketMessageThatPlayerFolded(game.roomCode, player.id);
+                const remaining = nonFoldedAndNotOutPlayers(game);
+                if (remaining.length === 1) distributePotToOnlyRemainingPlayer(game, remaining[0]!);
+                else if (remaining.length === 0) returnChipsToAllPlayers(game);
+            }
+            break;
+        }
+        case GamePhase.EQUATIONFORMING: {
+            player.foldedThisTurn = true;
+            player.hand.forEach(card => { card.hidden = true; });
+            sendSocketMessageThatPlayerFolded(game.roomCode, player.id);
+            // The phase ends once everyone still in has locked in; the leaver no longer counts.
+            const stillIn = nonFoldedAndNotOutPlayers(game);
+            if (stillIn.length > 0 && stillIn.every(p => p.isLockedIn)) endEquationForming(game);
+            break;
+        }
+        case GamePhase.HILOSELECTION: {
+            player.foldedThisTurn = true;
+            player.hand.forEach(card => { card.hidden = true; });
+            sendSocketMessageThatPlayerFolded(game.roomCode, player.id);
+            // The phase ends once everyone still in has chosen a side; the leaver no longer counts.
+            const stillIn = nonFoldedAndNotOutPlayers(game);
+            if (stillIn.length > 0 && stillIn.every(p => p.choices.length > 0)) resolveHiLoSelection(game);
+            break;
+        }
+        case GamePhase.RESULTVIEWING: {
+            // Hand already resolved — just drop the leaver from the showdown view.
+            player.foldedThisTurn = true;
+            break;
+        }
+    }
+
+    // If the leaver was the acting player and no transition above already moved the turn off
+    // them, hand it to the next present player now — so a later round never starts its wrap
+    // search from a now-removed id (findNextPlayerTurn throws if the start id isn't present).
+    if (game.currentTurnPlayerId === player.id && nonFoldedAndNotOutPlayers(game).length > 0) {
+        game.currentTurnPlayerId = findNextPlayerTurn(game);
+    }
+}
+
 function clearHands(roomCode: string, playersInThisRoom: Player[]) {
     playersInThisRoom.forEach(player => { // change players in room to be just the values. then modify logic everywhere
         player.hand = [];

@@ -555,8 +555,9 @@
             document.getElementById("roomCodeInfo").textContent = "Rejoin game in progress:";
             document.getElementById("roomCodeInput").value = msg.roomCode;
             document.getElementById("enterRoomButton").textContent = "Rejoin Game";
-            document.getElementById("createButton").style.display = "none";
-            document.getElementById("createRoomInfo").style.display = "none";
+            // Keep the "New Game" option visible: a player whose old room is in a bad state (or
+            // who just wants a fresh game) can create one instead of rejoining. The server settles
+            // their seat in the suggested room so the players still there keep playing.
 
             break;
         }
