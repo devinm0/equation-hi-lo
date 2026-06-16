@@ -210,8 +210,6 @@
         </script>
 
         <footer id="homeFooter">
-            <a href="#" id="openRulesLink">How to Play</a>
-            <span aria-hidden="true">·</span>
             <a href="/privacy.html">Privacy Policy</a>
         </footer>
     </div>
@@ -483,6 +481,10 @@
     let currentRoomCode = null;
     let reconnectDelay = 1000;       // exponential backoff, reset to 1s on a successful open
     let reconnectTimer = null;       // pending setTimeout id, so we never stack reconnect attempts
+    // Room code the server suggested we REJOIN (set on "suggest-room"). While the input still
+    // holds it the action is a rejoin; once the user types a different code it becomes a fresh
+    // join, so the button label tracks that live. null = no pending rejoin suggestion.
+    let suggestedRejoinCode = null;
 
     const rects = document.querySelectorAll('.rect');
     rects.forEach(rect => {
@@ -555,6 +557,7 @@
             document.getElementById("roomCodeInfo").textContent = "Rejoin game in progress:";
             document.getElementById("roomCodeInput").value = msg.roomCode;
             document.getElementById("enterRoomButton").textContent = "Rejoin Game";
+            suggestedRejoinCode = msg.roomCode;
             // Keep the "New Game" option visible: a player whose old room is in a bad state (or
             // who just wants a fresh game) can create one instead of rejoining. The server settles
             // their seat in the suggested room so the players still there keep playing.
@@ -1148,6 +1151,16 @@
         }
     });
 
+    // Once the server has suggested a rejoin, keep the button label honest as the user edits the
+    // code: matching the suggested room = "Rejoin Game", anything else = "Join Game". No-op until
+    // a rejoin has actually been suggested (suggestedRejoinCode stays null otherwise).
+    document.getElementById("roomCodeInput").addEventListener("input", (e) => {
+        if (!suggestedRejoinCode) return;
+        const code = e.target.value.trim().toUpperCase();
+        document.getElementById("enterRoomButton").textContent =
+            code === suggestedRejoinCode ? "Rejoin Game" : "Join Game";
+    });
+
     document.getElementById("enterRoomButton").addEventListener("click", () => { // TODO rename to enter room button?
         // if (myName === null || myName === undefined) { // server prevents username being set twice
             document.getElementById("grid-container").classList.add("hidden");
@@ -1203,7 +1216,6 @@
     const openRules = () => rulesModal.classList.remove("hidden");
     const closeRules = () => rulesModal.classList.add("hidden");
     document.getElementById("helpButton").addEventListener("click", openRules);
-    document.getElementById("openRulesLink").addEventListener("click", (e) => { e.preventDefault(); openRules(); });
     document.getElementById("closeRules").addEventListener("click", closeRules);
     rulesModal.addEventListener("click", (e) => { if (e.target === rulesModal) closeRules(); });
     document.addEventListener("keydown", (e) => { if (e.key === "Escape") closeRules(); });

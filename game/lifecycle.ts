@@ -21,7 +21,9 @@ import {
 import {
     sendSocketMessageThatPlayerFolded,
     notifyAllPlayersOfNewlyDealtCards,
+    getHandToSendFromHand,
 } from './notify.js';
+import { startingChipCount } from '../public/classes.js';
 import {
     playersInRoom,
     activePlayersInRoom,
@@ -235,6 +237,21 @@ export function settlePlayerDeparture(player: Player, game: Game): void {
     if (game.currentTurnPlayerId === player.id && nonFoldedAndNotOutPlayers(game).length > 0) {
         game.currentTurnPlayerId = findNextPlayerTurn(game);
     }
+
+    // Tell the remaining players the leaver is OUT — not merely folded for this hand. They left
+    // the room, so render them eliminated/greyed (same as a bust) rather than as a temporary
+    // fold that would reappear next hand. Sent last so "out" is the final visual regardless of
+    // any fold/flow messages emitted above; the host case (which previously only reassigned the
+    // host) now also gets marked out here. Hidden cards are masked since the hand isn't revealed.
+    // The leaver's own (creating) socket isn't bound to their id yet, so it won't receive this.
+    sendSocketMessageToEveryClientInRoom(game.roomCode, {
+        type: "kicked",
+        userId: player.id,
+        color: player.color!,
+        username: player.username!,
+        hand: getHandToSendFromHand(player.hand, false),
+        chipCount: player.chipCount,
+    });
 }
 
 function clearHands(roomCode: string, playersInThisRoom: Player[]) {
@@ -315,12 +332,16 @@ export function declareGameOver(game: Game, winner: Player | null): void {
 
     if (!champion) return; // empty room — nothing to announce
 
+    // Report NET winnings — what the champion actually gained — not their gross stack. Everyone
+    // buys in with the same starting stack, so the winner's profit is their final chips minus
+    // that buy-in. Clamped at 0 for the simultaneous-bust fallback where the "winner" is just
+    // whoever held the most (possibly below the buy-in).
     sendSocketMessageToEveryClientInRoom(game.roomCode, {
         type: "game-won",
         winnerId: champion.id,
         username: champion.username!,
         color: champion.color!,
-        chipCount: champion.chipCount,
+        chipCount: Math.max(0, champion.chipCount - startingChipCount),
     });
 }
 

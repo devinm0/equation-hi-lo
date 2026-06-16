@@ -1,7 +1,7 @@
 import { mintUniqueCode } from "./utilities.js";
 import { GamePhase, NumberCard, OperatorCard, Suit } from "../enums.js"
 
-const startingChipCount = 25;
+export const startingChipCount = 25;
 
 export class Game {
   // TODO private players: Player[]

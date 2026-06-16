@@ -76,6 +76,10 @@ test.describe('Create New Game while still seated in another room', () => {
         // the OLD room. page.on('websocket') only fires for sockets opened AFTER it's attached, so
         // we wire it before goto() to catch each page's first (and only) socket.
         const foldedIds = new Map<Page, string[]>();
+        // Per-page capture of every `kicked` id too: leaving for a new game marks you OUT (not
+        // just folded), broadcast to the old room as a `kicked` (note: that message keys the id
+        // under `userId`, unlike `player-folded` which uses `id`).
+        const kickedIds = new Map<Page, string[]>();
 
         const contexts: BrowserContext[] = [];
         const pages: Page[] = [];
@@ -85,10 +89,13 @@ test.describe('Create New Game while still seated in another room', () => {
             attachBrowserLogging(page, `player${i}`);
             const folds: string[] = [];
             foldedIds.set(page, folds);
+            const kicks: string[] = [];
+            kickedIds.set(page, kicks);
             page.on('websocket', ws => ws.on('framereceived', f => {
                 try {
                     const m = JSON.parse(f.payload as string);
                     if (m.type === 'player-folded') folds.push(m.id);
+                    if (m.type === 'kicked') kicks.push(m.userId);
                 } catch {}
             }));
             contexts.push(ctx);
@@ -144,6 +151,16 @@ test.describe('Create New Game while still seated in another room', () => {
         await expect
             .poll(() => foldedIds.get(host)!.includes(p2Id!), {
                 message: 'old room should broadcast player-folded for the leaver',
+                timeout: 15000,
+            })
+            .toBe(true);
+
+        // --- And proof the leaver is OUT, not merely folded: the old room broadcasts a `kicked`
+        //     for p2's id so the remaining players render them eliminated (the fix that makes
+        //     leaving for a new game mark you out instead of just folding). ---
+        await expect
+            .poll(() => kickedIds.get(host)!.includes(p2Id!), {
+                message: 'old room should broadcast kicked (out) for the leaver',
                 timeout: 15000,
             })
             .toBe(true);
