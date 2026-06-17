@@ -90,6 +90,10 @@ Run both test suites and verify manually:
 
 Do not commit if either fails.
 
+### Running E2E tests during development
+
+By default, run E2E tests **headed** (`npm run test:e2e:headed`, or `npx playwright test <name> --headed`) so the browsers are visible while iterating. The exception is the **full suite run before a commit** — run that **headless** (`npm run test:e2e`).
+
 ## Deployment Target: AWS EC2 t3.micro (Free Tier)
 
 ### Stack

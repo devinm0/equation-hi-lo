@@ -360,15 +360,16 @@ wss.on("connection", (ws: ExtendedWebSocket) => { // LEARN pass in extended
                 const choices: unknown[] = clientMsg.choices;
                 if (!Array.isArray(choices) || choices.length === 0) return;
                 if (!choices.every(c => c === 'low' || c === 'high')) return;
-                player.choices = choices as string[];
+                const selected = choices as string[];
+                const wantsLow = selected.includes("low");
+                const wantsHigh = selected.includes("high");
 
-                if (player.choices.includes("low") && !player.choices.includes("high")) {
-                    player.lowHand = player.hand;
-                    player.lowEquationResult = player.equationResult;
-                } else if (player.choices.includes("high") && !player.choices.includes("low")) {
-                    player.highHand = player.hand;
-                    player.highEquationResult = player.equationResult;
-                } else if (player.choices.includes("low") && player.choices.includes("high")) {
+                if (wantsLow && wantsHigh) {
+                    // Swing: fully validate the second equation BEFORE mutating any player state.
+                    // A rejected swing submit must leave the player completely unselected (so the
+                    // client can retry and the resolution check doesn't count them) — previously
+                    // player.choices was set first, so a rejected order stranded them with choices
+                    // but null results, shown as "(no selection)" with empty equations.
                     if (!clientMsg.order) {
                         console.log("swing betting requires a second card order");
                         return;
@@ -377,32 +378,48 @@ wss.on("connection", (ws: ExtendedWebSocket) => { // LEARN pass in extended
                     const swingOrder: unknown[] = clientMsg.order;
                     if (!Array.isArray(swingOrder) || swingOrder.length !== player.hand.length) return;
                     const swingSeen = new Set<number>();
+                    // The client sends card indices as strings (card.dataset.id), same as the
+                    // hand-order message — coerce with Number rather than rejecting on typeof.
                     for (const i of swingOrder) {
-                        if (typeof i !== 'number' || i < 0 || i >= player.hand.length || swingSeen.has(i)) return;
-                        swingSeen.add(i);
+                        const idx = Number(i);
+                        if (!Number.isInteger(idx) || idx < 0 || idx >= player.hand.length || swingSeen.has(idx)) return;
+                        swingSeen.add(idx);
                     }
-                    player.otherHand = swingOrder.map(i => player.hand[Number(i)]!);
+                    const otherHand = swingOrder.map(i => player.hand[Number(i)]!);
 
+                    let otherEquationResult: number;
                     try {
-                        player.otherEquationResult = applyOps(player.otherHand);
+                        otherEquationResult = applyOps(otherHand);
                     } catch {
                         return;
                     }
-                    if (!isFinite(player.otherEquationResult!)) return;
+                    if (!isFinite(otherEquationResult)) return;
+
+                    // All validation passed — commit the swing state.
+                    player.choices = selected;
+                    player.otherHand = otherHand;
+                    player.otherEquationResult = otherEquationResult;
 
                     // this shouldn't be true. What if their results are 21, and 23. They might want to choose 21 as high equation, and 23 as low (even though they could have just kept 21 for both)
-                    if (player.otherEquationResult < player.equationResult) {
-                        player.lowEquationResult = player.otherEquationResult;
+                    if (otherEquationResult < player.equationResult) {
+                        player.lowEquationResult = otherEquationResult;
                         player.highEquationResult = player.equationResult;
-                        player.lowHand = player.otherHand;
+                        player.lowHand = otherHand;
                         player.highHand = player.hand;
                     } else {
                         player.lowEquationResult = player.equationResult;
-                        player.highEquationResult = player.otherEquationResult;
-                        player.highHand = player.otherHand;
+                        player.highEquationResult = otherEquationResult;
+                        player.highHand = otherHand;
                         player.lowHand = player.hand;
                     }
-
+                } else if (wantsLow) {
+                    player.choices = selected;
+                    player.lowHand = player.hand;
+                    player.lowEquationResult = player.equationResult;
+                } else { // wantsHigh
+                    player.choices = selected;
+                    player.highHand = player.hand;
+                    player.highEquationResult = player.equationResult;
                 }
                 sendSocketMessageToEveryClientInRoom(game.roomCode, {
                     type: "player-selected-hilo",

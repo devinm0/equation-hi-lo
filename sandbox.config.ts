@@ -9,8 +9,11 @@ export default defineConfig({
     ...devices['iPhone 15 Pro'],
   },
   webServer: {
-    command: 'GAME_MODE=debug npm start',
+    // Tee server stdout to a log file so the hi-lo-selected handler logs (choices/order)
+    // can be grepped after a manual repro. reuseExistingServer:false forces this fresh
+    // command (with the tee) to run instead of reusing a server lingering on 8080.
+    command: 'mkdir -p logs && GAME_MODE=debug npm start 2>&1 | tee logs/sandbox-server.log',
     port: 8080,
-    reuseExistingServer: true,
+    reuseExistingServer: false,
   },
 });
