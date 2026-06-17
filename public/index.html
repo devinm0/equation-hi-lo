@@ -1733,7 +1733,13 @@
         progressBar.style.display = "block";
         progressBar.style.width = secondsRemaining / totalSeconds * 100 + "%";
         progressBar.style.borderRadius = "10px";
-        progressBar.style.animationDuration = `${totalSeconds}s`;
+        // Restart the CSS color animation from the start. Just changing
+        // animation-duration/-delay won't reseek an already-running animation, so
+        // the bar would keep the previous phase's color (e.g. yellow carried over
+        // from equation forming into hi/lo). Detach + force reflow to restart it.
+        progressBar.style.animation = "none";
+        void progressBar.offsetWidth; // force reflow
+        progressBar.style.animation = `progressBar ${totalSeconds}s ease`;
         progressBar.style.animationDelay = `-${totalSeconds - secondsRemaining}s`;
 
         // TODO change to game.timer (need one for each game)
