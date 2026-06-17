@@ -45,6 +45,7 @@ import {
 } from './game/lifecycle.js';
 import express from "express";
 import http from "http";
+import path from "path";
 import { WebSocketServer } from 'ws';
 import { v4 as uuidv4 } from "uuid";
 import dotenv from 'dotenv';
@@ -68,6 +69,16 @@ const wss = new WebSocketServer({ server });
 setWss(wss);
 
 app.use(express.static("public"));
+
+// Shareable room URLs: equationhi.lol/GB45 serves the SPA so the client can auto-enter
+// that room (see the `init` handler in index.html). Matches ONLY a 4-char room-code path
+// so real static assets (style.css, enums.js, favicon.png, preview.png) still hit
+// express.static above. Express 5 uses path-to-regexp v8, which dropped bare "*" routes,
+// so we match with a RegExp instead. public/ sits at the project root in both dev
+// (tsx server.ts) and prod (node dist/server.js), so resolve from cwd like express.static.
+app.get(/^\/[A-Za-z0-9]{4}$/, (req, res) => {
+    res.sendFile(path.resolve("public", "index.html"));
+});
 
 
 server.on("upgrade", (req, socket, head) => {

@@ -422,6 +422,42 @@ body.show-home-bg .grid-container {
     transform: translate(calc(-50% - 60px + 50vw), calc(50% + 30px - 50vh));
 }
 
+#shareLinkContainer {
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    gap: 8px;
+    margin: 6px 0 4px;
+    color: rgba(255, 255, 255, 0.85);
+    font-size: 0.95em;
+}
+
+#shareLinkText {
+    font-family: ui-monospace, SFMono-Regular, Menlo, monospace;
+    word-break: break-all;
+}
+
+#copyLinkButton {
+    display: inline-flex;
+    align-items: center;
+    justify-content: center;
+    padding: 6px;
+    border: none;
+    border-radius: 8px;
+    background: rgba(255, 255, 255, 0.12);
+    color: white;
+    cursor: pointer;
+    transition: background .15s ease;
+}
+
+#copyLinkButton:hover {
+    background: rgba(255, 255, 255, 0.25);
+}
+
+#copyLinkButton.copied {
+    color: #6ee7a0;
+}
+
 #nameInput {
     padding: 10px 16px;
     font-size: 16px;

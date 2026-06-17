@@ -14,6 +14,27 @@ async function pause(page: Page, ms = 1500) {
     if (!process.env.CI) await page.waitForTimeout(ms);
 }
 
+// Click the lobby "copy invite link" button on a host's page and return the copied URL. We wait
+// for the button to swap to its checkmark first: that only happens after clipboard.writeText
+// resolves, so it doubles as a guard against reading a stale clipboard value. Requires the
+// context to hold clipboard-read/-write permissions (granted below).
+async function copyInviteUrl(hostPage: Page): Promise<string> {
+    await expect(hostPage.locator('#shareLinkContainer')).toBeVisible();
+    await hostPage.click('#copyLinkButton');
+    await expect(hostPage.locator('#copiedIcon')).toBeVisible();
+    const url = await hostPage.evaluate(() => navigator.clipboard.readText());
+    expect(url, 'copied invite link should end in a 4-char room code').toMatch(/\/[A-Z0-9]{4}$/);
+    return url;
+}
+
+// Once inside a room the home screen's scrolling card-grid background must be gone — both the
+// grid element (display:none via .hidden) and the body class that animates it. Regression guard
+// for players who arrive via a room link (that path skips the create/enter button handlers).
+async function expectNoHomeBackground(page: Page) {
+    await expect(page.locator('#grid-container')).toBeHidden();
+    expect(await page.evaluate(() => document.body.classList.contains('show-home-bg'))).toBe(false);
+}
+
 // Drive the current betting round to completion: whoever holds the controls just calls (all-in
 // if calling needs the full stack), until no one has controls within the window — i.e. the round
 // closed and the game advanced to the next phase. (Mirrors reconnect.test.ts.)
@@ -84,7 +105,7 @@ test.describe('Create New Game while still seated in another room', () => {
         const contexts: BrowserContext[] = [];
         const pages: Page[] = [];
         for (let i = 0; i < 3; i++) {
-            const ctx = await browser.newContext(PLAYER_DEVICES[i]!);
+            const ctx = await browser.newContext({ ...PLAYER_DEVICES[i]!, permissions: ['clipboard-read', 'clipboard-write'] });
             const page = await ctx.newPage();
             attachBrowserLogging(page, `player${i}`);
             const folds: string[] = [];
@@ -109,15 +130,20 @@ test.describe('Create New Game while still seated in another room', () => {
         await host.click('#createButton');
         await expect(host.locator('#roomCodeContainer')).toContainText(/[A-Z0-9]{4}/);
         const oldRoomCode = (await host.locator('#roomCodeContainer').innerText()).split(' ')[1]!;
+        // Grab the shareable invite link from the host's copy button and confirm it carries the
+        // room code. p1/p2 will join by navigating to it rather than typing the code.
+        const oldRoomUrl = await copyInviteUrl(host);
+        expect(oldRoomUrl).toContain(`/${oldRoomCode}`);
+        await expectNoHomeBackground(host);
         await host.fill('#nameInput', 'Host');
         await host.click('#submitNameButton');
         await expect(host.locator('#lobbyPlayerListContainer')).toContainText('Host');
 
         for (const [i, p] of [p1, p2].entries()) {
-            await p.fill('#roomCodeInput', oldRoomCode);
-            await p.click('#enterRoomButton');
+            await p.goto(oldRoomUrl);            // join via the shared invite link, not the code field
             await p.fill('#nameInput', `Player${i + 1}`);
             await p.click('#submitNameButton');
+            await expectNoHomeBackground(p);     // URL-join must still tear down the home grid background
         }
         await expect(host.locator('#startButton')).toBeEnabled({ timeout: 5000 });
         await host.click('#startButton');
@@ -145,6 +171,11 @@ test.describe('Create New Game while still seated in another room', () => {
         await expect(p2.locator('#roomCodeContainer')).toContainText(/Room [A-Z0-9]{4}/, { timeout: 10000 });
         const newRoomCode = (await p2.locator('#roomCodeContainer').innerText()).split(' ')[1]!;
         expect(newRoomCode, 'the new room must be a different room from the old one').not.toBe(oldRoomCode);
+        // The second host copies its own invite link; D will join the new room by navigating to it.
+        const newRoomUrl = await copyInviteUrl(p2);
+        expect(newRoomUrl).toContain(`/${newRoomCode}`);
+        expect(newRoomUrl).not.toBe(oldRoomUrl);
+        await expectNoHomeBackground(p2);
 
         // --- Proof p2 was folded OUT of the old room: the old room broadcast a player-folded for
         //     p2's id (seen on the host's socket). ---
@@ -167,14 +198,13 @@ test.describe('Create New Game while still seated in another room', () => {
 
         // --- NEW GAME: a brand-new player joins p2's room AS SOON AS it's created (the old game is
         //     still mid-hand, paused on a betting turn — both rooms are now alive at once). ---
-        const dCtx = await browser.newContext(PLAYER_DEVICES[3]!);
+        const dCtx = await browser.newContext({ ...PLAYER_DEVICES[3]!, permissions: ['clipboard-read', 'clipboard-write'] });
         const dPage = await dCtx.newPage();
         attachBrowserLogging(dPage, 'playerD');
-        await dPage.goto('/');
-        await dPage.fill('#roomCodeInput', newRoomCode);
-        await dPage.click('#enterRoomButton');
+        await dPage.goto(newRoomUrl);            // join the new room via its shared invite link
         await dPage.fill('#nameInput', 'D');
         await dPage.click('#submitNameButton');
+        await expectNoHomeBackground(dPage);     // URL-join must still tear down the home grid background
 
         // The new host sees D land in the lobby (proves the new room's host/membership is sane),
         // then starts the new game.

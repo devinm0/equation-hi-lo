@@ -4,6 +4,23 @@
     <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no">
     <meta charset="UTF-8" />
     <title>Equation Hi Lo</title>
+    <meta name="description" content="Real-time multiplayer math card game. Form equations, bet chips, win the pot.">
+    <!-- Open Graph / iMessage / Slack / Discord rich link preview. These are read by
+         link-preview bots that DON'T run JS, so they must live in the static HTML. The
+         same generic card is served for every room URL. og:image must be an absolute
+         https URL; 1200x630 (1.91:1) renders as the large iMessage card. -->
+    <meta property="og:type" content="website">
+    <meta property="og:site_name" content="Equation Hi Lo">
+    <meta property="og:title" content="Equation Hi Lo">
+    <meta property="og:description" content="Join my game — form equations, bet chips, win the pot.">
+    <meta property="og:url" content="https://equationhi.lol">
+    <meta property="og:image" content="https://equationhi.lol/preview.png">
+    <meta property="og:image:width" content="1200">
+    <meta property="og:image:height" content="630">
+    <meta name="twitter:card" content="summary_large_image">
+    <meta name="twitter:title" content="Equation Hi Lo">
+    <meta name="twitter:description" content="Join my game — form equations, bet chips, win the pot.">
+    <meta name="twitter:image" content="https://equationhi.lol/preview.png">
     <link rel="icon" type="image/png" href="favicon.png" >
     <link rel="shortcut icon" href="favicon.png">
     <link rel="stylesheet" href="style.css">
@@ -397,6 +414,18 @@
     <div id="uiContainer" class="hidden"> <!--TODO rename to lobbyContainer-->
         <div id="lobbyTitleContainer">Equation <span style="white-space: nowrap;">Hi Lo</span></div>
         <div id="roomCodeContainer">Room Code:</div>
+        <div id="shareLinkContainer" class="hidden">
+            <span id="shareLinkText"></span>
+            <button id="copyLinkButton" type="button" title="Copy invite link" aria-label="Copy invite link">
+                <svg id="copyIcon" viewBox="0 0 24 24" width="18" height="18" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true">
+                    <rect x="9" y="9" width="13" height="13" rx="2" ry="2"></rect>
+                    <path d="M5 15H4a2 2 0 0 1-2-2V4a2 2 0 0 1 2-2h9a2 2 0 0 1 2 2v1"></path>
+                </svg>
+                <svg id="copiedIcon" class="hidden" viewBox="0 0 24 24" width="18" height="18" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true">
+                    <path d="M20 6 9 17l-5-5"></path>
+                </svg>
+            </button>
+        </div>
         <div id="nameContainer">
             <input type="text" id="nameInput" placeholder="Enter your name" pattern="^[a-zA-Z0-9]{1,12}$" required title="Username consists of 1-12 letters or numbers"/>
             <p id="nameError" style="color: rgb(255, 128, 128);"></p>
@@ -444,6 +473,12 @@
 
     const protocol = window.location.protocol === "https:" ? "wss:" : "ws:";
     const WS_URL = `${protocol}//${window.location.host}`;
+
+    // Shareable room URL: someone opened equationhi.lol/GB45. Pull the code out of the path
+    // (uppercased to match server room codes) so the `init` handler can auto-enter that room
+    // instead of showing the home screen. null when the path isn't a 4-char code (e.g. "/").
+    const pathRoomCode = window.location.pathname.replace(/^\//, "").toUpperCase();
+    const pendingRoomCode = /^[A-Z0-9]{4}$/.test(pathRoomCode) ? pathRoomCode : null;
     // A WebSocket is single-use: once a drop closes it (OS suspends a backgrounded tab and
     // tears down the TCP connection) the object is dead and can't be reopened. `socket` is a
     // `let` so connect() can swap in a fresh one. See connect()/onSocketClose below.
@@ -458,6 +493,12 @@
     const USER_NAME_KEY = 'userName';
     const USER_COLOR_KEY = 'userColor';
     const TIMESTAMP_KEY = 'timestamp';
+    // sessionStorage (per-tab, cleared when the tab closes): marks that THIS tab has already
+    // entered a room. Lets the `init` handler tell a fresh shared-link click (auto-enter) apart
+    // from a reload of a tab that's already in a game (go through the rejoin / New Game prompt,
+    // so the "leave via New Game" escape hatch stays reachable). Set on room-entered, cleared on
+    // a deliberate leave.
+    const SESSION_ROOM_KEY = 'inGameRoom';
 
     let myId = localStorage.getItem(USER_ID_KEY);
     let myColor = localStorage.getItem(USER_COLOR_KEY);
@@ -510,12 +551,30 @@
                 myId = msg.id;
                 localStorage.setItem(USER_ID_KEY, myId);
                 localStorage.setItem(TIMESTAMP_KEY, now);
-            } else { // items exist in localStorage = we exist = page refreshed
-                // send rejoin socket message
+            }
 
+            // Arrived via a shareable room link (equationhi.lol/GB45) on a tab that hasn't yet
+            // entered a room: enter that room directly, mirroring the "Enter Room" button. A
+            // FRESH link click means "take me to THIS room". But a RELOAD of a tab already in a
+            // game also has the code in its URL — there we must NOT silently re-enter, or the
+            // refresh -> "Rejoin game in progress / New Game" prompt (the only way to leave by
+            // starting a new game) becomes unreachable. SESSION_ROOM_KEY distinguishes the two:
+            // it's set once this tab enters a room, so a reload falls through to `refresh` below.
+            // enterRoom handles every fresh-click case: brand-new player -> name screen, already
+            // seated here -> rejoin, seated elsewhere -> settles the old room first. We always
+            // have a myId by this point (set just above on first visit, or from localStorage).
+            if (pendingRoomCode && !sessionStorage.getItem(SESSION_ROOM_KEY)) {
+                socket.send(JSON.stringify({
+                    type: "enter",
+                    userId: myId,
+                    color: myColor,
+                    username: myName,
+                    roomCode: pendingRoomCode,
+                }));
+            } else if (timestamp && now - timestamp <= EXPIRATION_TIME) { // items exist in localStorage = we exist = page refreshed
+                // send rejoin socket message
                 // if client never joined a game, just show regular page again.
                 // if they did, show option to join that room again
-                // should I implement uri for room code?
                 const data = {
                     type: "refresh", // TODO need to change... refreshing page is no longer a join, take me to home page
                     userId: myId,
@@ -541,6 +600,7 @@
             // document.getElementById("leaveButton").style.display = "block";
             document.getElementById("lobbyPlayerListContainer").remove();
             document.getElementById("lobbyTitleContainer").remove();
+            document.getElementById("shareLinkContainer").classList.add("hidden");
             document.getElementById("uiContainer").classList.add("hidden");
             showNotification('The game has started!');
 
@@ -992,6 +1052,12 @@
             console.log(text);
             error.textContent = text;
 
+            // If this rejection came from a room-link auto-enter (e.g. a dead/expired code in
+            // the path), clear the code from the URL so the home screen stands on its own and a
+            // reload doesn't immediately retry the same doomed enter. No-op for manual enters,
+            // which never put a code in the address bar.
+            history.replaceState({}, "", "/");
+
             break;
         }
         
@@ -999,6 +1065,20 @@
             // Remember where we are so onSocketOpen can auto re-enter after a transport drop.
             inRoom = true;
             currentRoomCode = msg.roomCode;
+            // Mark this tab as having entered a room, so a later reload (URL still holds the code)
+            // goes through the rejoin / New Game prompt instead of silently re-entering.
+            sessionStorage.setItem(SESSION_ROOM_KEY, msg.roomCode);
+
+            // Reflect the room in the address bar (without reloading) so the host can copy a
+            // shareable link. Covers create, manual enter, and arrival via a room link alike.
+            history.replaceState({}, "", "/" + msg.roomCode);
+
+            // Tear down the home screen's scrolling card-grid background. The manual "Enter Room"
+            // / "New Game" buttons do this in their click handlers, but arriving via a room link
+            // (or a reconnect) skips those — so do it here, the common success point for every
+            // entry path. Idempotent for the button flows that already cleared it.
+            document.getElementById("grid-container").classList.add("hidden");
+            document.body.classList.remove("show-home-bg");
 
             if (msg.color) {
                 myColor = msg.color;
@@ -1017,6 +1097,14 @@
             const roomCodeContainer = document.getElementById("roomCodeContainer");
             // TODO shouldn't trust client msg here.
             roomCodeContainer.textContent = "Room " + msg.roomCode;
+
+            // Shareable invite link with a copy button. Show the host-friendly host/CODE form,
+            // but copy the full origin (with protocol) so it pastes as a real tappable link in
+            // iMessage. Lobby-only: hidden while a game is in progress, removed on game-started.
+            const shareLinkContainer = document.getElementById("shareLinkContainer");
+            shareLinkContainer.dataset.url = location.origin + "/" + msg.roomCode;
+            document.getElementById("shareLinkText").textContent = location.host + "/" + msg.roomCode;
+            if (!msg.inProgress) shareLinkContainer.classList.remove("hidden");
 
             if (msg.hostId === myId) { 
                 const startButton = document.getElementById("startButton")
@@ -1211,6 +1299,43 @@
         socket.send(JSON.stringify({ type: "start", userId: myId }));
     });
 
+    // Copy the invite link to the clipboard, briefly swapping the copy icon for a checkmark.
+    // navigator.clipboard needs a secure context (https or localhost); fall back to a hidden
+    // textarea + execCommand for plain-http or older browsers so the button always works.
+    document.getElementById("copyLinkButton").addEventListener("click", async () => {
+        const button = document.getElementById("copyLinkButton");
+        const url = document.getElementById("shareLinkContainer").dataset.url || "";
+        if (!url) return;
+
+        let ok = false;
+        try {
+            if (navigator.clipboard && window.isSecureContext) {
+                await navigator.clipboard.writeText(url);
+                ok = true;
+            } else {
+                const ta = document.createElement("textarea");
+                ta.value = url;
+                ta.style.position = "fixed";
+                ta.style.opacity = "0";
+                document.body.appendChild(ta);
+                ta.select();
+                ok = document.execCommand("copy");
+                document.body.removeChild(ta);
+            }
+        } catch (e) { ok = false; }
+
+        if (!ok) { showNotification("Couldn't copy — long-press the link to copy it.", "red"); return; }
+
+        document.getElementById("copyIcon").classList.add("hidden");
+        document.getElementById("copiedIcon").classList.remove("hidden");
+        button.classList.add("copied");
+        setTimeout(() => {
+            document.getElementById("copyIcon").classList.remove("hidden");
+            document.getElementById("copiedIcon").classList.add("hidden");
+            button.classList.remove("copied");
+        }, 1500);
+    });
+
     // How to Play modal
     const rulesModal = document.getElementById("rulesModal");
     const openRules = () => rulesModal.classList.remove("hidden");
@@ -1257,7 +1382,9 @@
       localStorage.removeItem(USER_ID_KEY);
       localStorage.removeItem(USER_COLOR_KEY);
       localStorage.removeItem(TIMESTAMP_KEY);
+      sessionStorage.removeItem(SESSION_ROOM_KEY);
       alert("You have left the game.");
+      history.replaceState({}, "", "/"); // drop the room code so the reload lands on home
       location.reload(); // Reload to reset game state
     });
 
@@ -1267,7 +1394,9 @@
     // player when it next creates/joins a game (and is never suggested the dead room).
     document.getElementById('confirmGameOver').addEventListener('click', () => {
         inRoom = false; currentRoomCode = null; // room is being torn down — don't auto-reconnect
+        sessionStorage.removeItem(SESSION_ROOM_KEY);
         if (myId) socket.send(JSON.stringify({ type: "acknowledge-game-over", userId: myId }));
+        history.replaceState({}, "", "/"); // room is torn down — drop the code so reload lands on home
         setTimeout(() => location.reload(), 200); // let the ack flush before the socket closes
     });
 
