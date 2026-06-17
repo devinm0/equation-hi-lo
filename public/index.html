@@ -486,6 +486,8 @@
     const handDivs = new Map(); // map of divs, one for each player
     const handDivsList = []; // ordered list of divs, so that we can draw the user's hand last
     const hiloSelectingSet = new Set(); // player IDs that haven't yet submitted hi/lo selection
+    const discardingSet = new Set(); // player IDs still choosing which card to discard (× dealt)
+    let currentBettingPlayerId = null; // player whose turn it is to bet
     const lobbyPlayerDivs = {}; // list of nametags basically, for game lobby. one per player
 
     const EXPIRATION_TIME = 1000 * 60 * 60 * 24;  // 1 day in milliseconds
@@ -602,7 +604,6 @@
             document.getElementById("lobbyTitleContainer").remove();
             document.getElementById("shareLinkContainer").classList.add("hidden");
             document.getElementById("uiContainer").classList.add("hidden");
-            showNotification('The game has started!');
 
             break;
         } 
@@ -627,11 +628,12 @@
 
         case "begin-hand": {
             hiloSelectingSet.clear();
+            discardingSet.clear();
+            currentBettingPlayerId = null;
             showPlayingLayout();
-            showNotification("Beginning hand " + (msg.handNumber + 1));
- 
+
             break;
-       } 
+       }
         
         case "deal": {
             sounds.play("deal");
@@ -692,56 +694,46 @@
         case "player-discarded": {
             sounds.play("discard");
 
-            if (msg.id === myId) {
-                showNotification("You discarded your " + msg.value + " card.");
-            } else {
-                showNotification(msg.username + " discarded their " + msg.value + " card.");
-            }
-              
+            // The discarded card fades up and out of the player's hand for every viewer.
+            animateDiscard(msg.id, msg.value);
+            discardingSet.delete(msg.id);
+            refreshPlayerStatus(msg.id);
+
             break;
-        } 
+        }
         
         case "hi-lo-selection-commenced": {
             hiloSelectingSet.clear();
             msg.pendingPlayerIds.forEach(id => {
                 hiloSelectingSet.add(id);
-                const span = document.getElementById("hilo-selecting-" + id);
-                if (span) span.classList.remove("hidden");
+                refreshPlayerStatus(id);
             });
             break;
         }
 
         case "player-selected-hilo": {
             hiloSelectingSet.delete(msg.id);
-            const span = document.getElementById("hilo-selecting-" + msg.id);
-            if (span) span.classList.add("hidden");
+            refreshPlayerStatus(msg.id);
             break;
         }
 
         case "first-round-betting-commenced": {
-            showNotification("First round betting has commenced.");  
-
             break;
-        } 
-        
+        }
+
         case "second-round-betting-commenced": {
-            sortable.option("disabled", true); // need this in case a player was disconnected during end equation forming, and rejoins. 
+            sortable.option("disabled", true); // need this in case a player was disconnected during end equation forming, and rejoins.
                                                 // TODO actually need it everywhere... because what if they rejoin during a different phase (maybe they automatically folded and so game
                                                 // can proceed beyond second round betting without their input)
-            showNotification("Second round betting has commenced.");
             break;
-        } 
-        
+        }
+
         case "second-round-betting-skipped": {
-            showNotification("1 or more players are all in. Second round betting skipped.");
-  
             break;
-        } 
+        }
         
         case "player-folded": {
             sounds.play("fold");
-
-            showNotification(msg.username + " folded.");
 
             // const hand = handDivs.get(myId).querySelectorAll('.card');
             // console.log(hand);
@@ -766,8 +758,6 @@
 
         case "kicked": {
             sounds.play("eliminated");
-
-            showNotification(msg.username + " is out.");
 
             drawHand(msg.userId, msg.color, msg.username, msg.hand, false, false, true);
             updateChipStack(msg.chipCount, document.getElementById("chipStacksContainer-" + msg.userId), null, true);
@@ -807,12 +797,15 @@
             console.log("socket message bet-placed");
             sounds.play(msg.betType);
 
-            showNotification(msg.username + " bet " + msg.betAmount);
-            updateChipStack(msg.chipCount, document.getElementById("chipStacksContainer-" + msg.id));
-            updatePot(msg.pot);
+            const betterStack = document.getElementById("chipStacksContainer-" + msg.id);
+            // Capture where the chips are BEFORE shrinking the stack, then fly chips from there
+            // to the pot. The pot total updates as the chips land.
+            const fromRect = betterStack ? betterStack.getBoundingClientRect() : null;
+            updateChipStack(msg.chipCount, betterStack);
+            animateChipsToPot(fromRect, msg.betAmount, () => updatePot(msg.pot));
 
             break;
-        } 
+        }
         
         case "next-turn": {
             console.log("socket message next-turn", msg.currentTurnPlayerId, myId);
@@ -824,8 +817,6 @@
                 setupBettingControls(msg.toCall, msg.maxBet, msg.playerChipCount);
                 console.log("calling hideProgressBar from here");
                 hideProgressBar();
-            } else {
-                notifyThatAnotherPlayerIsBetting(msg.username);
             }
 
             highlightCurrentBettingPlayerAndDehighlightOthers(msg.currentTurnPlayerId);
@@ -835,20 +826,10 @@
         } 
         
         case "end-betting-round": {
-            // remove highlights from who is betting
-            document.querySelectorAll(".handLabel").forEach(el => {
-                el.style.backgroundColor = "";
-            });
+            clearBettingIndicator(); // drop the gold highlight and "(betting...)" tag
 
-            if (msg.round === GamePhase.FIRSTBETTING){
-                showNotification('First betting round complete. Dealing last open card');
-            } else if (msg.round === GamePhase.SECONDBETTING) {
-                showNotification('Second betting round complete.');
-            }
-            // TODO test that a folded player gets the right message once equation forming starts
-  
             break;
-        } 
+        }
         
         case "commence-equation-forming": {
             sounds.play("start");
@@ -862,7 +843,7 @@
             }
 
             if (msg.cannotFormEquation) {
-                showNotification('Other players are forming their equations.');
+                // spectating this phase — nothing to drag
             } else {
                 const confirmEquationFormedButton = document.getElementById("confirmEquationFormed");
                 confirmEquationFormedButton.classList.remove("hidden");
@@ -902,8 +883,8 @@
                     confirmEquationFormedButton.classList.add('hidden');
                 };
 
-                showNotification(`${msg.remainingSeconds ?? 90} seconds! Drag cards to get close to 1 or 20.`, "limegreen", 3000);
-                sortable.option("disabled", false)
+                sortable.option("disabled", false);
+                showDragHint();
             }
 
             break;
@@ -928,8 +909,6 @@
         } 
         
         case "hi-lo-selection": {
-            showNotification("Select Hi, Lo, or Swing betting.");
-
             hiLoTotalSeconds = msg.totalSeconds ?? 60;
             const hiLoRemaining = msg.remainingSeconds ?? hiLoTotalSeconds;
             // Same countdown bar as equation forming, floated above the choice modal. It runs
@@ -1021,24 +1000,23 @@
             // hi/lo timeout — relabel their tag from "(selecting...)" so the results view
             // explains why they're folded. Kept short so it doesn't wrap onto multiple lines.
             hiloSelectingSet.forEach(id => {
-                const span = document.getElementById("hilo-selecting-" + id);
-                if (span) {
-                    span.textContent = " (no selection)";
-                    span.classList.remove("hidden");
-                }
+                const span = document.getElementById("player-status-" + id);
+                if (span) span.textContent = " (no selection)";
             });
             hiloSelectingSet.clear();
 
             if (msg.loWinner?.id === myId || msg.hiWinner?.id === myId) {
                 sounds.play("win");
             }
-            showNotification(msg.message, "limegreen", 10000);
             updatePot(0); // maybe breaking here?
 
             // in the case of everyone but one folding, we don't need to show results. Same for everyone failing to form equation
             if (! msg.becauseAllButOneFolded && ! msg.becauseNoOneFormedEquation) {
                 showResultsLayout(msg.loWinner?.id, msg.hiWinner?.id);
-                displayHandResults(msg); 
+                displayHandResults(msg);
+            } else {
+                // No results layout for these — the toast is the only feedback on how the hand ended.
+                showNotification(msg.message, "limegreen", 10000);
             }
   
             break;
@@ -1550,17 +1528,16 @@
         if (out) {
             nameSpanContents += ' (out)'; // injection
         }
-        if (multiplicationCardDealt && id !== myId) {
-            nameSpanContents += ' (discarding...)';
-        }
         nameSpan.innerHTML = '<p>' + nameSpanContents + '</p>';
         nameDiv.appendChild(nameSpan);
 
-        const hiloSelectingSpan = document.createElement("span");
-        hiloSelectingSpan.id = "hilo-selecting-" + id;
-        hiloSelectingSpan.textContent = " (selecting...)";
-        if (!hiloSelectingSet.has(id)) hiloSelectingSpan.classList.add("hidden");
-        nameDiv.appendChild(hiloSelectingSpan);
+        // Single tag for the transient phase status (betting / selecting / discarding),
+        // rendered from shared state so a redraw mid-phase keeps the right label.
+        if (multiplicationCardDealt && id !== myId) discardingSet.add(id);
+        const statusSpan = document.createElement("span");
+        statusSpan.id = "player-status-" + id;
+        nameDiv.appendChild(statusSpan);
+        refreshPlayerStatus(id);
 
         drawCards(handDivs.get(id), id, hand, folded, multiplicationCardDealt, handLengthBeforeThisDeal);
     }
@@ -1645,11 +1622,49 @@
         });
     }
 
-    function notifyThatAnotherPlayerIsBetting(name){
-        showNotification(name + " is betting", "yellow");
+    // Single source of truth for the transient "(...)" tag next to a player's name. The three
+    // statuses are mutually exclusive by game phase, so one span per player covers all of them.
+    function refreshPlayerStatus(id) {
+        const span = document.getElementById("player-status-" + id);
+        if (!span) return;
+        if (id === currentBettingPlayerId) span.textContent = " (betting...)";
+        else if (hiloSelectingSet.has(id)) span.textContent = " (selecting...)";
+        else if (discardingSet.has(id)) span.textContent = " (discarding...)";
+        else span.textContent = "";
+    }
+
+    function refreshAllPlayerStatuses() {
+        handDivs.forEach((_, id) => refreshPlayerStatus(id));
+    }
+
+    // Fade the just-discarded card up and out of the given player's hand. Picks the first card
+    // in that hand matching the discarded value (the discardable operators +, −, × are unique
+    // within a hand, so this is unambiguous). Removing it from the DOM keeps the hand in sync
+    // before any later redraw, which the server already sends without the discarded card.
+    function animateDiscard(playerId, value) {
+        const handDiv = handDivs.get(playerId);
+        if (!handDiv) return;
+        const card = Array.from(handDiv.querySelectorAll('.card'))
+            .find(el => el.dataset.value === String(value));
+        if (!card) return;
+        card.classList.add('discarding');
+        card.addEventListener('animationend', () => card.remove(), { once: true });
+    }
+
+    function clearBettingIndicator() {
+        currentBettingPlayerId = null;
+        document.querySelectorAll(".handLabel").forEach(el => {
+            el.style.backgroundColor = "";
+            el.classList.remove("card-bounce");
+        });
+        document.querySelectorAll(".handLabel p").forEach(el => {
+            el.style.backgroundColor = "";
+        });
+        refreshAllPlayerStatuses();
     }
 
     function highlightCurrentBettingPlayerAndDehighlightOthers(currentTurnPlayerId){
+        currentBettingPlayerId = currentTurnPlayerId;
         // highlight only the betting person's hand
         document.querySelectorAll(".handLabel p").forEach(el => {
             el.style.backgroundColor = "rgba(0,0,0,0.3)";
@@ -1662,6 +1677,8 @@
         let handLabelParagraph = handLabel.querySelectorAll("p").forEach(el => {
             el.style.backgroundColor = "rgba(230, 208, 15, 0.5)";
         });
+
+        refreshAllPlayerStatuses(); // show "(betting...)" by the current player, clear it elsewhere
     }
 
     // totalSeconds defaults to 90 (equation forming); the hi/lo phase passes its own total
@@ -1710,6 +1727,19 @@
         highlightedCards.add(el);
     }
 
+    // Once equation forming starts, play a brief translucent "ghost" drag across the first card
+    // in my hand so players know the cards are draggable. Self-removes after the animation.
+    function showDragHint() {
+        const myHandDiv = handDivs.get(myId);
+        if (!myHandDiv) return;
+        const firstCard = myHandDiv.querySelector('.card');
+        if (!firstCard || firstCard.querySelector('.drag-hint')) return;
+        const hint = document.createElement('div');
+        hint.className = 'drag-hint';
+        firstCard.appendChild(hint);
+        hint.addEventListener('animationend', () => hint.remove(), { once: true });
+    }
+
     function hideProgressBar(){
         if (progressBarTimer) { progressBarTimer.stop(); progressBarTimer = null; } // stop the bar's rAF
 
@@ -1748,6 +1778,49 @@
     function updatePot(chipCount) {
         document.getElementById("potDiv").textContent = "Pot";
         updateChipStack(chipCount, document.getElementById("potChipStacksContainer")); //should rename it to potStacksContainer
+    }
+
+    // Fly a handful of chips from a bettor's stack (fromRect, captured before the stack shrinks)
+    // to the pot, then run onArrive (which bumps the pot total). The count is capped so a big
+    // raise animates a representative spray rather than hundreds of chips.
+    function animateChipsToPot(fromRect, betAmount, onArrive) {
+        const potContainer = document.getElementById("potChipStacksContainer");
+        if (!fromRect || !potContainer || !betAmount || betAmount <= 0) { onArrive?.(); return; }
+
+        let layer = document.getElementById("flyingChipLayer");
+        if (!layer) {
+            layer = document.createElement("div");
+            layer.id = "flyingChipLayer";
+            document.body.appendChild(layer);
+        }
+
+        const potRect = potContainer.getBoundingClientRect();
+        const startX = fromRect.left + fromRect.width / 2;
+        const startY = fromRect.top + fromRect.height / 2;
+        const endX = potRect.left + potRect.width / 2;
+        const endY = potRect.top + potRect.height / 2;
+
+        const count = Math.max(1, Math.min(betAmount, 8));
+        for (let i = 0; i < count; i++) {
+            const chip = document.createElement("div");
+            chip.className = "flying-chip";
+            chip.style.left = startX + "px";
+            chip.style.top = startY + "px";
+            chip.style.transitionDelay = (i * 45) + "ms";
+            layer.appendChild(chip);
+
+            // Next frame so the transition runs from the start position to the pot.
+            requestAnimationFrame(() => {
+                const dx = endX - startX + (Math.random() - 0.5) * 24;
+                const dy = endY - startY + (Math.random() - 0.5) * 16;
+                chip.style.transform = `translate(${dx}px, ${dy}px)`;
+            });
+
+            chip.addEventListener("transitionend", () => chip.remove(), { once: true });
+        }
+
+        // Bump the pot total just as the first chips land.
+        setTimeout(() => onArrive?.(), 380);
     }
 
     function getColorFromSuit(suit) {
