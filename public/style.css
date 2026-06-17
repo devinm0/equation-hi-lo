@@ -106,29 +106,64 @@ body.show-home-bg .grid-container {
     /* margin-bottom: 1em; TODO issues with this? */
 }
 
-.my-hand {
-    gap: 8px;
-    /* position: absolute; */
-    width: 100%;
-    justify-content: center;
-    /* bottom: 10%; */
-    margin-left: 0;
-    background: hsl(183, 89%, 31%);
-    z-index: 1000;
+/* Fixed wrapper holding the player's hand and the betting controls so the two scale as one
+   on scroll (see the scroll handler in index.html). It covers the viewport so its fixed-position
+   children resolve their bottom/left offsets exactly as they did when parented to <body>, but
+   pointer-events:none lets clicks pass through to the table; the children re-enable them. Having
+   a transform makes the dock the containing block + scaling pivot for those fixed children. */
+/* The bottom dock is a fixed, full-width BAR that carries the teal background + rounded top corners.
+   On scroll it only ever translates (dips) — it never scales — so its width and corners are identical
+   in both states. The background lives here (not on the hand) so it still covers the full width when
+   the dock scales the hand down and the hand narrows. .populated adds the background only once a hand
+   has been docked; with no hand the wrapper has no in-flow content and collapses to zero height, so
+   nothing shows in the lobby. */
+#dockWrapper {
     position: fixed;
-    bottom: 0%;
-    border-top: 2px solid hsl(183, 89%, 21%);
-    border-radius: 40px;
-    padding-bottom: 80px;
-    padding-top: 14px;
-    transform-origin: bottom center;
-    transform: scale(1);
-    transition: transform 0.1s ease-out;
-    touch-action: pan-y;
+    left: 0;
+    right: 0;
+    bottom: 0;
+    z-index: 1001;
+    transform: translateY(0);
+    transition: transform 0.12s ease-out;
 }
 
-.crouched {
-    transform: scale(0.7);
+#dockWrapper.populated {
+    background: hsl(183, 89%, 31%);
+    border-top: 2px solid hsl(183, 89%, 21%);
+    border-radius: 40px 40px 0 0;
+}
+
+/* Scroll-down crouch: the bar dips toward the bottom of the screen (revealing the table above) while
+   the dock inside scales down (shrinking the hand + betting controls together). The bar itself never
+   scales, so the full-width background keeps covering the sides and the corners stay round. */
+#dockWrapper.crouched {
+    transform: translateY(90px);
+}
+
+#dockWrapper.crouched #handDock {
+    transform: scale(0.55);
+}
+
+/* The dock sits in normal flow inside the wrapper, so the wrapper sizes to the hand. It owns the
+   scale used for crouching; the hand + betting controls inside it are otherwise unchanged. */
+#handDock {
+    position: relative;
+    /* Top-center origin: the wrapper has already dipped the dock down, so scaling from the bottom
+       would pin the (now off-screen) bottom edge and push the betting controls off screen. Scaling
+       from the top instead pins the top and lets the bottom rise as it shrinks, keeping them in view. */
+    transform-origin: top center;
+    transform: scale(1);
+    transition: transform 0.12s ease-out;
+}
+
+.my-hand {
+    gap: 8px;
+    width: 100%;
+    justify-content: center;
+    margin-left: 0;
+    padding-bottom: 80px;
+    padding-top: 14px;
+    touch-action: pan-y;
 }
 
 .ten {

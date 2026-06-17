@@ -441,6 +441,12 @@
         <div id="potChipStacksContainer" class="chip-stacks-container" style="width: 100%"></div>
     </div>
 
+    <!-- Bottom dock: #dockWrapper is the full-width bar (teal bg + rounded top corners) that dips
+         down on scroll. #handDock inside it scales on scroll to shrink the hand + betting controls
+         together. The player's own .my-hand div is moved into #handDock at runtime (see the deal
+         handler), which also flags #dockWrapper .populated so the bar background only shows in play. -->
+    <div id="dockWrapper">
+    <div id="handDock">
     <div id="bettingControls" style="display:none;">
         <div id="chipStagingContainer" style="text-align:center; font-weight: bold; color: white;"><span id="betAmountLabel">0</span></div>
         <div id="betContainer">
@@ -451,6 +457,8 @@
             <button class="button" id="callRaiseButton">Call</button>
             <button class="button" id="allInButton">All In</button>
         </div>
+    </div>
+    </div>
     </div>
 
     <button id="confirmResults" class="hidden">Next Hand ✅</button>
@@ -468,6 +476,8 @@
         
     const progressBar = document.getElementById("progressBar");
     const progressBarOverlay = document.getElementById("progressBarOverlay");
+    const handDock = document.getElementById("handDock");
+    const dockWrapper = document.getElementById("dockWrapper");
 
     const sounds = new SoundManager();
 
@@ -485,6 +495,10 @@
     let socket;
     const handDivs = new Map(); // map of divs, one for each player
     const handDivsList = []; // ordered list of divs, so that we can draw the user's hand last
+    // Comment node parked in the <body> hand flow marking where the player's own hand belongs in
+    // the results grid. During live play the hand lives in #handDock (inside the fixed bottom bar); this
+    // lets us drop it back into its original slot when results are shown. See the deal handler.
+    let myHandPlaceholder = null;
     const hiloSelectingSet = new Set(); // player IDs that haven't yet submitted hi/lo selection
     const discardingSet = new Set(); // player IDs still choosing which card to discard (× dealt)
     let currentBettingPlayerId = null; // player whose turn it is to bet
@@ -1440,6 +1454,18 @@
 
         if (id === myId) {
             handDivs.get(id).classList.add("my-hand");
+            // Relocate the player's hand into the dock so it scales together with the betting
+            // controls when #dockWrapper gets .crouched on scroll, and flag the wrapper .populated
+            // so its bar background shows. Leave a placeholder in the body flow (once) marking its
+            // slot for the results grid.
+            if (handDock && handDivs.get(id).parentElement !== handDock) {
+                if (!myHandPlaceholder) {
+                    myHandPlaceholder = document.createComment("my-hand-slot");
+                    handDivs.get(id).before(myHandPlaceholder);
+                }
+                handDock.appendChild(handDivs.get(id));
+                dockWrapper?.classList.add("populated");
+            }
             // handDivsList.push(id); // my-hand doesn't even need to go in the list for now for determining even or odd (left or right margin)
         } else {
             handDivs.get(id).classList.add("small-hand");
@@ -2292,7 +2318,14 @@
         myHand.forEach(hand => {
             hand.classList.remove('my-hand')
             hand.classList.add('small-hand')
+            // The hand lived in #handDock during play; return it to its original slot in the
+            // body so it flows into the results grid alongside the other players' hands.
+            if (myHandPlaceholder && myHandPlaceholder.parentNode) {
+                myHandPlaceholder.parentNode.insertBefore(hand, myHandPlaceholder);
+            }
         })
+        // The dock is now empty (hand moved to the results grid); drop the bar background and any crouch.
+        dockWrapper?.classList.remove("populated", "crouched");
 
         const hands = document.querySelectorAll('.hand');
         hands.forEach(hand => {
@@ -2397,20 +2430,20 @@
         return canvas;
     }
 
-    // Shrink the player's hand (anchored to the bottom edge) whenever the user
-    // scrolls down, and restore it on scroll up — so it stays in view at a
-    // smaller size instead of dipping off-screen.
+    // Shrink the bottom dock (the player's hand + its betting controls, anchored to the bottom
+    // edge) whenever the user scrolls down, and restore it on scroll up — so it stays in view at
+    // a smaller size instead of dipping off-screen. Crouching the dock scales both children
+    // together about the same bottom-center origin.
     let lastScroll = 0;
 
     window.addEventListener("scroll", () => {
         const current = window.pageYOffset;
-        const myHand = document.querySelector(".my-hand");
 
-        if (myHand) {
+        if (dockWrapper) {
             if (current > lastScroll) {
-                myHand.classList.add("crouched");
+                dockWrapper.classList.add("crouched");
             } else {
-                myHand.classList.remove("crouched");
+                dockWrapper.classList.remove("crouched");
             }
         }
 
