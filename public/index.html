@@ -425,6 +425,9 @@
                 </svg>
             </button>
         </div>
+        <div id="qrCodeContainer" class="hidden">
+            <div id="qrCode" aria-hidden="true"></div>
+        </div>
         <div id="nameContainer">
             <input type="text" id="nameInput" placeholder="Enter your name" pattern="^[a-zA-Z0-9]{1,12}$" required title="Username consists of 1-12 letters or numbers"/>
             <p id="nameError" style="color: rgb(255, 128, 128);"></p>
@@ -466,6 +469,7 @@
 
     <button class="button" id="leaveButton" style="display:none;">Leave Game</button>
     <script src="./sortable.js"></script>
+    <script src="./qrcode.js"></script>
     <script type="module">
     
     import { NumberCard, OperatorCard, Suit, GamePhase } from './enums.js';
@@ -609,6 +613,7 @@
             document.getElementById("lobbyPlayerListContainer").remove();
             document.getElementById("lobbyTitleContainer").remove();
             document.getElementById("shareLinkContainer").classList.add("hidden");
+            document.getElementById("qrCodeContainer").classList.add("hidden");
             document.getElementById("uiContainer").classList.add("hidden");
 
             break;
@@ -1086,6 +1091,17 @@
             shareLinkContainer.dataset.url = location.origin + "/" + msg.roomCode;
             document.getElementById("shareLinkText").textContent = location.host + "/" + msg.roomCode;
             if (!msg.inProgress) shareLinkContainer.classList.remove("hidden");
+
+            // QR code encoding the same join URL, so players can join by pointing a camera at it.
+            // SVG with no quiet zone (margin 0); the white quiet zone comes from #qrCode's CSS
+            // padding so the gaps between modules stay white rather than showing the lobby bg.
+            const qrCodeContainer = document.getElementById("qrCodeContainer");
+            const qr = qrcode(0, "M"); // typeNumber 0 = auto-size, "M" = ~15% error correction
+            qr.addData(shareLinkContainer.dataset.url);
+            qr.make();
+            document.getElementById("qrCode").innerHTML =
+                qr.createSvgTag({ cellSize: 4, margin: 0, scalable: true });
+            if (!msg.inProgress) qrCodeContainer.classList.remove("hidden");
 
             if (msg.hostId === myId) { 
                 const startButton = document.getElementById("startButton")
