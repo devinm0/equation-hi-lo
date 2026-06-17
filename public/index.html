@@ -2195,6 +2195,9 @@
         return canvas;
     }
 
+    // Shrink the player's hand (anchored to the bottom edge) whenever the user
+    // scrolls down, and restore it on scroll up — so it stays in view at a
+    // smaller size instead of dipping off-screen.
     let lastScroll = 0;
 
     window.addEventListener("scroll", () => {
