@@ -121,7 +121,16 @@ export function handleDebugForceGameOver(ws: ExtendedWebSocket, clientMsg: Debug
     const game = games.get(player.roomCode);
     if (!game) return;
 
-    playersInRoom(game.roomCode).forEach(p => { if (p.id !== player.id) p.out = true; });
+    // Mirror a real game-over: the champion has swept every other player's chips. Without this
+    // the forced winner keeps exactly their buy-in, so net winnings (declareGameOver reports
+    // chipCount - startingChipCount) come out 0 and the win modal shows an empty chipstack.
+    playersInRoom(game.roomCode).forEach(p => {
+        if (p.id !== player.id) {
+            player.chipCount += p.chipCount;
+            p.chipCount = 0;
+            p.out = true;
+        }
+    });
     declareGameOver(game, player);
 }
 
