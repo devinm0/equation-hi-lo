@@ -27,15 +27,17 @@ async function setupPlayers(browser: Browser, numPlayers: number): Promise<{ pag
     const pages = await Promise.all(contexts.map(ctx => ctx.newPage()));
     await Promise.all(pages.map(page => page.goto('/')));
 
+    // Tile the windows so they don't fully stack. We only set left/top (position) and NOT
+    // width/height: forcing the OS window size desyncs Playwright's device-viewport emulation
+    // (and macOS clamps windows to a ~500px min width / subtracts toolbar chrome), which made
+    // the rendered viewport wrong. Leaving the size alone keeps the emulated viewport correct,
+    // matching the regular E2E tests.
     const colW = 430;
     const colH = 500;
     const cols = Math.ceil(Math.sqrt(numPlayers));
     try {
         const cdp = await browser.newBrowserCDPSession();
         for (const [i, page] of pages.entries()) {
-            const device = i < IPHONE_DEVICES.length ? IPHONE_DEVICES[i] : undefined;
-            const w = device?.viewport?.width ?? 390;
-            const h = device?.viewport?.height ?? 844;
             const pageSession = await page.context().newCDPSession(page);
             const { targetInfo } = await (pageSession as any).send('Target.getTargetInfo');
             const { windowId } = await (cdp as any).send('Browser.getWindowForTarget', { targetId: targetInfo.targetId });
@@ -44,8 +46,6 @@ async function setupPlayers(browser: Browser, numPlayers: number): Promise<{ pag
                 bounds: {
                     left: (i % cols) * colW,
                     top: Math.floor(i / cols) * colH,
-                    width: w,
-                    height: h,
                 },
             });
             await pageSession.detach();
