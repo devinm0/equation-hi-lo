@@ -1,6 +1,6 @@
 import { test, expect, Browser, BrowserContext, Page, devices } from '@playwright/test';
 import { attachBrowserLogging } from './_logging.js';
-import { discardIfNeeded, doEquationForming } from './_helpers.js';
+import { discardIfNeeded, doEquationForming, getRoomCodeFromUrl } from './_helpers.js';
 
 // Sandbox tests for manual play — run with: npx playwright test --config sandbox.config.ts --headed
 
@@ -70,9 +70,7 @@ test('sandbox: 10-player lobby, pause before game starts', async ({ browser }) =
 
     // Host creates room
     await hostPage.click('#createButton');
-    await expect(hostPage.locator('#roomCodeContainer')).toContainText(/[A-Z0-9]{4}/);
-    const roomCodeText = await hostPage.locator('#roomCodeContainer').innerText();
-    const roomCode = roomCodeText.split(' ')[1];
+    const roomCode = await getRoomCodeFromUrl(hostPage);
 
     await hostPage.fill('#nameInput', 'Host');
     await hostPage.click('#submitNameButton');
@@ -101,9 +99,7 @@ test('sandbox: 3-player game, pause at first betting', async ({ browser }) => {
 
     // Host creates room
     await hostPage.click('#createButton');
-    await expect(hostPage.locator('#roomCodeContainer')).toContainText(/[A-Z0-9]{4}/);
-    const roomCodeText = await hostPage.locator('#roomCodeContainer').innerText();
-    const roomCode = roomCodeText.split(' ')[1];
+    const roomCode = await getRoomCodeFromUrl(hostPage);
 
     await hostPage.fill('#nameInput', 'Host');
     await hostPage.click('#submitNameButton');
@@ -154,8 +150,7 @@ test('sandbox: 3-player hand, pause at hi/lo selection', async ({ browser }) => 
 
     // Host creates room
     await hostPage.click('#createButton');
-    await expect(hostPage.locator('#roomCodeContainer')).toContainText(/[A-Z0-9]{4}/);
-    const roomCode = (await hostPage.locator('#roomCodeContainer').innerText()).split(' ')[1];
+    const roomCode = await getRoomCodeFromUrl(hostPage);
 
     await hostPage.fill('#nameInput', 'Host');
     await hostPage.click('#submitNameButton');

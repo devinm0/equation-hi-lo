@@ -1,5 +1,6 @@
 import { test, expect, Page } from '@playwright/test';
 import { attachBrowserLogging } from './_logging.js';
+import { getRoomCodeFromUrl } from './_helpers.js';
 
 test.describe('Joining mid-game', () => {
     test('a 4th player cannot enter a game already in progress', async ({ browser }) => {
@@ -14,10 +15,7 @@ test.describe('Joining mid-game', () => {
 
         // Host creates a room.
         await hostPage.click('#createButton');
-        await expect(hostPage.locator('#roomCodeContainer')).toContainText(/[A-Z0-9]{4}/);
-        const roomCodeText = await hostPage.locator('#roomCodeContainer').innerText();
-        const roomCode = roomCodeText.split(' ')[1]!;
-        expect(roomCode).toMatch(/^[A-Z0-9]{4}$/);
+        const roomCode = await getRoomCodeFromUrl(hostPage);
 
         await hostPage.fill('#nameInput', 'Host');
         await hostPage.click('#submitNameButton');

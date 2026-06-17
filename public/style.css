@@ -1045,8 +1045,9 @@ body.show-home-bg .grid-container {
 }
 
 .winner-div {
+    padding: 10px;
     border-radius: 30px;
-    background-color: #dddd5375;
+    background-color: #a6dd5366;
 }
 
 .high-symbol {
@@ -1119,6 +1120,8 @@ body.show-home-bg .grid-container {
 
     .hand, .small-hand {
         margin: 0px;
+        margin-top: 5px;
+        margin-bottom: 5px;
         gap: 2px;
         justify-content: center;
         width: 100%;

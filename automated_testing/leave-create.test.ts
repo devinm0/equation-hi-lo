@@ -1,6 +1,6 @@
 import { test, expect, Browser, BrowserContext, Page, devices } from '@playwright/test';
 import { attachBrowserLogging } from './_logging.js';
-import { discardIfNeeded, doEquationForming, acknowledgeResults } from './_helpers.js';
+import { discardIfNeeded, doEquationForming, acknowledgeResults, getRoomCodeFromUrl } from './_helpers.js';
 
 // 4 distinct iPhone viewports: 3 players start in the old room, the 4th joins the new room.
 const PLAYER_DEVICES = [
@@ -128,8 +128,7 @@ test.describe('Create New Game while still seated in another room', () => {
 
         // --- Lobby + start (host creates, p1/p2 join) ---
         await host.click('#createButton');
-        await expect(host.locator('#roomCodeContainer')).toContainText(/[A-Z0-9]{4}/);
-        const oldRoomCode = (await host.locator('#roomCodeContainer').innerText()).split(' ')[1]!;
+        const oldRoomCode = await getRoomCodeFromUrl(host);
         // Grab the shareable invite link from the host's copy button and confirm it carries the
         // room code. p1/p2 will join by navigating to it rather than typing the code.
         const oldRoomUrl = await copyInviteUrl(host);
@@ -168,8 +167,7 @@ test.describe('Create New Game while still seated in another room', () => {
         await p2.click('#submitNameButton');
 
         // p2 is now host of a brand-new room with a different code.
-        await expect(p2.locator('#roomCodeContainer')).toContainText(/Room [A-Z0-9]{4}/, { timeout: 10000 });
-        const newRoomCode = (await p2.locator('#roomCodeContainer').innerText()).split(' ')[1]!;
+        const newRoomCode = await getRoomCodeFromUrl(p2, { not: oldRoomCode });
         expect(newRoomCode, 'the new room must be a different room from the old one').not.toBe(oldRoomCode);
         // The second host copies its own invite link; D will join the new room by navigating to it.
         const newRoomUrl = await copyInviteUrl(p2);
@@ -232,7 +230,7 @@ test.describe('Create New Game while still seated in another room', () => {
         expect(ackedOld2, 'the old room should still complete a hand after the new game ran').toBe(2);
 
         // The two rooms never converged: the old room kept its original code, distinct from the new one.
-        await expect(host.locator('#roomCodeContainer')).toContainText(`Room ${oldRoomCode}`);
+        expect(await getRoomCodeFromUrl(host)).toBe(oldRoomCode);
         expect(oldRoomCode).not.toBe(newRoomCode);
 
         await Promise.all([...contexts, dCtx].map(ctx => ctx.close()));

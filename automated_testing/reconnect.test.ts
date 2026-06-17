@@ -5,6 +5,7 @@ import {
     equationFormingWithReconnect,
     hiLoSelectionWithReconnect,
     acknowledgeResults,
+    getRoomCodeFromUrl,
 } from './_helpers.js';
 
 // 3 players on distinct iPhone viewports (mirrors betting.test.ts).
@@ -78,8 +79,7 @@ test.describe('Reconnect after background/foreground', () => {
         // --- Lobby + start (mirrors setupRoom in betting.test.ts) ---
         const [host, ...rest] = pages as [Page, ...Page[]];
         await host.click('#createButton');
-        await expect(host.locator('#roomCodeContainer')).toContainText(/[A-Z0-9]{4}/);
-        const roomCode = (await host.locator('#roomCodeContainer').innerText()).split(' ')[1]!;
+        const roomCode = await getRoomCodeFromUrl(host);
         await host.fill('#nameInput', 'Host');
         await host.click('#submitNameButton');
         await expect(host.locator('#lobbyPlayerListContainer')).toContainText('Host');

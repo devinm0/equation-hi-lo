@@ -1,5 +1,6 @@
 import { test, expect, Page } from '@playwright/test';
 import { attachBrowserLogging } from './_logging.js';
+import { getRoomCodeFromUrl } from './_helpers.js';
 
 // MAX_PLAYERS_PER_ROOM is 10 (server-side, in state.ts). Spin up 12 clients and
 // confirm the room fills at 10 and the last 2 are rejected with the "full" reason.
@@ -21,10 +22,7 @@ test.describe('Room capacity', () => {
 
         // Host creates the room (player 1 of 10).
         await hostPage.click('#createButton');
-        await expect(hostPage.locator('#roomCodeContainer')).toContainText(/[A-Z0-9]{4}/);
-        const roomCodeText = await hostPage.locator('#roomCodeContainer').innerText();
-        const roomCode = roomCodeText.split(' ')[1]!;
-        expect(roomCode).toMatch(/^[A-Z0-9]{4}$/);
+        const roomCode = await getRoomCodeFromUrl(hostPage);
 
         await hostPage.fill('#nameInput', 'Host');
         await hostPage.click('#submitNameButton');

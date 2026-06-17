@@ -23,11 +23,9 @@ async function openTabs() {
     await hostPage.click("#createButton");    
     await hostPage.waitForTimeout(2000); // server must create room and send back, before we try to grab the id
     
-    // console.log(await hostPage.locator("#roomCodeContainer").innerText());
-    // console.log((await hostPage.locator("#roomCodeContainer").innerText()).split(" "));
-    // console.log((await hostPage.locator("#roomCodeContainer").innerText()).split(" ")[1]);
-
-    const roomCode = (await hostPage.locator("#roomCodeContainer").innerText()).split(" ")[1];
+    // The room code now lives only in the URL (history.replaceState to "/CODE"); the old
+    // #roomCodeContainer lobby display was removed.
+    const roomCode = new URL(hostPage.url()).pathname.replace(/^\/+/, "").toUpperCase();
     // console.log("checking roomCode");
     // console.log(roomCode);
 

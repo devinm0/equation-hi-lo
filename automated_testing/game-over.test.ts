@@ -1,5 +1,6 @@
 import { test, expect, Page } from '@playwright/test';
 import { attachBrowserLogging } from './_logging.js';
+import { getRoomCodeFromUrl } from './_helpers.js';
 
 // When everyone but one player is eliminated, the lone survivor sees a win modal with
 // their total winnings, and acknowledging it (or leaving the page) tears the room down
@@ -26,9 +27,7 @@ test.describe('Game over → win modal → fresh game from the same window', () 
 
         // Host creates the room.
         await hostPage.click('#createButton');
-        await expect(hostPage.locator('#roomCodeContainer')).toContainText(/[A-Z0-9]{4}/);
-        const oldRoom = (await hostPage.locator('#roomCodeContainer').innerText()).split(' ')[1]!;
-        expect(oldRoom).toMatch(/^[A-Z0-9]{4}$/);
+        const oldRoom = await getRoomCodeFromUrl(hostPage);
         await hostPage.fill('#nameInput', 'Host');
         await hostPage.click('#submitNameButton');
         await expect(hostPage.locator('#lobbyPlayerListContainer')).toContainText('Host');
@@ -75,9 +74,7 @@ test.describe('Game over → win modal → fresh game from the same window', () 
 
         // The same window can start a BRAND-NEW game — the server makes a new player for it.
         await hostPage.click('#createButton');
-        await expect(hostPage.locator('#roomCodeContainer')).toContainText(/[A-Z0-9]{4}/);
-        const newRoom = (await hostPage.locator('#roomCodeContainer').innerText()).split(' ')[1]!;
-        expect(newRoom).toMatch(/^[A-Z0-9]{4}$/);
+        const newRoom = await getRoomCodeFromUrl(hostPage, { not: oldRoom });
         expect(newRoom).not.toBe(oldRoom);
         await hostPage.fill('#nameInput', 'HostAgain');
         await hostPage.click('#submitNameButton');

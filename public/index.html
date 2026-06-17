@@ -413,7 +413,6 @@
 
     <div id="uiContainer" class="hidden"> <!--TODO rename to lobbyContainer-->
         <div id="lobbyTitleContainer">Equation <span style="white-space: nowrap;">Hi Lo</span></div>
-        <div id="roomCodeContainer">Room Code:</div>
         <div id="shareLinkContainer" class="hidden">
             <span id="shareLinkText"></span>
             <button id="copyLinkButton" type="button" title="Copy invite link" aria-label="Copy invite link">
@@ -461,9 +460,9 @@
     </div>
     </div>
 
-    <button id="confirmResults" class="hidden">Next Hand ✅</button>
-    <button id="confirmEquationFormed" class="hidden">Lock in Equation ✅</button>
-    <button id="confirmOtherEquationFormed" class="hidden">Lock in Second Equation ✅</button>
+    <button id="confirmResults" class="hidden">Next Hand</button>
+    <button id="confirmEquationFormed" class="hidden">Lock in Equation</button>
+    <button id="confirmOtherEquationFormed" class="hidden">Lock in Second Equation</button>
 
     <button class="button" id="leaveButton" style="display:none;">Leave Game</button>
     <script src="./sortable.js"></script>
@@ -604,13 +603,6 @@
         } 
         
         case "game-started": {
-            const roomCode = document.getElementById("roomCodeContainer");
-            if (window.matchMedia("(max-width: 800px)").matches) {
-                roomCode.style.transform = "translate(calc(50vw - 50% - 10px), calc(-50vh + 50% + 30px))";
-            } else {
-                roomCode.style.transform = "translate(calc(50vw - 50% - 60px), calc(-50vh + 50% + 30px))";
-            }
-
             const btn = document.getElementById("startButton");
             btn.parentNode.removeChild(btn);
             // document.getElementById("leaveButton").style.display = "block";
@@ -1086,9 +1078,6 @@
             if (msg.inProgress) {
                 document.getElementById("uiContainer").style.display = "none";
             }
-            const roomCodeContainer = document.getElementById("roomCodeContainer");
-            // TODO shouldn't trust client msg here.
-            roomCodeContainer.textContent = "Room " + msg.roomCode;
 
             // Shareable invite link with a copy button. Show the host-friendly host/CODE form,
             // but copy the full origin (with protocol) so it pastes as a real tappable link in
@@ -1517,7 +1506,7 @@
         trophyDiv.id = "trophy-" + id;
         trophyDiv.className = "trophy";
         trophyDiv.classList.add("hidden");
-        trophyDiv.textContent = "👑";
+        // trophyDiv.textContent = "👑";
         nameDiv.appendChild(trophyDiv); // TODO will need to put it at the beginning not the end
 
         // TODO create a span for the name and add it after

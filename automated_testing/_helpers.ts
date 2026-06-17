@@ -2,6 +2,28 @@
 // (no per-file drift).
 import { expect, Page, BrowserContext } from '@playwright/test';
 
+// The room code lives only in the URL now (the client does history.replaceState to "/CODE" in
+// the room-entered handler); the old #roomCodeContainer lobby display was removed. Wait for the
+// SPA to push the 4-char code into the path and return it, upper-cased as the server issues it.
+//
+// opts.not: when moving a page from one room to another (e.g. refresh -> "New Game"), the path
+// briefly still holds the previous code — both old and new match the 4-char shape — so pass the
+// previous code to wait until the URL actually changes to a different room.
+export async function getRoomCodeFromUrl(page: Page, opts: { not?: string } = {}): Promise<string> {
+    const readCode = () => new URL(page.url()).pathname.replace(/^\/+/, '').toUpperCase();
+    await expect.poll(readCode, {
+        message: 'room code should appear in the URL after the room is entered',
+        timeout: 10000,
+    }).toMatch(/^[A-Z0-9]{4}$/);
+    if (opts.not) {
+        await expect.poll(readCode, {
+            message: `room code in the URL should change away from ${opts.not}`,
+            timeout: 10000,
+        }).not.toBe(opts.not.toUpperCase());
+    }
+    return readCode();
+}
+
 // ---------------------------------------------------------------------------
 // Winner verification — reads what's ACTUALLY RENDERED on the results page
 // ---------------------------------------------------------------------------

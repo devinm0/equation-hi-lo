@@ -1,6 +1,6 @@
 import { test, expect, Browser, BrowserContext, Page, devices } from '@playwright/test';
 import { attachBrowserLogging } from './_logging.js';
-import { doEquationForming, discardIfNeeded, acknowledgeResults } from './_helpers.js';
+import { doEquationForming, discardIfNeeded, acknowledgeResults, getRoomCodeFromUrl } from './_helpers.js';
 
 // 3 players with distinct iPhone viewports
 const PLAYER_DEVICES = [
@@ -137,10 +137,7 @@ async function setupRoom(pages: Page[]): Promise<void> {
     }
 
     await hostPage.click('#createButton');
-    await expect(hostPage.locator('#roomCodeContainer')).toContainText(/[A-Z0-9]{4}/);
-    const roomCodeText = await hostPage.locator('#roomCodeContainer').innerText();
-    const roomCode = roomCodeText.split(' ')[1];
-    expect(roomCode).toMatch(/^[A-Z0-9]{4}$/);
+    const roomCode = await getRoomCodeFromUrl(hostPage);
 
     await hostPage.fill('#nameInput', 'Host');
     await hostPage.click('#submitNameButton');

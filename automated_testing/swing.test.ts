@@ -1,6 +1,6 @@
 import { test, expect, Page } from '@playwright/test';
 import { attachBrowserLogging } from './_logging.js';
-import { discardIfNeeded, doEquationForming } from './_helpers.js';
+import { discardIfNeeded, doEquationForming, getRoomCodeFromUrl } from './_helpers.js';
 
 // Regression test for the swing-betting hang/no-selection bug. The client sends the swing
 // second-equation card order as strings (card.dataset.id); the server's swing validator used
@@ -47,8 +47,7 @@ test.describe('Swing betting', () => {
         const [hostPage, ...rest] = pages as [Page, ...Page[]];
 
         await hostPage.click('#createButton');
-        await expect(hostPage.locator('#roomCodeContainer')).toContainText(/[A-Z0-9]{4}/);
-        const roomCode = (await hostPage.locator('#roomCodeContainer').innerText()).split(' ')[1]!;
+        const roomCode = await getRoomCodeFromUrl(hostPage);
         await hostPage.fill('#nameInput', 'Host');
         await hostPage.click('#submitNameButton');
         await expect(hostPage.locator('#lobbyPlayerListContainer')).toContainText('Host');

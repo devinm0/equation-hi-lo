@@ -1,6 +1,6 @@
 import { test, expect, Page } from '@playwright/test';
 import { attachBrowserLogging } from './_logging.js';
-import { discardIfNeeded, doEquationForming } from './_helpers.js';
+import { discardIfNeeded, doEquationForming, getRoomCodeFromUrl } from './_helpers.js';
 
 // Regression test for the end-of-hand hang: if a player never submits a hi/lo choice
 // (closed tab, walked away, lost the modal on a refresh, or — the original incident — an
@@ -50,8 +50,7 @@ test.describe('Hi/Lo selection timeout', () => {
 
         // Lobby setup.
         await hostPage.click('#createButton');
-        await expect(hostPage.locator('#roomCodeContainer')).toContainText(/[A-Z0-9]{4}/);
-        const roomCode = (await hostPage.locator('#roomCodeContainer').innerText()).split(' ')[1]!;
+        const roomCode = await getRoomCodeFromUrl(hostPage);
         await hostPage.fill('#nameInput', 'Host');
         await hostPage.click('#submitNameButton');
         await expect(hostPage.locator('#lobbyPlayerListContainer')).toContainText('Host');
