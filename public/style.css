@@ -398,7 +398,7 @@ body.show-home-bg .grid-container {
     transform: scale(1.05);
 }
 
-#uiContainer, #homeContainer {
+#uiContainer {
     position: absolute;
     top: 50%;
     left: 50%;
@@ -408,12 +408,67 @@ body.show-home-bg .grid-container {
     align-items: center;
     gap: 16px;
     max-height: 100vh;
+    width: 90%;
+    max-width: 540px;
+    box-sizing: border-box;
     background: rgba(0, 100, 105, .8);
     border-radius: 24px;
     padding: 16px;
 }
 
-#uiContainer.hidden, #homeContainer.hidden {
+#uiContainer.hidden {
+    display: none;
+}
+
+/* Home screen: a scrollable wrapper that centers two independent rounded boxes (join/create,
+   and how-to-play) plus the footer, each with its own small margin on every side, rather than
+   nesting the rules content inside the narrower join/create box. */
+#homeScreenWrapper {
+    position: fixed;
+    top: 0;
+    left: 0;
+    width: 100%;
+    height: 100%;
+    overflow-y: auto;
+    display: flex;
+    flex-direction: column;
+    align-items: center;
+    gap: 16px;
+    padding: 24px 12px 88px; /* bottom padding clears the fixed ad bar */
+    box-sizing: border-box;
+}
+
+#homeScreenWrapper.hidden {
+    display: none;
+}
+
+#homeContainer {
+    display: flex;
+    flex-direction: column;
+    align-items: center;
+    gap: 16px;
+    width: 100%;
+    max-width: 540px;
+    box-sizing: border-box;
+    background: rgba(0, 100, 105, .8);
+    border-radius: 24px;
+    padding: 16px;
+}
+
+#homeAdBar {
+    position: fixed;
+    bottom: 0;
+    left: 0;
+    width: 100%;
+    z-index: 500;
+    display: flex;
+    justify-content: center;
+    background: rgba(0, 40, 42, 0.92);
+    padding: 4px 0;
+    box-sizing: border-box;
+}
+
+#homeAdBar.hidden {
     display: none;
 }
 
@@ -1300,8 +1355,18 @@ body.show-home-bg .grid-container {
     max-width: 540px;
     max-height: 88vh;
     overflow-y: auto;
-    text-align: left;
+    text-align: justify;
     position: relative;
+}
+
+/* Inline variant used on the home screen instead of as a fixed overlay. */
+.rules-static {
+    position: static;
+    max-height: none;
+    overflow: visible;
+    animation: none;
+    width: 100%;
+    box-sizing: border-box;
 }
 
 .rules-close {

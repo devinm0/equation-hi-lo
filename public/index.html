@@ -204,8 +204,12 @@
 
     <button id="helpButton" aria-label="How to play" title="How to play">?</button>
 
+    <!-- Wraps the home screen's two boxes (join/create + how-to-play) plus the footer so they
+         can scroll together as independent rounded cards, instead of the rules content being
+         constrained to the narrow join/create box's width. -->
+    <div id="homeScreenWrapper">
     <div id="homeContainer"> <!--TODO rename to uiContainer-->
-        <div id="homeTitleContainer">Equation <span style="white-space: nowrap;">Hi Lo</span></div>
+        <div id="homeTitleContainer">Equation<br><span style="white-space: nowrap;">Hi Lo</span></div>
         <p id="roomCodeInfo" style="color: white; text-align: center;">Got a room code? Enter here to join an existing game:</p>
         <div id="roomCodeInputContainer">
             <input type="text" id="roomCodeInput" placeholder="Room Code" pattern="^[a-zA-Z0-9]{4}$" required title="Room code does not exist. Room code consists of 4 letters or numbers"/>
@@ -214,21 +218,205 @@
         </div>
         <p id="createRoomInfo" style="color: white;">Otherwise, host a new game here:</p>
         <button class="button" id="createButton">New Game</button>
+    </div>
 
-        <!-- Responsive banner ad (home screen only) -->
-        <ins class="adsbygoogle"
-             style="display:block; margin-top: 20px;"
-             data-ad-client="ca-pub-8735848760963536"
-             data-ad-slot="4790532527"
-             data-ad-format="auto"
-             data-full-width-responsive="true"></ins>
-        <script>
-            (adsbygoogle = window.adsbygoogle || []).push({});
-        </script>
+        <!-- How to Play, shown directly on the landing screen (not gated behind the in-game
+             "?" modal below) so this page always has real, crawlable content of its own.
+             Identical content/graphics to #rulesModal, just rendered inline instead of as
+             a fixed overlay. A separate box from #homeContainer so it isn't constrained to
+             that box's narrower width. -->
+        <section class="modal rules-modal rules-static">
+            <h2>How to Play Equation Hi Lo</h2>
+
+            <section class="rules-section">
+                <p>Equation Hi Lo is a poker-style card game played with math instead of poker hands. You are dealt <strong>number cards</strong> (0–10) and <strong>operator cards</strong> (+, −, ×, ÷, √), and you arrange them into an equation. Your goal is a result as close as possible to either <strong>1 (Low)</strong> or <strong>20 (High)</strong>. A hand plays out in the order below.</p>
+            </section>
+
+            <section class="rules-section">
+                <h3>1. The deal &amp; first bet</h3>
+                <p>To start, you receive <strong>two face-up number cards</strong> and <strong>one hidden card</strong> that only you can see (it's revealed at showdown), along with operator cards to combine them. A <strong>first round of betting</strong> then goes around the table.</p>
+                <p>Everyone always gets the <strong>+</strong>, <strong>−</strong> and <strong>÷</strong> operators. On top of those, you may also be dealt a <strong>×</strong> (multiply) or a <strong>√</strong> (square root) card.</p>
+            </section>
+
+            <section class="rules-section">
+                <h3>2. The multiply &amp; root cards</h3>
+                <p>If you're dealt a <strong>multiply (×)</strong> card, you must <strong>discard one</strong> of three cards: the <strong>×</strong>, the <strong>+</strong>, or the <strong>−</strong>. You may <strong>never</strong> discard the <strong>÷</strong>. The game highlights your three choices, just like below — tap one to discard it.</p>
+
+                <div class="rule-graphic">
+                    <div class="rule-equation">
+                        <div class="eg-card eg-op eg-highlight"><p>+</p></div>
+                        <div class="eg-card eg-op"><p>÷</p></div>
+                        <div class="eg-card eg-op eg-highlight"><p>−</p></div>
+                        <div class="eg-card"><p class="eg-single-digit" style="color:rgb(232,179,64);">7</p></div>
+                        <div class="eg-card"><p class="eg-single-digit" style="color:rgb(149,90,49);">3</p></div>
+                        <div class="eg-card eg-op eg-highlight"><p>×</p></div>
+                    </div>
+                    <p class="rule-caption">A × was dealt — discard the ×, +, or − (highlighted). The ÷ can never be discarded.</p>
+                </div>
+
+                <p>If you're dealt a <strong>root (√)</strong> card, you're also dealt an <strong>extra number card</strong> to compensate for the additional operator, so your equation stays balanced.</p>
+
+                <div class="rule-graphic">
+                    <div class="rule-equation">
+                        <div class="eg-card eg-op"><p>+</p></div>
+                        <div class="eg-card eg-op"><p>−</p></div>
+                        <div class="eg-card eg-op"><p>÷</p></div>
+                        <div class="eg-card eg-root rule-new"></div>
+                        <div class="eg-card"><p class="eg-single-digit" style="color:rgb(101,101,101);">8</p></div>
+                        <div class="eg-card"><p class="eg-single-digit" style="color:rgb(149,90,49);">5</p></div>
+                        <div class="eg-card rule-new"><p class="eg-single-digit" style="color:rgb(232,179,64);">2</p></div>
+                    </div>
+                    <p class="rule-caption">A √ <em>and</em> an extra number card (highlighted) are dealt together.</p>
+                </div>
+            </section>
+
+            <section class="rules-section">
+                <h3>3. Second card &amp; equation forming</h3>
+                <p>After the first bet, you're dealt <strong>one more face-up card</strong>. Then the <strong>equation-forming phase</strong> begins under a countdown timer. Drag your cards left and right to order them into the equation you want, then lock in before the timer runs out. A valid equation gives a real number:</p>
+
+                <div class="rule-graphic">
+                    <div class="rule-equation">
+                        <div class="eg-card"><p class="eg-single-digit" style="color:rgb(149,90,49);">3</p></div>
+                        <div class="eg-card eg-op"><p>×</p></div>
+                        <div class="eg-card"><p class="eg-single-digit" style="color:rgb(232,179,64);">6</p></div>
+                        <div class="eg-card eg-op"><p>+</p></div>
+                        <div class="eg-card"><p class="eg-single-digit" style="color:rgb(101,101,101);">2</p></div>
+                        <div class="rule-equals">=</div>
+                        <div class="rule-result">20</div>
+                    </div>
+                    <p class="rule-caption">× and ÷ resolve before + and − · 3 × 6 + 2 = 20</p>
+                </div>
+
+                <p>The <strong>√ is unary</strong> — unlike normal order of operations, it applies <strong>only to the single number immediately to its right</strong>, not to the rest of the expression:</p>
+
+                <div class="rule-graphic">
+                    <div class="rule-equation">
+                        <div class="eg-card eg-root"></div>
+                        <div class="eg-card"><p class="eg-single-digit" style="color:rgb(232,179,64);">9</p></div>
+                        <div class="eg-card eg-op"><p>+</p></div>
+                        <div class="eg-card"><p class="eg-single-digit" style="color:rgb(149,90,49);">7</p></div>
+                        <div class="rule-equals">=</div>
+                        <div class="rule-result">10</div>
+                    </div>
+                    <p class="rule-caption">√ binds to the 9 only: (√9) + 7 = 3 + 7 = 10 — <strong>not</strong> √(9 + 7).</p>
+                </div>
+
+                <p>An equation that can't be evaluated — such as <strong>dividing by zero</strong> — is rejected, and you'll need to rearrange your cards:</p>
+
+                <div class="rule-graphic">
+                    <div class="rule-equation rule-reject">
+                        <div class="eg-card"><p class="eg-single-digit" style="color:rgb(149,90,49);">8</p></div>
+                        <div class="eg-card eg-op"><p>÷</p></div>
+                        <div class="eg-card"><p class="eg-single-digit" style="color:rgb(101,101,101);">0</p></div>
+                        <div class="rule-equals">=</div>
+                        <div class="rule-result rule-reject">✗</div>
+                    </div>
+                    <p class="rule-caption">Division by zero is rejected — the cards flash red until you fix it. <strong>If the timer runs out before you form a valid equation, you're automatically folded.</strong></p>
+                </div>
+            </section>
+
+            <section class="rules-section">
+                <h3>4. Second bet</h3>
+                <p>With equations locked, a <strong>second round of betting</strong> takes place. You can call, raise, go all-in, or fold.</p>
+                <p>No player may bet <strong>more than it would take for the player with the fewest chips to go all in</strong> — bets are capped at the shortest stack. There are <strong>no side pots</strong> like in regular poker, because the pot is already potentially split between the High and Low winners.</p>
+            </section>
+
+            <section class="rules-section">
+                <h3>5. Choosing Low, High, or Swing</h3>
+                <p>Finally, each remaining player bets on a side. <strong>Low</strong> means your result is closest to 1; <strong>High</strong> means closest to 20. Importantly, Low targets <strong>1, not 0</strong> — a result of <strong>1.25</strong> (0.25 away from 1) beats a result of <strong>0.25</strong> (0.75 away from 1).</p>
+                <p>A <strong>Swing</strong> bet claims <em>both</em> pots. Players who go Swing then form a <strong>second equation</strong> from their cards — one aimed at 1 and one aimed at 20.</p>
+
+                <div class="rule-graphic rule-hilo">
+                    <div class="eg-options">
+                        <div class="eg-choice eg-selected">
+                            <div class="eg-low-symbol">1</div>
+                            <p>Low</p>
+                        </div>
+                        <div class="eg-choice">
+                            <div class="eg-high-symbol"><span class="eg-high-symbol-span">20</span></div>
+                            <p>High</p>
+                        </div>
+                    </div>
+                    <p class="rule-caption">Tap the side your result is closest to (Low selected here), or pick Swing to chase both.</p>
+                </div>
+
+                <div class="rule-graphic">
+                    <div class="rule-numberline">
+                        <div class="rule-target rule-low">
+                            <div class="eg-mini-symbol" style="background:white;color:black;border-radius:50%;">1</div>
+                            <span>Low</span>
+                        </div>
+                        <div class="rule-track">
+                            <div class="rule-marker" style="left:0%;">1.25</div>
+                            <div class="rule-marker rule-marker-alt" style="left:100%;">20</div>
+                        </div>
+                        <div class="rule-target rule-high">
+                            <div class="eg-mini-symbol" style="background:black;color:white;border-radius:4px;transform:rotate(45deg);"><span style="transform:rotate(-45deg);">20</span></div>
+                            <span>High</span>
+                        </div>
+                    </div>
+                    <p class="rule-caption">1.25 is just 0.25 from the Low target of 1 → a strong <strong>Low</strong> hand</p>
+                </div>
+            </section>
+
+            <section class="rules-section">
+                <h3>6. Showdown &amp; winning</h3>
+                <p>At showdown the <strong>Low pot</strong> goes to whoever is closest to 1, and the <strong>High pot</strong> goes to whoever is closest to 20.</p>
+                <p><strong>A Swing bet must win <em>both</em> sides.</strong> If a Swing player wins Low but loses High (or vice-versa), they win <em>nothing</em> — and the side they did win passes to the next-closest player who bet that side, if any.</p>
+                <p><strong>Ties.</strong> If players are an equal distance from the target:</p>
+                <ul class="rule-list">
+                    <li><strong>Low:</strong> the win goes to the player holding the <strong>lowest single number card</strong>; if that's also tied, the <strong>lower suit</strong> wins.</li>
+                    <li><strong>High:</strong> the mirror image — the win goes to the <strong>highest single number card</strong>; if tied, the <strong>higher suit</strong> wins.</li>
+                </ul>
+
+                <div class="rule-graphic">
+                    <div class="eg-tie">
+                        <span class="eg-tie-label">Low · card</span>
+                        <div class="eg-card"><p class="eg-single-digit" style="color:rgb(149,90,49);">2</p></div>
+                        <span class="eg-gt">&gt;</span>
+                        <div class="eg-card"><p class="eg-single-digit" style="color:rgb(149,90,49);">5</p></div>
+                    </div>
+                    <div class="eg-tie">
+                        <span class="eg-tie-label">Low · suit</span>
+                        <div class="eg-card"><p class="eg-single-digit" style="color:rgb(101,101,101);">4</p></div>
+                        <span class="eg-gt">&gt;</span>
+                        <div class="eg-card"><p class="eg-single-digit" style="color:rgb(232,179,64);">4</p></div>
+                    </div>
+                    <div class="eg-tie">
+                        <span class="eg-tie-label">High · card</span>
+                        <div class="eg-card"><p class="eg-single-digit" style="color:rgb(149,90,49);">9</p></div>
+                        <span class="eg-gt">&gt;</span>
+                        <div class="eg-card"><p class="eg-single-digit" style="color:rgb(149,90,49);">6</p></div>
+                    </div>
+                    <div class="eg-tie">
+                        <span class="eg-tie-label">High · suit</span>
+                        <div class="eg-card"><p class="eg-single-digit" style="color:rgb(232,179,64);">8</p></div>
+                        <span class="eg-gt">&gt;</span>
+                        <div class="eg-card"><p class="eg-single-digit" style="color:rgb(101,101,101);">8</p></div>
+                    </div>
+                    <p class="rule-caption">"&gt;" means "beats". Low: lower number — then lower suit — wins. High: higher number — then higher suit — wins.</p>
+                </div>
+
+                <p class="rule-caption" style="text-align:left;">Suit rank, low to high: Stone &lt; Bronze &lt; Silver &lt; Gold.</p>
+            </section>
+        </section>
 
         <footer id="homeFooter">
             <a href="/privacy.html">Privacy Policy</a>
         </footer>
+    </div> <!-- /homeScreenWrapper -->
+
+    <!-- Fixed banner ad, home screen only. Lives outside #homeScreenWrapper, which has a CSS
+         transform (for centering), and would make position:fixed descendants fix relative to
+         it instead of the viewport. Hidden in lockstep with #homeScreenWrapper below. -->
+    <div id="homeAdBar">
+        <ins class="adsbygoogle"
+             style="display:inline-block; width:320px; height:50px;"
+             data-ad-client="ca-pub-8735848760963536"
+             data-ad-slot="4790532527"></ins>
+        <script>
+            (adsbygoogle = window.adsbygoogle || []).push({});
+        </script>
     </div>
 
     <!-- Rules / How to Play. Static HTML so it is crawlable for AdSense review even while hidden. -->
@@ -412,7 +600,7 @@
     </div>
 
     <div id="uiContainer" class="hidden"> <!--TODO rename to lobbyContainer-->
-        <div id="lobbyTitleContainer">Equation <span style="white-space: nowrap;">Hi Lo</span></div>
+        <div id="lobbyTitleContainer">Equation<br><span style="white-space: nowrap;">Hi Lo</span></div>
         <div id="shareLinkContainer" class="hidden">
             <span id="shareLinkText"></span>
             <button id="copyLinkButton" type="button" title="Copy invite link" aria-label="Copy invite link">
@@ -1090,7 +1278,8 @@
                 localStorage.setItem(USER_COLOR_KEY, myColor);
             }
 
-            document.getElementById("homeContainer").classList.add("hidden");
+            document.getElementById("homeScreenWrapper").classList.add("hidden");
+            document.getElementById("homeAdBar").classList.add("hidden");
             document.getElementById("uiContainer").classList.remove("hidden");
 
             if (msg.joined) {
@@ -1304,7 +1493,8 @@
 
         // TODO actually don't do this. need to wait to see if we've actually entered a room.
         // also rename to showRoomPage();
-        document.getElementById("homeContainer").classList.add("hidden");
+        document.getElementById("homeScreenWrapper").classList.add("hidden");
+        document.getElementById("homeAdBar").classList.add("hidden");
         document.getElementById("uiContainer").classList.remove("hidden");
     });
 
@@ -1385,7 +1575,7 @@
         ctx.stroke();
         return canvas;
     }
-    document.querySelectorAll('#rulesModal .eg-root').forEach(el => {
+    document.querySelectorAll('#rulesModal .eg-root, .rules-static .eg-root').forEach(el => {
         el.innerHTML = '';
         el.appendChild(drawRulesRootCanvas());
     });
