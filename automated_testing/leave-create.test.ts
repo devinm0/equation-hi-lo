@@ -55,6 +55,30 @@ async function finishBettingRound(pages: Page[]) {
     }
 }
 
+// Drive betting forward (calling on whoever's turn it currently is) until it's specifically
+// `targetPage`'s turn to act, then return WITHOUT acting on their turn — their #bettingControls
+// is left open so the caller can leave mid-turn instead of calling/folding.
+async function waitForBettingTurn(pages: Page[], targetPage: Page) {
+    for (let guard = 0; guard < 20; guard++) {
+        if (await targetPage.locator('#bettingControls').isVisible()) return;
+
+        const bettingPage = await Promise.any(
+            pages.map(async (p) => {
+                await p.locator('#bettingControls').waitFor({ state: 'visible', timeout: 4000 });
+                return p;
+            }),
+        ).catch(() => undefined);
+        if (!bettingPage) throw new Error("no player's betting controls became visible while waiting for the target's turn");
+        if (bettingPage === targetPage) return;
+
+        const callBtn = bettingPage.locator('#callRaiseButton');
+        if (await callBtn.isVisible()) await callBtn.click();
+        else await bettingPage.locator('#allInButton').click();
+        await pages[0]!.waitForTimeout(800);
+    }
+    throw new Error("target page's betting turn never arrived");
+}
+
 // Every non-folded player selects Low and confirms (folded/out players have no modal).
 async function doHiLoSelection(pages: Page[]) {
     await Promise.all(pages.map(async (page) => {
@@ -90,7 +114,7 @@ async function playFreshHand(pages: Page[]): Promise<number> {
 }
 
 test.describe('Create New Game while still seated in another room', () => {
-    test('leaving via "New Game" folds you out of the old room; old + new games play on independently', async ({ browser }) => {
+    test('host leaving on their bet turn via "New Game" folds them out of the old room; old + new games play on independently', async ({ browser }) => {
         test.setTimeout(300000);
 
         // Per-page capture of every player-folded id, so we can prove the leaver was folded out of
@@ -148,54 +172,60 @@ test.describe('Create New Game while still seated in another room', () => {
         await host.click('#startButton');
         for (const p of pages) await expect(p.locator('#potContainer')).toBeVisible({ timeout: 10000 });
 
-        // p2's persistent id — used to match the player-folded the old room broadcasts when p2 leaves.
-        const p2Id = await p2.evaluate(() => localStorage.getItem('userId'));
-        expect(p2Id).toBeTruthy();
+        // Host's persistent id — used to match the player-folded the old room broadcasts when the
+        // host leaves.
+        const hostId = await host.evaluate(() => localStorage.getItem('userId'));
+        expect(hostId).toBeTruthy();
 
-        // --- First-deal discards for all 3, then confirm we've reached FIRST betting. ---
+        // --- First-deal discards for all 3, then drive betting (calling on whoever else's turn it
+        //     is) until it's specifically the HOST's turn to act — leaving mid-turn is the case
+        //     that exercises settlePlayerDeparture's "wasTheirTurn" fold-and-advance branch. ---
         await discardIfNeeded(pages);
-        await Promise.any(pages.map(p => p.locator('#bettingControls').waitFor({ state: 'visible', timeout: 20000 })));
+        await waitForBettingTurn(pages, host);
 
-        // --- p2 abandons the old room by REFRESHING and choosing "New Game" instead of "Rejoin". ---
-        await p2.reload();
+        // --- The host abandons the old room, mid-OWN-TURN, by REFRESHING and choosing "New Game"
+        //     instead of "Rejoin". ---
+        await host.reload();
         // The refresh triggers the server's rejoin suggestion (proves the socket is open and the
-        // server still has p2's old-room record). Our change keeps the "New Game" button visible here.
-        await expect(p2.locator('#roomCodeInfo')).toHaveText('Rejoin game in progress:', { timeout: 15000 });
-        await expect(p2.locator('#createButton')).toBeVisible();
-        await p2.click('#createButton');
-        await p2.fill('#nameInput', 'NewHost');
-        await p2.click('#submitNameButton');
+        // server still has the host's old-room record). Our change keeps the "New Game" button
+        // visible here.
+        await expect(host.locator('#roomCodeInfo')).toHaveText('Rejoin game in progress:', { timeout: 15000 });
+        await expect(host.locator('#createButton')).toBeVisible();
+        await host.click('#createButton');
+        await host.fill('#nameInput', 'NewHost');
+        await host.click('#submitNameButton');
 
-        // p2 is now host of a brand-new room with a different code.
-        const newRoomCode = await getRoomCodeFromUrl(p2, { not: oldRoomCode });
+        // The former host is now host of a brand-new room with a different code.
+        const newRoomCode = await getRoomCodeFromUrl(host, { not: oldRoomCode });
         expect(newRoomCode, 'the new room must be a different room from the old one').not.toBe(oldRoomCode);
-        // The second host copies its own invite link; D will join the new room by navigating to it.
-        const newRoomUrl = await copyInviteUrl(p2);
+        // The new host copies its own invite link; D will join the new room by navigating to it.
+        const newRoomUrl = await copyInviteUrl(host);
         expect(newRoomUrl).toContain(`/${newRoomCode}`);
         expect(newRoomUrl).not.toBe(oldRoomUrl);
-        await expectNoHomeBackground(p2);
+        await expectNoHomeBackground(host);
 
-        // --- Proof p2 was folded OUT of the old room: the old room broadcast a player-folded for
-        //     p2's id (seen on the host's socket). ---
+        // --- Proof the host was folded OUT of the old room mid-turn: the old room broadcast a
+        //     player-folded for the host's id (seen on p1's socket, who stayed behind). ---
         await expect
-            .poll(() => foldedIds.get(host)!.includes(p2Id!), {
+            .poll(() => foldedIds.get(p1)!.includes(hostId!), {
                 message: 'old room should broadcast player-folded for the leaver',
                 timeout: 15000,
             })
             .toBe(true);
 
         // --- And proof the leaver is OUT, not merely folded: the old room broadcasts a `kicked`
-        //     for p2's id so the remaining players render them eliminated (the fix that makes
+        //     for the host's id so the remaining players render them eliminated (the fix that makes
         //     leaving for a new game mark you out instead of just folding). ---
         await expect
-            .poll(() => kickedIds.get(host)!.includes(p2Id!), {
+            .poll(() => kickedIds.get(p1)!.includes(hostId!), {
                 message: 'old room should broadcast kicked (out) for the leaver',
                 timeout: 15000,
             })
             .toBe(true);
 
-        // --- NEW GAME: a brand-new player joins p2's room AS SOON AS it's created (the old game is
-        //     still mid-hand, paused on a betting turn — both rooms are now alive at once). ---
+        // --- NEW GAME: a brand-new player joins the former host's room AS SOON AS it's created (the
+        //     old game is still mid-hand, paused on a betting turn — both rooms are now alive at
+        //     once). ---
         const dCtx = await browser.newContext({ ...PLAYER_DEVICES[3]!, permissions: ['clipboard-read', 'clipboard-write'] });
         const dPage = await dCtx.newPage();
         attachBrowserLogging(dPage, 'playerD');
@@ -206,15 +236,17 @@ test.describe('Create New Game while still seated in another room', () => {
 
         // The new host sees D land in the lobby (proves the new room's host/membership is sane),
         // then starts the new game.
-        await expect(p2.locator('#lobbyPlayerListContainer')).toContainText('D', { timeout: 10000 });
-        await expect(p2.locator('#startButton')).toBeEnabled({ timeout: 10000 });
-        await p2.click('#startButton');
-        const newGame = [p2, dPage];
+        await expect(host.locator('#lobbyPlayerListContainer')).toContainText('D', { timeout: 10000 });
+        await expect(host.locator('#startButton')).toBeEnabled({ timeout: 10000 });
+        await host.click('#startButton');
+        const newGame = [host, dPage];
         for (const p of newGame) await expect(p.locator('#potContainer')).toBeVisible({ timeout: 10000 });
 
         // --- OLD GAME proceeds normally with the two REMAINING players through a full hand, even
-        //     though the new game is now running in parallel. ---
-        const oldRemaining = [host, p1];
+        //     though the new game is now running in parallel. The host's abandoned turn was already
+        //     folded and advanced by settlePlayerDeparture, so betting resumes with whichever of
+        //     p1/p2 is now on the clock. ---
+        const oldRemaining = [p1, p2];
         const ackedOld1 = await finishHandFromFirstBetting(oldRemaining);
         expect(ackedOld1, 'both remaining old-room players should reach the results screen').toBe(2);
         // And the old room loops into its next hand — it kept running past the departure.
@@ -230,7 +262,7 @@ test.describe('Create New Game while still seated in another room', () => {
         expect(ackedOld2, 'the old room should still complete a hand after the new game ran').toBe(2);
 
         // The two rooms never converged: the old room kept its original code, distinct from the new one.
-        expect(await getRoomCodeFromUrl(host)).toBe(oldRoomCode);
+        expect(await getRoomCodeFromUrl(p1)).toBe(oldRoomCode);
         expect(oldRoomCode).not.toBe(newRoomCode);
 
         await Promise.all([...contexts, dCtx].map(ctx => ctx.close()));
