@@ -450,6 +450,9 @@
     <div id="dockWrapper">
     <div id="handDock">
     <div id="bettingControls" style="display:none;">
+        <div id="bettingTimerBarWrapper" class="betting-timer-bar-wrapper" style="display:none;">
+            <div id="bettingTimerBarFill" class="betting-timer-bar-fill"></div>
+        </div>
         <div id="chipStagingContainer" style="text-align:center; font-weight: bold; color: white;"><span id="betAmountLabel">0</span></div>
         <div id="betContainer">
             <button class="button" id="foldButton">Fold</button>
@@ -532,6 +535,10 @@
     // alive and fights the new one over the shared overlay/width (the "flashes 60" bug).
     let progressBarTimer = null;
     let hiLoTotalSeconds = 60; // full hi/lo duration (for the progress-bar fraction)
+    // The single active per-turn betting countdown bar (separate from the progress bar above so
+    // they never fight over the same element). Driven by a CountdownTimer; the server auto-folds
+    // the player when it runs out, so this is purely the visual countdown.
+    let bettingTurnTimer = null;
 
     // --- Reconnection state ---
     // inRoom/currentRoomCode let onSocketOpen re-enter the room after a transport drop without
@@ -746,6 +753,11 @@
         case "player-folded": {
             sounds.play("fold");
 
+            // If I'm the one who folded, tear down my own betting controls. A manual fold already
+            // hides them locally, but a server-driven auto-fold (betting turn timed out) doesn't —
+            // this covers that case (idempotent for the manual one).
+            if (msg.id === myId) hideBettingControls();
+
             // const hand = handDivs.get(myId).querySelectorAll('.card');
             // console.log(hand);
 
@@ -831,8 +843,12 @@
             }
 
             highlightCurrentBettingPlayerAndDehighlightOthers(msg.currentTurnPlayerId);
+            // Per-turn countdown bar: in the betting controls if it's my turn, under the acting
+            // player's "(betting...)" label otherwise. Must run AFTER the highlight (which can
+            // redraw labels). Server auto-folds the player when it expires.
+            startBettingTurnTimer(msg.currentTurnPlayerId, msg.remainingSeconds ?? 20, msg.totalSeconds ?? 20);
             // chips move from your stack to a staging stack
-  
+
             break;
         } 
         
@@ -1658,8 +1674,8 @@
     function refreshPlayerStatus(id) {
         const span = document.getElementById("player-status-" + id);
         if (!span) return;
-        if (id === currentBettingPlayerId) span.textContent = " (betting...)";
-        else if (hiloSelectingSet.has(id)) span.textContent = " (selecting...)";
+        // No "(betting...)" text — the per-turn countdown bar is the betting indicator now.
+        if (hiloSelectingSet.has(id)) span.textContent = " (selecting...)";
         else if (discardingSet.has(id)) span.textContent = " (discarding...)";
         else span.textContent = "";
     }
@@ -1684,6 +1700,7 @@
 
     function clearBettingIndicator() {
         currentBettingPlayerId = null;
+        clearBettingTurnTimer(); // betting round is over — tear down the countdown bar too
         document.querySelectorAll(".handLabel").forEach(el => {
             el.style.backgroundColor = "";
             el.classList.remove("card-bounce");
@@ -1790,6 +1807,53 @@
 
         let progressBar = document.getElementById("progressBar");
         progressBar.style.display = "none";
+    }
+
+    // Start (or restart) the per-turn betting countdown bar for whoever's turn it now is. If it's
+    // my turn the bar lives in the betting controls; otherwise it's injected under that player's
+    // "(betting...)" label, right beneath their name. remaining/total come from the server so a
+    // re-sent next-turn (e.g. on rejoin) resumes at the correct point. Only one bar exists at a
+    // time — clearBettingTurnTimer tears down any previous one first.
+    function startBettingTurnTimer(playerId, remaining, total) {
+        clearBettingTurnTimer();
+        if (!(remaining > 0)) return;
+
+        let fill;
+        if (playerId === myId) {
+            const wrapper = document.getElementById("bettingTimerBarWrapper");
+            wrapper.style.display = "block";
+            fill = document.getElementById("bettingTimerBarFill");
+        } else {
+            const handLabel = document.getElementById("handLabel-" + playerId);
+            if (!handLabel) return; // no rendered hand for this player (e.g. not yet drawn)
+            const wrapper = document.createElement("div");
+            wrapper.className = "betting-timer-bar-wrapper player-betting-timer";
+            wrapper.id = "bettingTimerBar-" + playerId;
+            fill = document.createElement("div");
+            fill.className = "betting-timer-bar-fill";
+            wrapper.appendChild(fill);
+            // Inside the label row (a centered flex container) so the bar sits beside the name
+            // plaque, vertically centered with it.
+            handLabel.appendChild(wrapper);
+        }
+
+        // Seed the width, then (re)seek the color animation so a mid-window start (rejoin) shows
+        // the right color rather than restarting from green. Same technique as the progress bar.
+        fill.style.width = (remaining / total * 100) + "%";
+        fill.style.animation = "none";
+        void fill.offsetWidth; // force reflow
+        fill.style.animation = `progressBar ${total}s ease`;
+        fill.style.animationDelay = `-${total - remaining}s`;
+
+        bettingTurnTimer = new CountdownTimer(remaining * 1000, fill, null, total);
+        bettingTurnTimer.start();
+    }
+
+    function clearBettingTurnTimer() {
+        if (bettingTurnTimer) { bettingTurnTimer.stop(); bettingTurnTimer = null; }
+        const myWrapper = document.getElementById("bettingTimerBarWrapper");
+        if (myWrapper) myWrapper.style.display = "none";
+        document.querySelectorAll(".player-betting-timer").forEach(el => el.remove());
     }
 
     function drawPlayer(id, color, username, hostId) {
@@ -1976,6 +2040,10 @@
     }
 
     function hideBettingControls() {
+        // I've acted (bet/fold) — stop my own countdown bar immediately. The next next-turn /
+        // end-betting-round will (re)start or clear the table-wide bar as appropriate.
+        clearBettingTurnTimer();
+
         // we may have previously hidden the slider if max bet was equal to min bet
         document.getElementById("betSlider").style.display = "inline-block";
         document.getElementById("sliderMin").style.display = "inline-block";

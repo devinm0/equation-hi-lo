@@ -8,7 +8,7 @@
 // is none because every leaf module below is PURE and never imports lifecycle.
 import { WebSocket } from 'ws';
 import {
-    games, players, wss, EQUATION_DURATION, HI_LO_DURATION,
+    games, players, wss, EQUATION_DURATION, HI_LO_DURATION, BETTING_TURN_DURATION,
     Game, Player, GamePhase, ExtendedWebSocket,
 } from '../state.js';
 import { printDeck } from '../debug/print.js';
@@ -118,6 +118,29 @@ export function fold(foldedPlayer: Player, manual: Boolean, game: Game) {
     }
 }
 
+// Arm (or re-arm) the auto-fold timer for whoever's turn it now is. Call AFTER setting
+// game.currentTurnPlayerId and BEFORE advanceToNextPlayersTurn, so the broadcast carries the
+// fresh endTime. If the acting player doesn't respond in time, fold them manually — which
+// settles a one-player-left pot or advances the turn (re-arming for the next player) exactly
+// as a real fold would. Lives here (not in the pure betting.ts leaf) because it must call fold.
+export function armBettingTurnTimer(game: Game) {
+    clearTimeout(game.bettingTurnTimeout);
+    game.bettingTurnEndTime = Date.now() + BETTING_TURN_DURATION;
+    game.bettingTurnTimeout = setTimeout(() => {
+        // Guard against a stale fire: only act if we're still in a betting round and it's still
+        // the same player's unfinished turn.
+        if (game.phase !== GamePhase.FIRSTBETTING && game.phase !== GamePhase.SECONDBETTING) return;
+        const player = players.get(game.currentTurnPlayerId!);
+        if (!player) return;
+        console.log(`Betting turn timed out for ${player.username}; auto-folding.`);
+        fold(player, true, game);
+    }, BETTING_TURN_DURATION);
+}
+
+export function clearBettingTurnTimer(game: Game) {
+    clearTimeout(game.bettingTurnTimeout);
+}
+
 export function endRoundOrProceedToNextPlayer(game: Game, justPlayedPlayer: Player) {
     if (bettingRoundIsComplete(game)) {
         endBettingRound(game);
@@ -146,6 +169,7 @@ export function endRoundOrProceedToNextPlayer(game: Game, justPlayedPlayer: Play
         if (!currentTurnPlayer) throw new Error;
 
         console.log(currentTurnPlayer.username);
+        armBettingTurnTimer(game);
         // subtract player's stake.
         // if someone bets 10, then next raises 4, we can toCall to be 4, NOT 14
         // it would also allow betting more chips than a player has
@@ -268,6 +292,7 @@ export function endHand(game: Game) {
 
     clearTimeout(game.endEquationFormingTimeout);
     clearTimeout(game.hiLoSelectionTimeout);
+    clearBettingTurnTimer(game);
     clearHands(game.roomCode, playersInRoom(game.roomCode));
     game.maxRaiseReached = false;
     game.handNumber += 1;
@@ -321,6 +346,7 @@ export function endHand(game: Game) {
 export function declareGameOver(game: Game, winner: Player | null): void {
     clearTimeout(game.endEquationFormingTimeout);
     clearTimeout(game.hiLoSelectionTimeout);
+    clearBettingTurnTimer(game);
     game.phase = GamePhase.GAMEOVER;
 
     // Edge case: a simultaneous bust (e.g. all-swing-no-sweep forfeits the pot) can
@@ -386,6 +412,10 @@ export function initializeHand(game: Game) { // means start a hand of play
 }
 
 export function endBettingRound(game: Game) {
+    // The betting round is over — no one's "on the clock" anymore, so stop the per-turn auto-fold
+    // timer (a transition to equation forming/hi-lo arms its own separate timer).
+    clearBettingTurnTimer(game);
+
     sendSocketMessageToEveryClientInRoom(game.roomCode, { type: "end-betting-round", round: game.phase });
 
     game.toCall = 0;
@@ -409,6 +439,7 @@ export function commenceFirstRoundBetting(game: Game) {
     if (!currentPlayer || currentPlayer.out || currentPlayer.foldedThisTurn) {
         game.currentTurnPlayerId = findNextPlayerTurn(game);
     }
+    armBettingTurnTimer(game);
     advanceToNextPlayersTurn(game, 1); // TODO change to anteAmount (and then modify as game goes on)
 }
 
@@ -421,6 +452,7 @@ export function commenceSecondRoundBetting(game: Game) {
     // i think I want to just continue in round robin.
     // We can change this implementation later to always follow left of the dealer
     game.currentTurnPlayerId = findNextPlayerTurn(game); // TODO we should be passing player id into advanceToNextPlayersTurn
+    armBettingTurnTimer(game);
     advanceToNextPlayersTurn(game, 0); // no ante to match on the second round
 }
 

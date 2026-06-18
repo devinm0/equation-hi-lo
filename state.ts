@@ -24,6 +24,9 @@ export const EQUATION_DURATION =
 // the client countdown is parameterized by total duration rather than assuming 90.
 export const HI_LO_DURATION =
     (process.env.GAME_MODE === 'debug' ? 20 : 60) * 1000;
+// Per-turn betting timer: each player has this long to act on their turn (first/second betting
+// rounds) before they're auto-folded, so one idle/disconnected player can't stall the table.
+export const BETTING_TURN_DURATION = 20 * 1000;
 
 export interface ExtendedWebSocket extends WebSocket {
     isAlive: boolean;

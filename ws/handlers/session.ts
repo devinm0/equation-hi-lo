@@ -88,14 +88,21 @@ export function handleLeave(ws: ExtendedWebSocket, clientMsg: LeaveMessage) {
     const game = games.get(player.roomCode);
     if (!game) return;
 
-    if (clientMsg.userId === game.hostId) {
-        // set a new host. if last player, end the game
-    }
-
     sendSocketMessageToEveryClientInRoom(game.roomCode, { type: "player-left" });
 
-    player.out = true; //ws.userId or userId??
-    // console.log(`User disconnected: ${ws.userId}`);
+    // Before a hand starts (or after the game's over) there's nothing in-flight to unwind — just
+    // mark them gone.
+    if (game.phase === GamePhase.LOBBY || game.phase === GamePhase.GAMEOVER) {
+        player.out = true;
+        return;
+    }
+
+    // Mid-hand: fully resolve the room's dependence on the leaver — reassign host, fold them, and
+    // push forward whatever phase was waiting on them. Critically, if they bail while it's their
+    // turn to bet, this advances the turn (re-arming the per-turn timer for the next player) right
+    // away, instead of stalling the table until the 20s betting-turn timeout would auto-fold them.
+    // Reuses the same settlement as a player who leaves by starting a new game.
+    settlePlayerDeparture(player, game);
 }
 
 // The winner clicked "Accept" on the win screen (or their tab fired beforeunload).

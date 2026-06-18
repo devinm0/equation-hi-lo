@@ -645,6 +645,37 @@ body.show-home-bg .grid-container {
     animation: progressBar 90s ease;
 }
 
+/* Per-turn betting countdown bar. Shown in the betting controls when it's your turn, and
+   beside another player's name plaque when it's theirs. Reuses the progressBar color keyframes
+   (green -> yellow -> red) so it reads the same as the equation/hi-lo timer. */
+.betting-timer-bar-wrapper {
+    width: 100%;
+    max-width: 200px;
+    height: 8px;
+    margin: 4px auto;
+    background-color: rgba(0,0,0,0.4);
+    border-radius: 10px;
+    overflow: hidden;
+}
+
+/* As a flex item inside the (centered) name label: a fixed-width bar that sits next to the name
+   plaque, vertically centered with it. flex:none keeps it from squashing/stretching the row. */
+.player-betting-timer.betting-timer-bar-wrapper {
+    flex: none;
+    width: 70px;
+    max-width: 70px;
+    height: 6px;
+    margin: 0;
+}
+
+.betting-timer-bar-fill {
+    height: 100%;
+    width: 100%;
+    background-color: #ebc605;
+    border-radius: 10px;
+    animation: progressBar 20s ease;
+}
+
 @keyframes progressBar {
     0% { background-color: rgb(50, 205, 102); }
     55% { background-color: #ebc605; }

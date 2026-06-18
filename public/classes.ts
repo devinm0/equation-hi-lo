@@ -23,6 +23,11 @@ export class Game {
   // all-locked-in early-exit (which clears endEquationFormingTimeout) can't clobber it.
   hiLoEndTime: number = 0;
   hiLoSelectionTimeout?: NodeJS.Timeout;
+  // Per-turn betting timer — each player gets a fixed window to act on their turn during the
+  // first/second betting rounds; if they don't, they're auto-folded. endTime lets a rejoining
+  // client recover the correct remaining time. Kept separate from the equation/hi-lo timers.
+  bettingTurnEndTime: number = 0;
+  bettingTurnTimeout?: NodeJS.Timeout;
   results: any[] = []; // TODO type this better
 
   constructor() {

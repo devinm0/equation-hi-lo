@@ -1,7 +1,13 @@
 import { WebSocket } from 'ws';
-import { wss, players, ExtendedWebSocket, Game, Player } from '../state.js';
+import { wss, players, BETTING_TURN_DURATION, ExtendedWebSocket, Game, Player } from '../state.js';
 import { findNextKeyWithWrap } from '../public/utilities.js';
 import { playersInRoomEntries, nonFoldedAndNotOutPlayers } from './rooms.js';
+
+// Seconds left on the current player's betting-turn timer, for the client's countdown bar.
+// Reads the shared endTime so a re-sent next-turn (e.g. on rejoin) restores the true remaining.
+export function getBettingTurnSecondsLeft(game: Game) {
+    return Math.max(0, Math.ceil((game.bettingTurnEndTime - Date.now()) / 1000));
+}
 
 export function findNextPlayerTurn(game: Game): string {
     return findNextKeyWithWrap<Player>(
@@ -37,7 +43,9 @@ export function advanceToNextPlayersTurn(game: Game, toCall: number) {
                 maxBet: maxStake - players.get(game.currentTurnPlayerId!)!.stake,
                 currentTurnPlayerId: game.currentTurnPlayerId,
                 username: players.get(game.currentTurnPlayerId!)!.username,
-                playerChipCount: players.get(client.userId)!.chipCount
+                playerChipCount: players.get(client.userId)!.chipCount,
+                remainingSeconds: getBettingTurnSecondsLeft(game),
+                totalSeconds: BETTING_TURN_DURATION / 1000
             }));
         }
     });
