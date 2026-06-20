@@ -2673,9 +2673,10 @@
         socket.send(JSON.stringify(data));
     }
 
-    function drawRootSymbol(id, index, folded) {
-        // for roots, need to draw it by hand since font is bad
-        const canvas = document.createElement('canvas');
+    // for roots, need to draw it by hand since font is bad. Pulled out from drawRootSymbol so the
+    // resize handler below can re-paint existing canvases in place when the mobile/desktop
+    // breakpoint is crossed, instead of leaving them stuck at their creation-time size.
+    function paintRootSymbol(canvas, folded) {
         let scaleFactor;
         if (window.matchMedia("(max-width: 800px)").matches) {
             // Mobile device canvas
@@ -2684,9 +2685,8 @@
             // Larger device canvas
             scaleFactor = 0.75;
         }
-        
+
         // TODO set background color to rgb(251, 251, 250)
-        canvas.id = `sqrt-canvas-${id}-${index}`;
         const ctx = canvas.getContext('2d');
 
         const width = scaleFactor * 120;
@@ -2705,16 +2705,42 @@
         ctx.fillRect(0, 0, scaleFactor * 120, scaleFactor * 180);
         ctx.strokeStyle = 'rgb(40,40,40)';
         ctx.lineWidth = scaleFactor * 10;
-        ctx.lineCap = 'butt'; 
+        ctx.lineCap = 'butt';
         ctx.beginPath();
         ctx.moveTo(scaleFactor * 20, scaleFactor * 98);
         ctx.lineTo(scaleFactor * 40, scaleFactor * 128);
         ctx.lineTo(scaleFactor * 70, scaleFactor * 48);
         ctx.lineTo(scaleFactor * 100, scaleFactor * 48);
         ctx.stroke();
+    }
 
+    function drawRootSymbol(id, index, folded) {
+        const canvas = document.createElement('canvas');
+        canvas.id = `sqrt-canvas-${id}-${index}`;
+        canvas.dataset.folded = folded ? '1' : '';
+        paintRootSymbol(canvas, folded);
         return canvas;
     }
+
+    // The root-symbol canvases are rasterized at a fixed pixel size for whichever breakpoint
+    // was active when they were drawn, so they go stale if the window is resized across the
+    // 800px breakpoint afterward (e.g. un-maximizing the window, rotating a tablet). CSS can't
+    // fix this by itself since the stroke width is baked into the bitmap. Repaint in place, but
+    // only when the breakpoint actually flips, not on every resize tick.
+    let isMobileRootLayout = window.matchMedia("(max-width: 800px)").matches;
+    window.addEventListener("resize", () => {
+        const nowMobile = window.matchMedia("(max-width: 800px)").matches;
+        if (nowMobile === isMobileRootLayout) return;
+        isMobileRootLayout = nowMobile;
+
+        document.querySelectorAll('canvas[id^="sqrt-canvas-"]').forEach(canvas => {
+            paintRootSymbol(canvas, canvas.dataset.folded === '1');
+        });
+        document.querySelectorAll('#rulesModal .eg-root, .rules-static .eg-root').forEach(el => {
+            el.innerHTML = '';
+            el.appendChild(drawRulesRootCanvas());
+        });
+    });
 
     // Shrink the bottom dock (the player's hand + its betting controls, anchored to the bottom
     // edge) whenever the user scrolls down, and restore it on scroll up — so it stays in view at
