@@ -198,7 +198,7 @@ function enterRoom(game: Game, clientMsg: CreateMessage | EnterMessage, ws: Exte
         console.log(player);
         if (player && player.roomCode === game.roomCode) {
             // TODO how to change the flow so we don't have to trust this
-            ws.send(JSON.stringify({ type: "room-entered", roomCode: game.roomCode, hostId: game.hostId, joined: player.username !== null }));
+            ws.send(JSON.stringify({ type: "room-entered", roomCode: game.roomCode, hostId: game.hostId, joined: player.username != null }));
 
             if (player.roomCode === game.roomCode){
                 ws.userId = clientMsg.userId;
