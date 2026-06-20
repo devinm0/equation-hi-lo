@@ -185,7 +185,7 @@ test.describe('Multiplayer game flow', () => {
 
         // Host creates a room
         await hostPage.click('#createButton');
-        await expect(hostPage.locator('#uiContainer')).not.toHaveClass(/hidden/);
+        await expect(hostPage.locator('#lobbyScreenWrapper')).not.toHaveClass(/hidden/);
         // Read the room code from the URL once the WS round-trip has pushed it into the path.
         const roomCode = await getRoomCodeFromUrl(hostPage);
 

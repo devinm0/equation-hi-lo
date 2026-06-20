@@ -51,7 +51,7 @@ test.describe('Room capacity', () => {
             await expect(page.locator('#roomCodeError')).toHaveText('Room is full.');
             // They never enter the lobby — the home screen stays up.
             await expect(page.locator('#homeContainer')).toBeVisible();
-            await expect(page.locator('#uiContainer')).toHaveClass(/hidden/);
+            await expect(page.locator('#lobbyScreenWrapper')).toHaveClass(/hidden/);
         }
 
         // Host starts the game — only the 10 in-room players should be in hand 1.

@@ -1,5 +1,5 @@
 import {
-    games, players, emojis, MAX_PLAYERS_PER_ROOM, wss,
+    games, players, MAX_PLAYERS_PER_ROOM, wss,
     Game, Player, GamePhase,
     ExtendedWebSocket,
     CreateMessage, EnterMessage, JoinMessage, StartMessage, LeaveMessage, RefreshMessage,
@@ -158,7 +158,7 @@ export function handleJoin(ws: ExtendedWebSocket, clientMsg: JoinMessage) { // T
         return;
     }
 
-    player.username = player.emoji + " " + removeWhitespace(clientMsg.username);
+    player.username = removeWhitespace(clientMsg.username);
     const game = games.get(player.roomCode);
     if (game == null) {
         // must be incorrect room code
@@ -252,22 +252,19 @@ function enterRoom(game: Game, clientMsg: CreateMessage | EnterMessage, ws: Exte
             ws.userId = clientMsg.userId; // TODO need this??
 
             let color;
-            let emoji;
-            // assign color and emoji to player
+            // assign color to player
             while (true) {
                 const index = Math.floor(Math.random() * 12);
                 if (game.usedColors.has(index)) {
                     continue;
                 } else {
-                    color = `hsl(${index * 30}, 100%, 70%)`;
-                    emoji = emojis[index];
+                    color = `hsl(${index * 30}, 100%, 45%)`; // capped below 70%: stays legible on the white lobby cards, not just the dark in-game backgrounds
                     game.usedColors.add(index);
                     break;
                 }
             }
 
             players.set(clientMsg.userId, new Player(clientMsg.userId, game.roomCode, color)); // TODO sanitize clientMsg.username to standards
-            players.get(clientMsg.userId)!.emoji = emoji;
             ws.send(JSON.stringify({ type: "room-entered", roomCode: game.roomCode, hostId: game.hostId, joined: false, color: color }));
 
             console.log([...players].filter(([id, player]) => player.roomCode === game.roomCode));

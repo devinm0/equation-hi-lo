@@ -71,7 +71,6 @@ export class Player {
   lowEquationResult?: number | null;
   highEquationResult?: number | null;
   acknowledgedResults: boolean = false;
-  emoji: string | undefined;
 
   constructor(id: string, roomCode: string, color: string) {
       this.id = id;

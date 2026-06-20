@@ -599,7 +599,8 @@
         </div>
     </div>
 
-    <div id="uiContainer" class="hidden"> <!--TODO rename to lobbyContainer-->
+    <div id="lobbyScreenWrapper" class="hidden">
+    <div id="uiContainer"> <!--TODO rename to lobbyContainer-->
         <div id="lobbyTitleContainer">Equation<br><span style="white-space: nowrap;">Hi Lo</span></div>
         <div id="shareLinkContainer" class="hidden">
             <span id="shareLinkText"></span>
@@ -623,6 +624,7 @@
         </div>
         <button class="button" id="startButton" style="display:none;" disabled>Start Game</button>
         <div id="lobbyPlayerListContainer"></div>
+    </div>
     </div>
 
     <div id="potContainer" style="width:100%; min-height: 90px;">
@@ -809,7 +811,7 @@
             document.getElementById("lobbyTitleContainer").remove();
             document.getElementById("shareLinkContainer").classList.add("hidden");
             document.getElementById("qrCodeContainer").classList.add("hidden");
-            document.getElementById("uiContainer").classList.add("hidden");
+            document.getElementById("lobbyScreenWrapper").classList.add("hidden");
 
             break;
         } 
@@ -1280,13 +1282,13 @@
 
             document.getElementById("homeScreenWrapper").classList.add("hidden");
             document.getElementById("homeAdBar").classList.add("hidden");
-            document.getElementById("uiContainer").classList.remove("hidden");
+            document.getElementById("lobbyScreenWrapper").classList.remove("hidden");
 
             if (msg.joined) {
                 document.getElementById("nameContainer").style.display = "none";
             }
             if (msg.inProgress) {
-                document.getElementById("uiContainer").style.display = "none";
+                document.getElementById("lobbyScreenWrapper").classList.add("hidden");
             }
 
             // Shareable invite link with a copy button. Show the host-friendly host/CODE form,
@@ -1495,7 +1497,7 @@
         // also rename to showRoomPage();
         document.getElementById("homeScreenWrapper").classList.add("hidden");
         document.getElementById("homeAdBar").classList.add("hidden");
-        document.getElementById("uiContainer").classList.remove("hidden");
+        document.getElementById("lobbyScreenWrapper").classList.remove("hidden");
     });
 
     document.getElementById("startButton").addEventListener("click", () => {
@@ -2047,18 +2049,33 @@
     }
 
     function drawPlayer(id, color, username, hostId) {
-        let lobbyPlayerListItem = document.getElementById("lobbyPlayerListItem-" + id);
-        if (lobbyPlayerListItem !== null) {
-            lobbyPlayerListItem.innerHTML = `<span>${username}</span>` + (hostId === id ? ' (Host)' : '') + (id === myId ? ' (You)' : ''); // injection
-        } else {
-            let lobbyPlayerListContainer = document.getElementById("lobbyPlayerListContainer");
-            const div = document.createElement("div");
-            div.id = "lobbyPlayerListItem-" + id;
-            div.className = "lobbyPlayerListItem";
-            div.innerHTML = `<span>${username}</span>` + (hostId === id ? ' (Host)' : '') + (id === myId ? ' (You)' : ''); // injection
-            div.style.color = color;
-            lobbyPlayerListContainer.appendChild(div);
+        let lobbyPlayerCard = document.getElementById("lobbyPlayerCard-" + id);
+
+        if (lobbyPlayerCard === null) {
+            lobbyPlayerCard = document.createElement("div");
+            lobbyPlayerCard.id = "lobbyPlayerCard-" + id;
+            lobbyPlayerCard.className = "lobbyPlayerCard";
+
+            const cardDiv = document.createElement("div");
+            cardDiv.className = "card";
+            const letter = document.createElement("p");
+            letter.className = "single-digit";
+            cardDiv.appendChild(letter);
+            lobbyPlayerCard.appendChild(cardDiv);
+
+            const caption = document.createElement("div");
+            caption.className = "lobbyPlayerCaption";
+            lobbyPlayerCard.appendChild(caption);
+
+            document.getElementById("lobbyPlayerListContainer").appendChild(lobbyPlayerCard);
         }
+
+        lobbyPlayerCard.querySelector(".card").style.color = color;
+        lobbyPlayerCard.querySelector(".card p").textContent = username.charAt(0).toUpperCase();
+
+        const caption = lobbyPlayerCard.querySelector(".lobbyPlayerCaption");
+        caption.textContent = username + (hostId === id ? ' (Host)' : '') + (id === myId ? ' (You)' : '');
+        caption.style.color = color;
     }
 
     function hidePotDiv() {

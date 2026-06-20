@@ -9,7 +9,6 @@ export let players = new Map<string, Player>();
 export let wss: WebSocketServer;
 export function setWss(server: WebSocketServer) { wss = server; }
 
-export const emojis = ['💀','❤️','😎','💩','👽','🧠','🐸','🍄','🪐','🔥','❄️','🍩'];
 export const RATE_LIMIT = 20;
 export const INTERVAL = 10000;
 // Deck has 44 number cards and each player consumes up to 4 in the worst-case
