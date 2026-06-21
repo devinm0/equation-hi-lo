@@ -1,6 +1,6 @@
 import { drawNumberCardFromDeck } from './game/deck.js';
 import {
-    games, players, RATE_LIMIT, INTERVAL, EQUATION_DURATION,
+    games, players, RATE_LIMIT, INTERVAL, EQUATION_DURATION, DISCARD_FADE_MS,
     ExtendedWebSocket, ClientMessage, ServerMessage,
     GamePhase,
     JoinMessage, StartMessage, RefreshMessage,
@@ -177,17 +177,25 @@ wss.on("connection", (ws: ExtendedWebSocket) => { // LEARN pass in extended
                 const draw = drawNumberCardFromDeck(game.deck);
                 player.hand.push(draw);
 
-                notifyAllPlayersOfNewlyDealtCards(game.roomCode, player);
-                player.needToDiscard = false;
+                // The deal broadcast (and anything gated on every discard being in, like
+                // starting equation forming) is held back so every viewer's discard fade-up
+                // animation (started by the "player-discarded" broadcast above) has time to
+                // finish before the hand redraw lands — see DISCARD_FADE_MS. Otherwise
+                // commenceEquationForming would enable dragging on the discarder's own hand
+                // before it's redrawn with the replacement card.
+                setTimeout(() => {
+                    notifyAllPlayersOfNewlyDealtCards(game.roomCode, player);
+                    player.needToDiscard = false;
 
-                if (playersThatNeedToDiscard(game.roomCode).length === 0) {
-                    if (game.phase === GamePhase.SECONDDEAL) {
-                        commenceEquationForming(game);
-                    } else if (game.phase === GamePhase.FIRSTDEAL) {
-                        commenceFirstRoundBetting(game); 
+                    if (playersThatNeedToDiscard(game.roomCode).length === 0) {
+                        if (game.phase === GamePhase.SECONDDEAL) {
+                            commenceEquationForming(game);
+                        } else if (game.phase === GamePhase.FIRSTDEAL) {
+                            commenceFirstRoundBetting(game);
+                        }
+                        // would break if someone leaves. in that case reduce num players that need to discard by 1?
                     }
-                    // would break if someone leaves. in that case reduce num players that need to discard by 1?
-                }
+                }, DISCARD_FADE_MS);
                 break;
             }
         

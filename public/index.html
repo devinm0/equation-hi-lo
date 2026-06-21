@@ -847,17 +847,11 @@
             sounds.play("deal");
 
             // A discard's replacement card arrives in this same "deal" message, and drawHand()
-            // below wipes the whole hand and redraws it from scratch. If that redraw happens
-            // immediately it destroys the discarding card's element before its fade-up animation
-            // (DISCARD_FADE_MS, started by the preceding "player-discarded" message) can play.
-            // Hold the redraw until the animation finishes.
-            const handDivForDeal = handDivs.get(msg.id);
-            const discardInFlight = handDivForDeal?.querySelector('.card.discarding');
-            if (discardInFlight) {
-                setTimeout(() => applyDeal(msg), DISCARD_FADE_MS);
-            } else {
-                applyDeal(msg);
-            }
+            // below wipes the whole hand and redraws it from scratch. The server holds this
+            // message back by DISCARD_FADE_MS after the preceding "player-discarded" broadcast
+            // (see the "discard" case in server.ts) specifically so every viewer's fade-up
+            // animation (started there) has time to finish before the redraw lands here.
+            applyDeal(msg);
 
             break;
         }
@@ -1596,9 +1590,7 @@
     // the game straight to game-over without grinding hands until a real bust.
     window.__forceGameOver = () => socket.send(JSON.stringify({ type: "debug-force-game-over", userId: myId }));
 
-    // Body of the "deal" message handler, deferred away from message receipt so a
-    // discard's fade-up animation (see animateDiscard/DISCARD_FADE_MS) can finish before
-    // drawHand() wipes and redraws the hand.
+    // Body of the "deal" message handler.
     function applyDeal(msg) {
         if (msg.id === myId) {
             myHand = msg.hand;

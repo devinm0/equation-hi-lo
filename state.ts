@@ -26,6 +26,11 @@ export const HI_LO_DURATION =
 // Per-turn betting timer: each player has this long to act on their turn (first/second betting
 // rounds) before they're auto-folded, so one idle/disconnected player can't stall the table.
 export const BETTING_TURN_DURATION = 20 * 1000;
+// Must match the .card.discarding animation-duration in public/style.css. The "deal" message
+// following a discard is held back by this long so every viewer's discard fade-up animation
+// (started by the preceding "player-discarded" broadcast) has time to finish before the
+// hand redraw lands.
+export const DISCARD_FADE_MS = 250;
 
 export interface ExtendedWebSocket extends WebSocket {
     isAlive: boolean;
