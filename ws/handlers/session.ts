@@ -255,10 +255,10 @@ function enterRoom(game: Game, clientMsg: CreateMessage | EnterMessage, ws: Exte
             // assign color to player
             while (true) {
                 const index = Math.floor(Math.random() * 12);
-                if (game.usedColors.has(index)) {
+                if (index === 2 || game.usedColors.has(index)) { // index 2 is yellow (hue 60) — illegible on the white lobby cards at any lightness that still reads on dark backgrounds, so it's excluded entirely rather than dimmed
                     continue;
                 } else {
-                    color = `hsl(${index * 30}, 80%, 38%)`; // yellow (index 2) at 100%/45% read as a near-neon rgb(229,229,0) — illegible on the white lobby cards. Lower saturation/lightness keeps every hue readable there, not just the dark in-game backgrounds.
+                    color = `hsl(${index * 30}, 100%, 60%)`;
                     game.usedColors.add(index);
                     break;
                 }
