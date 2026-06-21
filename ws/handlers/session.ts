@@ -258,7 +258,7 @@ function enterRoom(game: Game, clientMsg: CreateMessage | EnterMessage, ws: Exte
                 if (game.usedColors.has(index)) {
                     continue;
                 } else {
-                    color = `hsl(${index * 30}, 100%, 45%)`; // capped below 70%: stays legible on the white lobby cards, not just the dark in-game backgrounds
+                    color = `hsl(${index * 30}, 80%, 38%)`; // yellow (index 2) at 100%/45% read as a near-neon rgb(229,229,0) — illegible on the white lobby cards. Lower saturation/lightness keeps every hue readable there, not just the dark in-game backgrounds.
                     game.usedColors.add(index);
                     break;
                 }

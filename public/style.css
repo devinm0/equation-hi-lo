@@ -1030,13 +1030,13 @@ body.show-home-bg .grid-container {
 /* A just-discarded card fades up and out of the hand. */
 .card.discarding {
     pointer-events: none;
-    animation: discardFadeUp 0.45s ease-out forwards;
+    animation: discardFadeUp 0.25s ease-out forwards;
 }
 
 @keyframes discardFadeUp {
     to {
         opacity: 0;
-        transform: translateY(-40px) scale(0.85);
+        transform: translateY(-40px);
     }
 }
 

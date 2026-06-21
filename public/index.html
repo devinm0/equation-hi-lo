@@ -846,46 +846,22 @@
         case "deal": {
             sounds.play("deal");
 
-            if (msg.id === myId) {
-                myHand = msg.hand;
-            }        
-            drawHand(msg.id, msg.color, msg.username, msg.hand, msg.multiplicationCardDealt);
-        
-            if (msg.chipCount !== undefined) {
-                updateChipStack(msg.chipCount, document.getElementById("chipStacksContainer-" + msg.id));
+            // A discard's replacement card arrives in this same "deal" message, and drawHand()
+            // below wipes the whole hand and redraws it from scratch. If that redraw happens
+            // immediately it destroys the discarding card's element before its fade-up animation
+            // (DISCARD_FADE_MS, started by the preceding "player-discarded" message) can play.
+            // Hold the redraw until the animation finishes.
+            const handDivForDeal = handDivs.get(msg.id);
+            const discardInFlight = handDivForDeal?.querySelector('.card.discarding');
+            if (discardInFlight) {
+                setTimeout(() => applyDeal(msg), DISCARD_FADE_MS);
+            } else {
+                applyDeal(msg);
             }
-            // TODO 5/20
-            // need the same bool to only do this with alert.
-            const highlightedCardEls = document.querySelectorAll('.card-highlighted');
-            highlightedCardEls.forEach(card => {
-                // have a guard clause here but might be better to KNOW that I'll only call this once
-                if (!card.classList.contains('listener-added')) {
-                    card.addEventListener('click', function() {
-                        const data = {
-                            type: "discard",
-                            userId: myId,
-                            value: this.children[0].dataset.value,
-                            color: myColor,
-                            username: myName
-                        };
-                        socket.send(JSON.stringify(data));
-                        // remove the highlight from ALL cards. highlightedCards here is the
-                        // module-level rAF Set (line ~1114), NOT this NodeList — deleting from
-                        // the Set stops the shared highlight animation loop for discarded cards.
-                        document.querySelectorAll('.card-highlighted').forEach(card => {
-                            card.classList.remove("card-highlighted");
-                            card.style.transform = '';
-                            highlightedCards.delete(card);
-                        });
-                    });
 
-                    card.classList.add('listener-added');
-                }
-            });
-  
             break;
-        } 
-        
+        }
+
         case "player-joined": {
             drawPlayer(msg.id, msg.color, msg.username, msg.hostId);
 
@@ -900,10 +876,13 @@
         } 
         
         case "player-discarded": {
-            sounds.play("discard");
-
-            // The discarded card fades up and out of the player's hand for every viewer.
-            animateDiscard(msg.id, msg.value);
+            // Our own discard already played (sound + fade) optimistically at click time —
+            // see the click handler in applyDeal. This broadcast is only news to spectators.
+            if (msg.id !== myId) {
+                sounds.play("discard");
+                // The discarded card fades up and out of the player's hand for every viewer.
+                animateDiscard(msg.id, msg.value);
+            }
             discardingSet.delete(msg.id);
             refreshPlayerStatus(msg.id);
 
@@ -1617,6 +1596,59 @@
     // the game straight to game-over without grinding hands until a real bust.
     window.__forceGameOver = () => socket.send(JSON.stringify({ type: "debug-force-game-over", userId: myId }));
 
+    // Body of the "deal" message handler, deferred away from message receipt so a
+    // discard's fade-up animation (see animateDiscard/DISCARD_FADE_MS) can finish before
+    // drawHand() wipes and redraws the hand.
+    function applyDeal(msg) {
+        if (msg.id === myId) {
+            myHand = msg.hand;
+        }
+        drawHand(msg.id, msg.color, msg.username, msg.hand, msg.multiplicationCardDealt);
+
+        if (msg.chipCount !== undefined) {
+            updateChipStack(msg.chipCount, document.getElementById("chipStacksContainer-" + msg.id));
+        }
+        // TODO 5/20
+        // need the same bool to only do this with alert.
+        const highlightedCardEls = document.querySelectorAll('.card-highlighted');
+        highlightedCardEls.forEach(card => {
+            // have a guard clause here but might be better to KNOW that I'll only call this once
+            if (!card.classList.contains('listener-added')) {
+                card.addEventListener('click', function() {
+                    const value = this.children[0].dataset.value;
+
+                    // remove the highlight from ALL cards. highlightedCards here is the
+                    // module-level rAF Set (line ~1114), NOT this NodeList — deleting from
+                    // the Set stops the shared highlight animation loop for discarded cards.
+                    document.querySelectorAll('.card-highlighted').forEach(card => {
+                        card.classList.remove("card-highlighted");
+                        card.style.transform = '';
+                        highlightedCards.delete(card);
+                    });
+
+                    // Play the fade-out locally right away instead of waiting on a server round
+                    // trip, and hold the "discard" send until it finishes. That way the animation
+                    // is never cut short, and since our own "deal"/"commence-equation-forming"
+                    // replies can't arrive before our send does, our hand redraw — and the
+                    // equation-forming drag/timer it unlocks — is never held up by an animation
+                    // still in flight either.
+                    sounds.play("discard");
+                    animateDiscard(myId, value, () => {
+                        socket.send(JSON.stringify({
+                            type: "discard",
+                            userId: myId,
+                            value: value,
+                            color: myColor,
+                            username: myName
+                        }));
+                    });
+                });
+
+                card.classList.add('listener-added');
+            }
+        });
+    }
+
     function drawHand(id, color, username, hand, multiplicationCardDealt = false, folded = false, out = false) {
         let isRightHand = false;
 
@@ -1876,18 +1908,24 @@
         handDivs.forEach((_, id) => refreshPlayerStatus(id));
     }
 
+    // Must match the .card.discarding animation-duration in style.css.
+    const DISCARD_FADE_MS = 250;
+
     // Fade the just-discarded card up and out of the given player's hand. Picks the first card
     // in that hand matching the discarded value (the discardable operators +, −, × are unique
     // within a hand, so this is unambiguous). Removing it from the DOM keeps the hand in sync
     // before any later redraw, which the server already sends without the discarded card.
-    function animateDiscard(playerId, value) {
+    // onComplete (optional) fires once the card is gone — used by our own click handler to hold
+    // off sending the "discard" message until the animation has fully played, instead of racing it
+    // against the server's reply.
+    function animateDiscard(playerId, value, onComplete) {
         const handDiv = handDivs.get(playerId);
-        if (!handDiv) return;
+        if (!handDiv) { onComplete?.(); return; }
         const card = Array.from(handDiv.querySelectorAll('.card'))
             .find(el => el.dataset.value === String(value));
-        if (!card) return;
+        if (!card) { onComplete?.(); return; }
         card.classList.add('discarding');
-        card.addEventListener('animationend', () => card.remove(), { once: true });
+        card.addEventListener('animationend', () => { card.remove(); onComplete?.(); }, { once: true });
     }
 
     function clearBettingIndicator() {
