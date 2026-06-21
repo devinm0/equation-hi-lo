@@ -30,6 +30,16 @@
     <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
     <link href="https://fonts.googleapis.com/css2?family=Uchen&display=swap" rel="stylesheet">
     <link href="https://fonts.googleapis.com/css2?family=Zen+Old+Mincho&display=swap" rel="stylesheet">
+    <!-- Brush fonts for the Japanese calligraphy skin (sumi-e / washi). -->
+    <link href="https://fonts.googleapis.com/css2?family=Yuji+Mai&family=Yuji+Syuku&family=Shippori+Mincho:wght@500;700&display=swap" rel="stylesheet">
+    <script>
+        // Apply the saved skin before first paint so there's no flash of the default scheme.
+        (function () {
+            var skin = "default";
+            try { skin = localStorage.getItem("skin") || "default"; } catch (e) {}
+            document.documentElement.setAttribute("data-skin", skin);
+        })();
+    </script>
     </head>
 <body class="show-home-bg">
     <div id="choiceModal" class="modal-overlay hidden">
@@ -63,7 +73,13 @@
     </div>
 
     <div id="progressBarWrapper" style="display: none;">
-        <div id="progressBar" style="display: none;"></div>
+        <!-- #progressBarInk is a fixed-width layer that, in the calligraphy skin, carries the brush-
+             stroke mask. #progressBar (the actual countdown bar whose width shrinks) drains behind
+             that mask so the stroke keeps its frayed ends instead of scaling. In other skins
+             #progressBarInk is just a transparent full-size pass-through. -->
+        <div id="progressBarInk">
+            <div id="progressBar" style="display: none;"></div>
+        </div>
         <div id="progressBarOverlay" style="display: none;"></div>
     </div>
 
@@ -203,6 +219,13 @@
     </div>
 
     <button id="helpButton" aria-label="How to play" title="How to play">?</button>
+    <button id="skinButton" aria-label="Change skin" title="Change skin">Skin: Default</button>
+
+    <!-- Full-viewport invert layer for the "negative" test skin. backdrop-filter inverts
+         everything painted behind it without altering any element's positioning containing
+         block (filter on body/html would, breaking the fixed dock/betting/notifications).
+         Shown only while data-skin="negative"; pointer-events:none keeps clicks passing through. -->
+    <div id="negativeSkinOverlay"></div>
 
     <!-- Wraps the home screen's two boxes (join/create + how-to-play) plus the footer so they
          can scroll together as independent rounded cards, instead of the rules content being
@@ -1523,6 +1546,29 @@
     rulesModal.addEventListener("click", (e) => { if (e.target === rulesModal) closeRules(); });
     document.addEventListener("keydown", (e) => { if (e.key === "Escape") closeRules(); });
 
+    // Skins — cycle through global CSS schemes, persisted in localStorage. Add a skin by
+    // appending its id to SKINS, a label to SKIN_LABELS, and scoping CSS under
+    // html[data-skin="<id>"]. "negative" is a placeholder for testing the toggle.
+    const SKINS = ["default", "negative", "calligraphy"];
+    const SKIN_LABELS = { default: "Default", negative: "Negative", calligraphy: "Calligraphy" };
+    const skinButton = document.getElementById("skinButton");
+    function applySkin(skin) {
+        if (!SKINS.includes(skin)) skin = "default";
+        document.documentElement.setAttribute("data-skin", skin);
+        try { localStorage.setItem("skin", skin); } catch (e) {}
+        skinButton.textContent = "Skin: " + SKIN_LABELS[skin];
+        // Root-symbol canvases bake in their ink/paper colors at paint time, so they must be
+        // repainted when the skin changes (the calligraphy skin draws a brush stroke instead).
+        repaintAllRootCanvases();
+    }
+    function cycleSkin() {
+        const current = document.documentElement.getAttribute("data-skin") || "default";
+        const next = SKINS[(SKINS.indexOf(current) + 1) % SKINS.length];
+        applySkin(next);
+    }
+    applySkin(document.documentElement.getAttribute("data-skin") || "default");
+    skinButton.addEventListener("click", cycleSkin);
+
     // Draw the √ symbol for the rules examples on a canvas, exactly like real root cards
     // (the font renders √ poorly). The example cards are 2:3 like real cards, so we reuse the
     // same stroke path with a scale factor sized to the modal card.
@@ -1537,17 +1583,14 @@
         canvas.style.height = height + 'px';
         const ctx = canvas.getContext('2d');
         ctx.scale(ratio, ratio);
-        ctx.fillStyle = 'rgb(251, 251, 250)';
-        ctx.fillRect(0, 0, width, height);
-        ctx.strokeStyle = 'rgb(40,40,40)';
-        ctx.lineWidth = sf * 10;
-        ctx.lineCap = 'butt';
-        ctx.beginPath();
-        ctx.moveTo(sf * 20, sf * 98);
-        ctx.lineTo(sf * 40, sf * 128);
-        ctx.lineTo(sf * 70, sf * 48);
-        ctx.lineTo(sf * 100, sf * 48);
-        ctx.stroke();
+        if (document.documentElement.getAttribute('data-skin') === 'calligraphy') {
+            ctx.clearRect(0, 0, width, height);
+            strokeRootPath(ctx, sf, 'rgb(30,26,23)', true);
+        } else {
+            ctx.fillStyle = 'rgb(251, 251, 250)';
+            ctx.fillRect(0, 0, width, height);
+            strokeRootPath(ctx, sf, 'rgb(40,40,40)', false);
+        }
         return canvas;
     }
     document.querySelectorAll('#rulesModal .eg-root, .rules-static .eg-root').forEach(el => {
@@ -2162,6 +2205,16 @@
     }
 
     function getColorFromSuit(suit) {
+        // The calligraphy skin uses cream cards, so the default metallic tints (esp. silver) wash
+        // out. Swap in deeper, ink-compatible suit colors that stay legible on washi paper.
+        if (document.documentElement.getAttribute('data-skin') === 'calligraphy') {
+            switch(suit) {
+                case Suit.GOLD:   return 'rgb(154, 116, 21)';   // dark goldenrod
+                case Suit.SILVER: return 'rgb(95, 107, 112)';   // slate
+                case Suit.BRONZE: return 'rgb(122, 68, 32)';    // sepia
+                case Suit.STONE:  return 'rgb(58, 53, 47)';      // charcoal
+            }
+        }
         switch(suit) {
             case Suit.GOLD:
                 return 'rgb(232, 179, 64)';
@@ -2730,18 +2783,43 @@
 
         ctx.scale(ratio, ratio);
 
-        // draw root
-        ctx.fillStyle = folded ? 'lightgrey' : 'white';
-        ctx.fillRect(0, 0, scaleFactor * 120, scaleFactor * 180);
-        ctx.strokeStyle = 'rgb(40,40,40)';
-        ctx.lineWidth = scaleFactor * 10;
-        ctx.lineCap = 'butt';
+        ctx.clearRect(0, 0, scaleFactor * 120, scaleFactor * 180);
+        if (document.documentElement.getAttribute('data-skin') === 'calligraphy') {
+            // Transparent face so the washi card shows through; a sumi-ink brush stroke.
+            strokeRootPath(ctx, scaleFactor, folded ? 'rgba(120,112,104,0.9)' : 'rgb(30,26,23)', true);
+        } else {
+            ctx.fillStyle = folded ? 'lightgrey' : 'white';
+            ctx.fillRect(0, 0, scaleFactor * 120, scaleFactor * 180);
+            strokeRootPath(ctx, scaleFactor, 'rgb(40,40,40)', false);
+        }
+    }
+
+    // The √ glyph, shared by live cards and the rules examples. In default mode it's a crisp
+    // butt-capped stroke; in calligraphy mode it's a rounded, slightly heavier brush stroke with a
+    // faint ink-bleed pass along the top bar so it reads like a single confident brush gesture.
+    function strokeRootPath(ctx, sf, color, brush) {
+        // The default path sits a touch high for the heavier brush stroke; nudge it down a hair.
+        if (brush) ctx.translate(0, sf * 3);
+        ctx.strokeStyle = color;
+        ctx.lineWidth = sf * (brush ? 12 : 10);
+        ctx.lineCap = brush ? 'round' : 'butt';
+        ctx.lineJoin = brush ? 'round' : 'miter';
         ctx.beginPath();
-        ctx.moveTo(scaleFactor * 20, scaleFactor * 98);
-        ctx.lineTo(scaleFactor * 40, scaleFactor * 128);
-        ctx.lineTo(scaleFactor * 70, scaleFactor * 48);
-        ctx.lineTo(scaleFactor * 100, scaleFactor * 48);
+        ctx.moveTo(sf * 20, sf * 98);
+        ctx.lineTo(sf * 40, sf * 128);
+        ctx.lineTo(sf * 70, sf * 48);
+        ctx.lineTo(sf * 100, sf * 48);
         ctx.stroke();
+        if (brush) {
+            ctx.save();
+            ctx.globalAlpha = 0.22;
+            ctx.lineWidth = sf * 4;
+            ctx.beginPath();
+            ctx.moveTo(sf * 72, sf * 46);
+            ctx.lineTo(sf * 104, sf * 46);
+            ctx.stroke();
+            ctx.restore();
+        }
     }
 
     function drawRootSymbol(id, index, folded) {
@@ -2757,12 +2835,10 @@
     // 800px breakpoint afterward (e.g. un-maximizing the window, rotating a tablet). CSS can't
     // fix this by itself since the stroke width is baked into the bitmap. Repaint in place, but
     // only when the breakpoint actually flips, not on every resize tick.
-    let isMobileRootLayout = window.matchMedia("(max-width: 800px)").matches;
-    window.addEventListener("resize", () => {
-        const nowMobile = window.matchMedia("(max-width: 800px)").matches;
-        if (nowMobile === isMobileRootLayout) return;
-        isMobileRootLayout = nowMobile;
-
+    // Repaint every root-symbol canvas (live hands + the rules-modal examples). Used both when the
+    // mobile/desktop breakpoint flips (the stroke width is baked into the bitmap) and when the skin
+    // changes (the calligraphy skin paints a sumi brush stroke instead of the default √).
+    function repaintAllRootCanvases() {
         document.querySelectorAll('canvas[id^="sqrt-canvas-"]').forEach(canvas => {
             paintRootSymbol(canvas, canvas.dataset.folded === '1');
         });
@@ -2770,6 +2846,14 @@
             el.innerHTML = '';
             el.appendChild(drawRulesRootCanvas());
         });
+    }
+
+    let isMobileRootLayout = window.matchMedia("(max-width: 800px)").matches;
+    window.addEventListener("resize", () => {
+        const nowMobile = window.matchMedia("(max-width: 800px)").matches;
+        if (nowMobile === isMobileRootLayout) return;
+        isMobileRootLayout = nowMobile;
+        repaintAllRootCanvases();
     });
 
     // Shrink the bottom dock (the player's hand + its betting controls, anchored to the bottom

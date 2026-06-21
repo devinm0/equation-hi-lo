@@ -706,6 +706,13 @@ body.show-home-bg .grid-container {
     border-radius: 10px;
 }
 
+/* Transparent full-size pass-through that holds #progressBar. The calligraphy skin puts the
+   brush-stroke mask here so the bar can drain behind a fixed-width stroke silhouette. */
+#progressBarInk {
+    width: 100%;
+    height: 100%;
+}
+
 #progressBar {
     height: 100%;
     background-color: #ebc605;
@@ -1368,6 +1375,401 @@ body.show-home-bg .grid-container {
 
 #helpButton:hover {
     background: rgba(101, 214, 255, 0.7);
+}
+
+/* ---------- Skins ---------- */
+/* Toggle button, styled like #helpButton but a pill, parked just left of it. */
+#skinButton {
+    position: fixed;
+    top: 16px;
+    right: 70px;
+    height: 44px;
+    padding: 0 16px;
+    border-radius: 22px;
+    border: 2px solid rgba(255, 255, 255, 0.8);
+    background: rgba(73, 102, 96, 0.84);
+    color: white;
+    font-size: 14px;
+    font-weight: bold;
+    font-family: 'Arial', sans-serif;
+    cursor: pointer;
+    z-index: 9000;
+    box-shadow: 3px 3px rgba(0, 0, 0, 0.3);
+    line-height: 1;
+}
+
+#skinButton:hover {
+    background: rgba(101, 214, 255, 0.7);
+}
+
+/* Hidden by default; the "negative" skin reveals it. Sits above everything (incl. modals at
+   z-index 10000) so its backdrop-filter inverts the entire painted page. */
+#negativeSkinOverlay {
+    position: fixed;
+    inset: 0;
+    pointer-events: none;
+    z-index: 2147483647;
+    display: none;
+    -webkit-backdrop-filter: invert(1);
+    backdrop-filter: invert(1);
+}
+
+html[data-skin="negative"] #negativeSkinOverlay {
+    display: block;
+}
+
+/* ============================================================================
+   SKIN: Japanese calligraphy (sumi-e ink on washi paper)
+   ----------------------------------------------------------------------------
+   Concept: a paper writing desk. The table is warm washi; UI panels and the
+   bottom dock are dark lacquer trays; cards are cream paper inked with a brush
+   font; chips are strung copper mon coins; name plates are carved stone
+   paperweights; the timer is a single sumi brush stroke. Everything is scoped
+   under html[data-skin="calligraphy"] so the default skin is untouched.
+   ============================================================================ */
+html[data-skin="calligraphy"] {
+    --cal-ink:        rgb(31, 27, 24);
+    --cal-ink-soft:   rgba(31, 27, 24, 0.7);
+    --cal-paper:      #e3d6bb;   /* the washi table */
+    --cal-paper-lt:   #f1e7cf;
+    --cal-card:       #f6efdd;   /* card face */
+    --cal-lacquer-a:  #3a322a;   /* dark tray, top */
+    --cal-lacquer-b:  #2a231d;   /* dark tray, bottom */
+    --cal-seal:       #b5341f;   /* vermilion seal red */
+    --cal-gold:       #c8a24a;
+}
+
+/* ---- Table: washi paper with a faint fiber grain + warm vignette ---- */
+html[data-skin="calligraphy"] body {
+    background-color: var(--cal-paper);
+    /* A single seamless washi tile (feTurbulence with stitchTiles, so it tiles invisibly) under a
+       soft warm vignette — no directional/repeating streaks. */
+    background-image:
+        radial-gradient(130% 100% at 50% -10%, rgba(255, 250, 235, 0.5), rgba(120, 95, 60, 0) 60%),
+        radial-gradient(120% 120% at 50% 120%, rgba(90, 70, 45, 0.2), rgba(120, 95, 60, 0) 55%),
+        url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='220' height='220'%3E%3Cfilter id='p'%3E%3CfeTurbulence type='fractalNoise' baseFrequency='0.8' numOctaves='3' stitchTiles='stitch'/%3E%3CfeColorMatrix type='saturate' values='0'/%3E%3C/filter%3E%3Crect width='100%25' height='100%25' filter='url(%23p)' opacity='0.11'/%3E%3C/svg%3E");
+    color: var(--cal-ink);
+    font-family: "Shippori Mincho", serif;
+}
+
+/* The scrolling background grid becomes genkō yōshi (manuscript paper) squares. */
+html[data-skin="calligraphy"] .rect {
+    background: rgba(255, 252, 244, 0.12);
+    border: 1px solid rgba(60, 48, 34, 0.16);
+    border-radius: 0;
+    color: rgba(60, 48, 34, 0.05);
+}
+
+/* ---- UI chrome: dark lacquer trays so the existing light text stays legible ---- */
+html[data-skin="calligraphy"] #homeContainer,
+html[data-skin="calligraphy"] #uiContainer {
+    background: linear-gradient(180deg, rgba(46, 39, 33, 0.93), rgba(34, 28, 23, 0.93));
+    border: 1px solid rgba(15, 11, 8, 0.6);
+    box-shadow: 0 16px 44px rgba(20, 13, 7, 0.42);
+}
+
+html[data-skin="calligraphy"] #homeTitleContainer,
+html[data-skin="calligraphy"] #lobbyTitleContainer {
+    font-family: "Yuji Mai", serif;
+    color: var(--cal-paper-lt);
+    text-shadow: 2px 4px 0 rgba(0, 0, 0, 0.35);
+}
+
+html[data-skin="calligraphy"] .rules-section h3 { color: var(--cal-gold); }
+html[data-skin="calligraphy"] #helpButton,
+html[data-skin="calligraphy"] #skinButton {
+    background: linear-gradient(180deg, var(--cal-lacquer-a), var(--cal-lacquer-b));
+    border-color: rgba(220, 205, 175, 0.6);
+    color: var(--cal-paper-lt);
+}
+
+/* ---- Cards: cream washi, brush font, inked irregular corners, soft ink shadow ---- */
+html[data-skin="calligraphy"] .card {
+    background-color: var(--cal-card);
+    font-family: "Yuji Syuku", "Zen Old Mincho", serif;
+    border: 1px solid rgba(70, 55, 40, 0.28);
+    border-radius: 15px 17px 13px 16px;   /* hand-cut paper edge */
+    box-shadow: 3px 5px 11px rgba(45, 30, 18, 0.3);
+}
+
+html[data-skin="calligraphy"] .operator-card {
+    font-family: "Yuji Syuku", serif;
+    font-weight: 700;
+    color: var(--cal-ink);
+}
+
+/* The brush font's operator glyphs sit low on the baseline; lift them to optically centre. */
+html[data-skin="calligraphy"] .operator-card p {
+    transform: translateY(-11%);
+    line-height: 1;
+}
+
+html[data-skin="calligraphy"] .card-highlighted {
+    background-color: #efe6b8;
+    box-shadow: 3px 5px 11px rgba(45, 30, 18, 0.3), 0 0 0 2px rgba(181, 52, 31, 0.55);
+}
+
+html[data-skin="calligraphy"] .tiebreaker-card {
+    background-color: #e6ecc2;
+    box-shadow: 3px 5px 11px rgba(45, 30, 18, 0.3), 0 0 0 2px rgba(181, 52, 31, 0.45);
+}
+
+/* Card back: indigo (藍) cloth with a quiet woven sheen + a vermilion seal margin. */
+html[data-skin="calligraphy"] .card-back {
+    background:
+        repeating-linear-gradient(45deg, rgba(255, 255, 255, 0.05) 0 7px, rgba(0, 0, 0, 0.06) 7px 14px),
+        linear-gradient(160deg, #2b3a63, #1b2647);
+    border: 1px solid rgba(181, 52, 31, 0.5);
+    border-radius: 15px 17px 13px 16px;   /* match the card front's hand-cut edge */
+    box-shadow: 3px 5px 11px rgba(45, 30, 18, 0.3);   /* same blurred ink shadow as the front */
+}
+
+/* ---- Chips: strung copper mon coins (round, square hole) ---- */
+/* Foreshortened ellipse (seen slightly from above) + a hard bottom edge for coin thickness,
+   so the coins read as 3D discs rather than flat head-on circles. */
+html[data-skin="calligraphy"] .chip,
+html[data-skin="calligraphy"] .my-hand .chip,
+html[data-skin="calligraphy"] .flying-chip {
+    width: 26px;
+    height: 15px;
+    border-radius: 50%;
+    position: relative;
+    background: radial-gradient(ellipse at 42% 22%, #e0a868 0%, #b0702f 52%, #7a4720 100%);
+    border: 1px solid #5a3115;
+    box-shadow:
+        0 2px 0 #6a3d1a,                       /* coin rim / thickness */
+        0 4px 4px rgba(40, 20, 8, 0.4),         /* cast shadow */
+        inset 0 1px 1px rgba(255, 224, 178, 0.55);
+}
+
+html[data-skin="calligraphy"] .chip,
+html[data-skin="calligraphy"] .my-hand .chip {
+    margin: -8px;   /* overlap into a strung coin stack */
+}
+
+html[data-skin="calligraphy"] .chip-stack {
+    gap: 3px;
+}
+
+/* The square hole, foreshortened to a slim rectangle to match the coin's angle. */
+html[data-skin="calligraphy"] .chip::after,
+html[data-skin="calligraphy"] .flying-chip::after {
+    content: "";
+    position: absolute;
+    top: 50%;
+    left: 50%;
+    width: 7px;
+    height: 4px;
+    border-radius: 1px;
+    transform: translate(-50%, -50%);
+    background: var(--cal-lacquer-b);
+    box-shadow: inset 0 1px 2px rgba(0, 0, 0, 0.7);
+}
+
+html[data-skin="calligraphy"] .chip-highlighted {
+    background: radial-gradient(circle at 36% 30%, #f0c074 0%, #d6943a 45%, #9c6326 100%);
+}
+
+html[data-skin="calligraphy"] .chip-count-overlay {
+    background: rgba(31, 27, 24, 0.92);
+    color: var(--cal-paper-lt);
+}
+
+/* ---- Name plate: a carved grey stone paperweight, name engraved in player color ---- */
+html[data-skin="calligraphy"] .handLabel p {
+    background: linear-gradient(157deg, #555049 0%, #3c3832 55%, #2b2824 100%);
+    border: 1px solid rgba(20, 17, 13, 0.6);
+    border-radius: 4px;
+    box-shadow:
+        0 3px 7px rgba(20, 15, 9, 0.5),
+        inset 0 1px 0 rgba(255, 255, 255, 0.1),
+        inset 0 -2px 5px rgba(0, 0, 0, 0.45);
+    text-shadow: 0 1px 1px rgba(0, 0, 0, 0.6);
+}
+
+/* ---- Pot / room code: dark ink text since they sit directly on the paper table ---- */
+html[data-skin="calligraphy"] #potDiv,
+html[data-skin="calligraphy"] #roomCodeContainer {
+    color: var(--cal-ink);
+}
+
+/* ---- Bottom dock: a dark lacquer tray holding the hand + betting controls ---- */
+html[data-skin="calligraphy"] #dockWrapper.populated {
+    background: linear-gradient(180deg, #dccdac, #d1c09c);
+    border-top: 2px solid rgba(60, 48, 34, 0.3);
+}
+
+/* The betting controls carry inline color:white (for the dark default dock). On the light
+   calligraphy dock that's invisible, so force them to ink. */
+html[data-skin="calligraphy"] #sliderMin,
+html[data-skin="calligraphy"] #sliderMax,
+html[data-skin="calligraphy"] #chipStagingContainer,
+html[data-skin="calligraphy"] #betAmountLabel {
+    color: var(--cal-ink) !important;
+}
+
+/* ---- Timer: a sumi brush stroke. No trough/outline — just the ink. ---- */
+html[data-skin="calligraphy"] #progressBarWrapper,
+html[data-skin="calligraphy"] .betting-timer-bar-wrapper {
+    background-color: transparent;
+    border-radius: 0;
+    box-shadow: none;
+}
+
+/* Twice as thick as the default 20px bar. */
+html[data-skin="calligraphy"] #progressBarWrapper {
+    height: 40px;
+}
+
+/* The brush silhouette is a fixed-width mask (inline SVG: a rounded bar pushed through
+   feTurbulence + feDisplacementMap, fraying the ends into a dry-brush stroke). It lives on the
+   fixed-width LAYER (#progressBarInk for the main bar, the wrapper for the betting bar); the ink
+   bar drains its width behind it, so the stroke keeps its frayed ends and start cap instead of
+   compressing as it shrinks. No raster image required. */
+html[data-skin="calligraphy"] #progressBarInk,
+html[data-skin="calligraphy"] .betting-timer-bar-wrapper {
+    -webkit-mask: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='240' height='40' preserveAspectRatio='none'%3E%3Cfilter id='b' x='-15%25' y='-60%25' width='130%25' height='220%25'%3E%3CfeTurbulence type='fractalNoise' baseFrequency='0.014 0.16' numOctaves='2' seed='6' result='n'/%3E%3CfeDisplacementMap in='SourceGraphic' in2='n' scale='15' xChannelSelector='R' yChannelSelector='G'/%3E%3C/filter%3E%3Crect x='8' y='13' width='224' height='14' rx='7' fill='white' filter='url(%23b)'/%3E%3C/svg%3E") center / 100% 100% no-repeat;
+    mask: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='240' height='40' preserveAspectRatio='none'%3E%3Cfilter id='b' x='-15%25' y='-60%25' width='130%25' height='220%25'%3E%3CfeTurbulence type='fractalNoise' baseFrequency='0.014 0.16' numOctaves='2' seed='6' result='n'/%3E%3CfeDisplacementMap in='SourceGraphic' in2='n' scale='15' xChannelSelector='R' yChannelSelector='G'/%3E%3C/filter%3E%3Crect x='8' y='13' width='224' height='14' rx='7' fill='white' filter='url(%23b)'/%3E%3C/svg%3E") center / 100% 100% no-repeat;
+}
+
+/* Sumi fill. Must be a background IMAGE (not background-color): the progressBar keyframes animate
+   background-color green→red, and during an animation that wins over a plain color declaration —
+   an opaque gradient image paints over it so the bar stays ink. */
+html[data-skin="calligraphy"] #progressBar,
+html[data-skin="calligraphy"] .betting-timer-bar-fill {
+    background-image: linear-gradient(180deg, #1b1612, #15110d);
+    box-shadow: none;
+}
+
+html[data-skin="calligraphy"] #progressBarOverlay {
+    color: var(--cal-paper-lt);
+    text-shadow: 0 0 3px rgba(0, 0, 0, 0.7), 0 1px 2px rgba(0, 0, 0, 0.6);
+}
+
+/* ---- Buttons: sumi lacquer with a brushed feel; confirm actions get a seal-red lacquer ---- */
+html[data-skin="calligraphy"] #enterRoomButton,
+html[data-skin="calligraphy"] #callRaiseButton,
+html[data-skin="calligraphy"] #foldButton,
+html[data-skin="calligraphy"] #allInButton,
+html[data-skin="calligraphy"] #startButton,
+html[data-skin="calligraphy"] #createButton,
+html[data-skin="calligraphy"] #submitNameButton,
+html[data-skin="calligraphy"] #leaveButton {
+    background: linear-gradient(180deg, var(--cal-lacquer-a), var(--cal-lacquer-b));
+    color: var(--cal-paper-lt);
+    /* No border — it added height/width and pushed the betting timer up over the hand. The inked
+       edge is done with an inset box-shadow ring instead, which doesn't affect layout size. */
+    border: none;
+    border-radius: 7px;
+    font-family: "Shippori Mincho", serif;
+    box-shadow: 0 3px 6px rgba(30, 20, 10, 0.35), inset 0 0 0 1px rgba(0, 0, 0, 0.45);
+}
+
+html[data-skin="calligraphy"] #enterRoomButton:hover,
+html[data-skin="calligraphy"] #callRaiseButton:hover,
+html[data-skin="calligraphy"] #foldButton:hover,
+html[data-skin="calligraphy"] #allInButton:hover,
+html[data-skin="calligraphy"] #startButton:hover,
+html[data-skin="calligraphy"] #createButton:hover,
+html[data-skin="calligraphy"] #submitNameButton:hover,
+html[data-skin="calligraphy"] #leaveButton:hover {
+    background: linear-gradient(180deg, #4a4036, #34291f);
+}
+
+html[data-skin="calligraphy"] #submitNameButton::before {
+    background: linear-gradient(90deg, var(--cal-seal), var(--cal-gold));
+}
+
+html[data-skin="calligraphy"] #confirmResults,
+html[data-skin="calligraphy"] #confirmEquationFormed,
+html[data-skin="calligraphy"] #confirmOtherEquationFormed {
+    background: linear-gradient(180deg, #c23d27, #9c2c19);
+    color: var(--cal-paper-lt);
+    animation: none;
+}
+
+html[data-skin="calligraphy"] #confirmChoice {
+    background: linear-gradient(180deg, #c23d27, #9c2c19);
+    color: var(--cal-paper-lt);
+}
+
+/* ---- Inputs: paper slips with an ink border ---- */
+html[data-skin="calligraphy"] #nameInput,
+html[data-skin="calligraphy"] #roomCodeInput {
+    background: var(--cal-paper-lt);
+    color: var(--cal-ink);
+    border: 1px solid rgba(60, 45, 30, 0.45);
+    font-family: "Shippori Mincho", serif;
+}
+
+/* ---- Modals & notifications: washi slips ---- */
+html[data-skin="calligraphy"] .modal {
+    background: linear-gradient(180deg, rgba(45, 38, 31, 0.95), rgba(33, 27, 22, 0.95));
+    border: 1px solid rgba(15, 11, 8, 0.6);
+}
+
+html[data-skin="calligraphy"] .modal-overlay {
+    background: rgba(40, 32, 24, 0.5);
+}
+
+/* A torn slip of washi: an SVG turbulence mask frays all four edges into a deckle/ripped edge,
+   and filter:drop-shadow (not box-shadow) is used so the cast shadow follows that ragged edge
+   instead of a rectangle. */
+html[data-skin="calligraphy"] .notification {
+    background: rgba(245, 237, 218, 0.98);
+    color: var(--cal-ink);
+    border: none;
+    border-radius: 0;
+    text-shadow: none;
+    box-shadow: none;
+    filter: drop-shadow(2px 4px 5px rgba(40, 28, 16, 0.32));
+    -webkit-mask: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='320' height='90' preserveAspectRatio='none'%3E%3Cfilter id='t' x='-8%25' y='-25%25' width='116%25' height='150%25'%3E%3CfeTurbulence type='fractalNoise' baseFrequency='0.022 0.05' numOctaves='3' seed='11' result='n'/%3E%3CfeDisplacementMap in='SourceGraphic' in2='n' scale='11' xChannelSelector='R' yChannelSelector='G'/%3E%3C/filter%3E%3Crect x='6' y='6' width='308' height='78' fill='white' filter='url(%23t)'/%3E%3C/svg%3E") center / 100% 100% no-repeat;
+    mask: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='320' height='90' preserveAspectRatio='none'%3E%3Cfilter id='t' x='-8%25' y='-25%25' width='116%25' height='150%25'%3E%3CfeTurbulence type='fractalNoise' baseFrequency='0.022 0.05' numOctaves='3' seed='11' result='n'/%3E%3CfeDisplacementMap in='SourceGraphic' in2='n' scale='11' xChannelSelector='R' yChannelSelector='G'/%3E%3C/filter%3E%3Crect x='6' y='6' width='308' height='78' fill='white' filter='url(%23t)'/%3E%3C/svg%3E") center / 100% 100% no-repeat;
+}
+
+/* ---- Hi/Lo choice: seal-red selection wash instead of the default blue ---- */
+html[data-skin="calligraphy"] .option.selected {
+    background-color: rgba(181, 52, 31, 0.42);
+}
+html[data-skin="calligraphy"] .option:hover {
+    background-color: rgba(181, 52, 31, 0.6);
+}
+
+/* Low/High markers as carved charcoal stones — the round vs. diamond shape still tells them
+   apart, with the target number engraved into the stone. Covers the modal, the mini markers on
+   the name plates, and the rules-modal examples. */
+/* Low = a pale, whitish stone with the number engraved in black. box-sizing + padding-bottom lift
+   the glyph, which the serif metrics otherwise drop too low. */
+html[data-skin="calligraphy"] .low-symbol,
+html[data-skin="calligraphy"] .eg-low-symbol {
+    box-sizing: border-box;
+    padding-bottom: 0.18em;
+    background: radial-gradient(circle at 38% 26%, #f4efe2, #ddd6c6 62%, #c5bdab);
+    color: #221f1b;
+    box-shadow:
+        0 3px 6px rgba(20, 15, 9, 0.4),
+        inset 0 1px 0 rgba(255, 255, 255, 0.65),
+        inset 0 -2px 5px rgba(0, 0, 0, 0.2);
+    text-shadow: 0 1px 0 rgba(255, 255, 255, 0.55);
+}
+
+/* High = a dark charcoal stone with the number engraved light. */
+html[data-skin="calligraphy"] .high-symbol,
+html[data-skin="calligraphy"] .eg-high-symbol {
+    background: linear-gradient(155deg, #5b564e, #393530 60%, #272420);
+    color: #e9e2d3;
+    box-shadow:
+        4px 4px 6px rgba(20, 15, 9, 0.45),
+        inset 0 1px 0 rgba(255, 255, 255, 0.1),
+        inset 0 -2px 5px rgba(0, 0, 0, 0.45);
+    text-shadow: 0 1px 1px rgba(0, 0, 0, 0.6);
+}
+
+/* Lift the High "20": the span is counter-rotated (-45°) against the diamond's +45°, so the two
+   rotations cancel and translateY moves the number straight up visually. */
+html[data-skin="calligraphy"] .high-symbol-span,
+html[data-skin="calligraphy"] .eg-high-symbol-span {
+    transform: rotate(-45deg) translateY(-0.12em);
 }
 
 #homeFooter {
