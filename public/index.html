@@ -1635,6 +1635,12 @@
     // the game straight to game-over without grinding hands until a real bust.
     window.__forceGameOver = () => socket.send(JSON.stringify({ type: "debug-force-game-over", userId: myId }));
 
+    // Debug/E2E only: force this client's resolved low/high equation results (ignored unless
+    // GAME_MODE=debug). Send BEFORE making the hi/lo selection; the server applies it just
+    // before winner determination so E2E can construct exact winner scenarios.
+    window.__debugSetEquationResults = (low, high) =>
+        socket.send(JSON.stringify({ type: "debug-set-equation-results", userId: myId, low, high }));
+
     // Body of the "deal" message handler.
     function applyDeal(msg) {
         if (msg.id === myId) {

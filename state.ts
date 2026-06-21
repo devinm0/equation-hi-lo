@@ -136,6 +136,17 @@ export interface DebugForceGameOverMessage {
     userId: string;
 }
 
+// Debug-only (server honours it solely when GAME_MODE=debug): force the sender's resolved
+// low/high equation results, applied just before winner determination. Lets E2E construct
+// exact winner scenarios (swing ties alongside pure betters, swing sweeps, all-swing
+// forfeits) that random deals can't reliably produce.
+export interface DebugSetEquationResultsMessage {
+    type: "debug-set-equation-results";
+    userId: string;
+    low?: number | null;
+    high?: number | null;
+}
+
 export type ClientMessage =
     CreateMessage
     | StartMessage
@@ -152,6 +163,7 @@ export type ClientMessage =
     | LeaveMessage
     | AcknowledgeGameOverMessage
     | DebugForceGameOverMessage
+    | DebugSetEquationResultsMessage
 
 export interface BeginHandMessage {
     type: "begin-hand";

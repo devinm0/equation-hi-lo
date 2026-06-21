@@ -321,6 +321,8 @@ export function endHand(game: Game) {
         player.otherEquationResult = null;
         player.lowEquationResult = null;
         player.highEquationResult = null;
+        player.debugLowEquationResult = null;
+        player.debugHighEquationResult = null;
         player.choices = [];
         player.acknowledgedResults = false;
         player.contribution = 0;
@@ -590,6 +592,19 @@ export function resolveHiLoSelection(game: Game) {
     }
 
     revealHiddenCards(game);
+
+    // Debug-only (GAME_MODE=debug): apply any forced equation results before winner
+    // determination. Overriding here — ahead of both the winner logic and the round-result
+    // build in determineWinners — means the results page renders exactly the forced values,
+    // so the self-checking E2E winner verifier stays consistent. Only the side(s) the player
+    // actually chose matter downstream, so overriding the unused side is harmless.
+    if (process.env.GAME_MODE === 'debug') {
+        for (const player of nonFoldedAndNotOutPlayers(game)) {
+            if (player.debugLowEquationResult != null) player.lowEquationResult = player.debugLowEquationResult;
+            if (player.debugHighEquationResult != null) player.highEquationResult = player.debugHighEquationResult;
+        }
+    }
+
     determineWinners(game);
 }
 

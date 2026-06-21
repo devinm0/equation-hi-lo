@@ -3,7 +3,7 @@ import {
     Game, Player, GamePhase,
     ExtendedWebSocket,
     CreateMessage, EnterMessage, JoinMessage, StartMessage, LeaveMessage, RefreshMessage,
-    AcknowledgeGameOverMessage, DebugForceGameOverMessage,
+    AcknowledgeGameOverMessage, DebugForceGameOverMessage, DebugSetEquationResultsMessage,
 } from '../../state.js';
 import { removeWhitespace } from '../../public/utilities.js';
 import { logRoomsAndPlayers } from '../../debug/print.js';
@@ -139,6 +139,19 @@ export function handleDebugForceGameOver(ws: ExtendedWebSocket, clientMsg: Debug
         }
     });
     declareGameOver(game, player);
+}
+
+// Debug-only test hook (ignored unless GAME_MODE=debug): stash forced low/high equation
+// results on the sender. resolveHiLoSelection applies them just before winner determination
+// (and before the round-result is built), so both the winner logic and the rendered results
+// page use the forced values — keeping the self-checking E2E winner verifier consistent.
+export function handleDebugSetEquationResults(ws: ExtendedWebSocket, clientMsg: DebugSetEquationResultsMessage) {
+    if (process.env.GAME_MODE !== 'debug') return;
+
+    const player = players.get(clientMsg.userId);
+    if (!player) return;
+    if (clientMsg.low !== undefined) player.debugLowEquationResult = clientMsg.low;
+    if (clientMsg.high !== undefined) player.debugHighEquationResult = clientMsg.high;
 }
 
 export function handleJoin(ws: ExtendedWebSocket, clientMsg: JoinMessage) { // TODO change to set Name

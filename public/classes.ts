@@ -70,6 +70,11 @@ export class Player {
   otherEquationResult?: number | null;
   lowEquationResult?: number | null;
   highEquationResult?: number | null;
+  // Debug-only (honoured solely when GAME_MODE=debug): forced low/high equation results
+  // applied just before winner determination, so E2E can construct exact winner scenarios
+  // (ties, sweeps, all-swing forfeits) the random deal can't reliably produce. Cleared each hand.
+  debugLowEquationResult?: number | null;
+  debugHighEquationResult?: number | null;
   acknowledgedResults: boolean = false;
 
   constructor(id: string, roomCode: string, color: string) {

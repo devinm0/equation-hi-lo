@@ -20,6 +20,7 @@ import {
     handleJoin,
     handleAcknowledgeGameOver,
     handleDebugForceGameOver,
+    handleDebugSetEquationResults,
 } from './ws/handlers/session.js';
 import {
     getHandToSendFromHand,
@@ -216,6 +217,11 @@ wss.on("connection", (ws: ExtendedWebSocket) => { // LEARN pass in extended
 
             case "debug-force-game-over": {
                 handleDebugForceGameOver(ws, clientMsg);
+                break;
+            }
+
+            case "debug-set-equation-results": {
+                handleDebugSetEquationResults(ws, clientMsg);
                 break;
             }
 
