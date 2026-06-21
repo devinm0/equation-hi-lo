@@ -221,7 +221,17 @@
     </div>
 
     <button id="helpButton" aria-label="How to play" title="How to play">?</button>
-    <button id="skinButton" aria-label="Change skin" title="Change skin">Skin: Default</button>
+
+    <!-- Skin selection: a gear button (bottom-left) that expands a menu of skins above it.
+         Menu items are injected from the SKINS list in JS. -->
+    <div id="skinControl">
+        <div id="skinMenu" role="menu" aria-label="Skins" hidden></div>
+        <button id="skinButton" aria-label="Change skin" title="Change skin" aria-haspopup="true" aria-expanded="false">
+            <svg viewBox="0 0 24 24" width="24" height="24" aria-hidden="true" focusable="false">
+                <path fill="currentColor" d="M19.14 12.94c.04-.31.06-.63.06-.94s-.02-.63-.07-.94l2.03-1.58a.49.49 0 0 0 .12-.61l-1.92-3.32a.49.49 0 0 0-.59-.22l-2.39.96c-.5-.38-1.04-.7-1.62-.94l-.36-2.54a.49.49 0 0 0-.48-.41h-3.84a.49.49 0 0 0-.48.41l-.36 2.54c-.59.24-1.13.57-1.62.94l-2.39-.96a.49.49 0 0 0-.59.22L2.74 8.87a.49.49 0 0 0 .12.61l2.03 1.58c-.05.31-.07.63-.07.94s.02.63.07.94l-2.03 1.58a.49.49 0 0 0-.12.61l1.92 3.32c.13.22.39.3.59.22l2.39-.96c.5.38 1.03.7 1.62.94l.36 2.54c.05.24.25.41.48.41h3.84c.24 0 .44-.17.48-.41l.36-2.54c.59-.24 1.13-.56 1.62-.94l2.39.96c.2.08.46 0 .59-.22l1.92-3.32a.49.49 0 0 0-.12-.61l-2.01-1.58zM12 15.6a3.6 3.6 0 1 1 0-7.2 3.6 3.6 0 0 1 0 7.2z"/>
+            </svg>
+        </button>
+    </div>
 
     <!-- Full-viewport invert layer for the "negative" test skin. backdrop-filter inverts
          everything painted behind it without altering any element's positioning containing
@@ -1548,28 +1558,61 @@
     rulesModal.addEventListener("click", (e) => { if (e.target === rulesModal) closeRules(); });
     document.addEventListener("keydown", (e) => { if (e.key === "Escape") closeRules(); });
 
-    // Skins — cycle through global CSS schemes, persisted in localStorage. Add a skin by
-    // appending its id to SKINS, a label to SKIN_LABELS, and scoping CSS under
-    // html[data-skin="<id>"]. "negative" is a placeholder for testing the toggle.
+    // Skins — global CSS schemes, persisted in localStorage, chosen from a menu that expands
+    // from the gear button. Add a skin by appending its id to SKINS, a label to SKIN_LABELS,
+    // and scoping CSS under html[data-skin="<id>"]. "negative" is a placeholder for testing.
     const SKINS = ["default", "negative", "calligraphy"];
     const SKIN_LABELS = { default: "Default", negative: "Negative", calligraphy: "Calligraphy" };
+    const skinControl = document.getElementById("skinControl");
     const skinButton = document.getElementById("skinButton");
+    const skinMenu = document.getElementById("skinMenu");
+
+    // Build one menu row per skin. Each carries data-skin and a check mark shown when active.
+    SKINS.forEach((skin) => {
+        const item = document.createElement("button");
+        item.type = "button";
+        item.className = "skin-option";
+        item.setAttribute("role", "menuitemradio");
+        item.dataset.skin = skin;
+        item.innerHTML = '<span class="skin-check" aria-hidden="true">✓</span><span class="skin-name"></span>';
+        item.querySelector(".skin-name").textContent = SKIN_LABELS[skin];
+        item.addEventListener("click", () => { applySkin(skin); closeSkinMenu(); });
+        skinMenu.appendChild(item);
+    });
+
     function applySkin(skin) {
         if (!SKINS.includes(skin)) skin = "default";
         document.documentElement.setAttribute("data-skin", skin);
         try { localStorage.setItem("skin", skin); } catch (e) {}
-        skinButton.textContent = "Skin: " + SKIN_LABELS[skin];
+        skinMenu.querySelectorAll(".skin-option").forEach((el) => {
+            el.setAttribute("aria-checked", el.dataset.skin === skin ? "true" : "false");
+        });
         // Root-symbol canvases bake in their ink/paper colors at paint time, so they must be
         // repainted when the skin changes (the calligraphy skin draws a brush stroke instead).
         repaintAllRootCanvases();
     }
-    function cycleSkin() {
-        const current = document.documentElement.getAttribute("data-skin") || "default";
-        const next = SKINS[(SKINS.indexOf(current) + 1) % SKINS.length];
-        applySkin(next);
+
+    function openSkinMenu() {
+        skinMenu.hidden = false;
+        skinControl.classList.add("open");
+        skinButton.setAttribute("aria-expanded", "true");
     }
+    function closeSkinMenu() {
+        skinMenu.hidden = true;
+        skinControl.classList.remove("open");
+        skinButton.setAttribute("aria-expanded", "false");
+    }
+
     applySkin(document.documentElement.getAttribute("data-skin") || "default");
-    skinButton.addEventListener("click", cycleSkin);
+    skinButton.addEventListener("click", (e) => {
+        e.stopPropagation();
+        skinControl.classList.contains("open") ? closeSkinMenu() : openSkinMenu();
+    });
+    // Clicking anywhere outside the control, or pressing Escape, dismisses the menu.
+    document.addEventListener("click", (e) => {
+        if (!skinControl.contains(e.target)) closeSkinMenu();
+    });
+    document.addEventListener("keydown", (e) => { if (e.key === "Escape") closeSkinMenu(); });
 
     // Draw the √ symbol for the rules examples on a canvas, exactly like real root cards
     // (the font renders √ poorly). The example cards are 2:3 like real cards, so we reuse the

@@ -1355,7 +1355,7 @@ body.show-home-bg .grid-container {
 /* ---------- How to Play: help button, rules modal & graphics ---------- */
 #helpButton {
     position: fixed;
-    top: 16px;
+    bottom: 16px;
     right: 16px;
     width: 44px;
     height: 44px;
@@ -1377,28 +1377,100 @@ body.show-home-bg .grid-container {
 }
 
 /* ---------- Skins ---------- */
-/* Toggle button, styled like #helpButton but a pill, parked just left of it. */
-#skinButton {
+/* Gear button parked bottom-left; clicking it expands #skinMenu upward. */
+#skinControl {
     position: fixed;
-    top: 16px;
-    right: 70px;
+    bottom: 16px;
+    left: 16px;
+    z-index: 9000;
+}
+
+#skinButton {
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    width: 44px;
     height: 44px;
-    padding: 0 16px;
-    border-radius: 22px;
+    padding: 0;
+    border-radius: 50%;
     border: 2px solid rgba(255, 255, 255, 0.8);
     background: rgba(73, 102, 96, 0.84);
     color: white;
-    font-size: 14px;
-    font-weight: bold;
-    font-family: 'Arial', sans-serif;
     cursor: pointer;
-    z-index: 9000;
     box-shadow: 3px 3px rgba(0, 0, 0, 0.3);
-    line-height: 1;
+}
+
+#skinButton svg {
+    display: block;
+    transition: transform 0.4s ease;
 }
 
 #skinButton:hover {
     background: rgba(101, 214, 255, 0.7);
+}
+
+#skinControl.open #skinButton svg {
+    transform: rotate(60deg);
+}
+
+/* Menu expands from just above the gear (44px tall + 10px gap). */
+#skinMenu {
+    position: absolute;
+    bottom: 54px;
+    left: 0;
+    min-width: 168px;
+    padding: 6px;
+    border-radius: 12px;
+    border: 2px solid rgba(255, 255, 255, 0.8);
+    background: rgba(73, 102, 96, 0.95);
+    box-shadow: 3px 3px rgba(0, 0, 0, 0.3);
+    transform-origin: bottom left;
+    animation: skinMenuIn 0.16s ease both;
+}
+
+#skinMenu[hidden] {
+    display: none;
+}
+
+@keyframes skinMenuIn {
+    from { opacity: 0; transform: scale(0.82) translateY(10px); }
+    to   { opacity: 1; transform: scale(1) translateY(0); }
+}
+
+.skin-option {
+    display: flex;
+    align-items: center;
+    gap: 8px;
+    width: 100%;
+    padding: 9px 10px;
+    border: none;
+    border-radius: 8px;
+    background: transparent;
+    color: white;
+    font-family: 'Arial', sans-serif;
+    font-size: 14px;
+    font-weight: bold;
+    text-align: left;
+    cursor: pointer;
+}
+
+.skin-option:hover {
+    background: rgba(101, 214, 255, 0.5);
+}
+
+.skin-option[aria-checked="true"] {
+    background: rgba(101, 214, 255, 0.32);
+}
+
+.skin-option .skin-check {
+    width: 16px;
+    flex: none;
+    text-align: center;
+    opacity: 0;
+}
+
+.skin-option[aria-checked="true"] .skin-check {
+    opacity: 1;
 }
 
 /* Hidden by default; the "negative" skin reveals it. Sits above everything (incl. modals at
@@ -1476,10 +1548,23 @@ html[data-skin="calligraphy"] #lobbyTitleContainer {
 
 html[data-skin="calligraphy"] .rules-section h3 { color: var(--cal-gold); }
 html[data-skin="calligraphy"] #helpButton,
-html[data-skin="calligraphy"] #skinButton {
+html[data-skin="calligraphy"] #skinButton,
+html[data-skin="calligraphy"] #skinMenu {
     background: linear-gradient(180deg, var(--cal-lacquer-a), var(--cal-lacquer-b));
     border-color: rgba(220, 205, 175, 0.6);
     color: var(--cal-paper-lt);
+}
+
+html[data-skin="calligraphy"] .skin-option {
+    color: var(--cal-paper-lt);
+}
+
+html[data-skin="calligraphy"] .skin-option:hover {
+    background: rgba(200, 162, 74, 0.32);
+}
+
+html[data-skin="calligraphy"] .skin-option[aria-checked="true"] {
+    background: rgba(200, 162, 74, 0.22);
 }
 
 /* ---- Cards: cream washi, brush font, inked irregular corners, soft ink shadow ---- */
